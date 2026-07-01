@@ -85,7 +85,7 @@ const MEDS = [
 const CONFIG = { patientName: 'Brandi', ceilingMg: 4000, tempUnit: 'Fahrenheit' };
 
 // State
-let state = { entries: [], now: Date.now(), toast: null, warn: null, demo: false, tab: 'today', override: null, tempInput: '', weightInput: '', weightRange: 'weeks', loaded: false };
+let state = { entries: [], now: Date.now(), toast: null, warn: null, demo: false, tab: 'today', override: null, tempInput: '', weightInput: '', weightRange: 'weeks', timeModal: null, loaded: false };
 let toastTimer = null;
 let unsub = null;
 
@@ -111,6 +111,11 @@ function fmtCountdown(ms) {
   return Math.max(1, Math.floor(ms / 1000)) + 's';
 }
 function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; const m = MEDS.find(x => x.id === id); return m ? m.name : id; }
+function nowLocalISO() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
 
 function fmtDateLabel(ts) {
   const d0 = dayStart(Date.now());
@@ -169,34 +174,51 @@ async function logMed(medId, dose, opts) {
   const med = MEDS.find(m => m.id === medId);
   const st = status(med);
   if (st.locked && !opts.force) { setState({ override: { medId } }); return; }
-  const entry = { medId, dose: dose ? dose.label : null, mg: dose ? dose.mg : 0, ts: Date.now() };
-  if (opts.force) entry.override = true;
-  setState({ override: null });
-  await addEntryDB(entry);
-  setToast(med.name + ' logged' + (dose ? (' · ' + dose.label) : '') + (opts.force ? ' (early)' : '') + ' at ' + fmtTime(entry.ts));
-  // afterLog will run after the listener updates entries
-  setTimeout(() => afterLog({ ...entry, id: 'pending' }), 500);
+  setState({ override: null, timeModal: { type: 'med', medId, dose, opts, timeValue: nowLocalISO() } });
 }
 
 async function logTemp() {
   const raw = (state.tempInput || '').trim();
   const v = parseFloat(raw);
   if (!raw || isNaN(v) || v <= 0 || v > 120) { setToast('Enter a valid temperature'); return; }
-  const suffix = tempSuffix();
-  const entry = { medId: 'temp', temp: v, dose: v + ' ' + suffix, mg: 0, ts: Date.now() };
-  setState({ tempInput: '' });
-  await addEntryDB(entry);
-  setToast('Temperature ' + v + ' ' + suffix + ' logged at ' + fmtTime(entry.ts));
+  setState({ timeModal: { type: 'temp', tempValue: v, timeValue: nowLocalISO() } });
 }
 
 async function logWeight() {
   const raw = (state.weightInput || '').trim();
   const v = parseFloat(raw);
   if (!raw || isNaN(v) || v <= 0 || v > 999) { setToast('Enter a valid weight'); return; }
-  const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts: Date.now() };
-  setState({ weightInput: '' });
-  await addEntryDB(entry);
-  setToast('Weight ' + v + ' lbs logged at ' + fmtTime(entry.ts));
+  setState({ timeModal: { type: 'weight', weightValue: v, timeValue: nowLocalISO() } });
+}
+
+async function confirmTimeAndLog() {
+  const m = state.timeModal;
+  if (!m) return;
+  const ts = new Date(m.timeValue).getTime();
+  if (isNaN(ts)) { setToast('Invalid time'); return; }
+
+  if (m.type === 'med') {
+    const med = MEDS.find(x => x.id === m.medId);
+    const entry = { medId: m.medId, dose: m.dose ? m.dose.label : null, mg: m.dose ? m.dose.mg : 0, ts };
+    if (m.opts && m.opts.force) entry.override = true;
+    setState({ timeModal: null });
+    await addEntryDB(entry);
+    setToast(med.name + ' logged' + (m.dose ? (' · ' + m.dose.label) : '') + (m.opts && m.opts.force ? ' (early)' : '') + ' at ' + fmtTime(ts));
+    setTimeout(() => afterLog({ ...entry, id: 'pending' }), 500);
+  } else if (m.type === 'temp') {
+    const v = m.tempValue;
+    const suffix = tempSuffix();
+    const entry = { medId: 'temp', temp: v, dose: v + ' ' + suffix, mg: 0, ts };
+    setState({ tempInput: '', timeModal: null });
+    await addEntryDB(entry);
+    setToast('Temperature ' + v + ' ' + suffix + ' logged at ' + fmtTime(ts));
+  } else if (m.type === 'weight') {
+    const v = m.weightValue;
+    const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
+    setState({ weightInput: '', timeModal: null });
+    await addEntryDB(entry);
+    setToast('Weight ' + v + ' lbs logged at ' + fmtTime(ts));
+  }
 }
 
 async function removeEntry(id) {
@@ -307,6 +329,8 @@ function render() {
     ),
     // Toast
     state.toast ? h('div', { style: { position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(19,33,29,0.82)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '99px', fontSize: '14px', fontWeight: '600', boxShadow: '0 10px 28px rgba(20,40,35,0.3), 0 0 0 1px rgba(255,255,255,0.08)', zIndex: '50', maxWidth: '90vw', textAlign: 'center', whiteSpace: 'nowrap' } }, state.toast) : null,
+    // Time picker modal
+    renderTimeModal(),
     // Loading overlay
     !state.loaded ? h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '100' } },
       h('div', { style: { textAlign: 'center' } },
@@ -318,6 +342,35 @@ function render() {
 
   root.innerHTML = '';
   root.appendChild(page);
+}
+
+function renderTimeModal() {
+  if (!state.timeModal) return null;
+  const m = state.timeModal;
+  let title = '';
+  if (m.type === 'med') {
+    const med = MEDS.find(x => x.id === m.medId);
+    title = 'Log ' + med.name + (m.dose ? ' · ' + m.dose.label : '');
+  } else if (m.type === 'temp') {
+    title = 'Log Temperature · ' + m.tempValue + tempSuffix();
+  } else {
+    title = 'Log Weight · ' + m.weightValue + ' lbs';
+  }
+
+  return h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '60', padding: '20px' }, onClick: (e) => { if (e.target === e.currentTarget) setState({ timeModal: null }); } },
+    h('div', { style: { background: 'rgba(18,22,20,0.96)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '22px', padding: '24px 22px', width: '320px', maxWidth: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.08)' } },
+      h('div', { style: { fontSize: '16px', fontWeight: '800', marginBottom: '22px', textAlign: 'center', letterSpacing: '-0.01em' } }, title),
+      h('div', null,
+        h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8B9590', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' } }, 'Date & Time'),
+        h('input', { type: 'datetime-local', value: m.timeValue, onInput: (e) => { state.timeModal.timeValue = e.target.value; }, className: 'mono', style: { width: '100%', minHeight: '52px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '13px', padding: '0 14px', fontSize: '16px', background: 'rgba(255,255,255,0.08)', color: '#E8EBE9', colorScheme: 'dark' } }),
+        h('div', { style: { fontSize: '12px', color: '#5C6662', marginTop: '6px' } }, 'Defaults to now — edit if logging a past time')
+      ),
+      h('div', { style: { display: 'flex', gap: '10px', marginTop: '22px' } },
+        h('button', { onClick: () => setState({ timeModal: null }), style: { flex: '1', minHeight: '50px', borderRadius: '13px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#8B9590', fontSize: '15px', fontWeight: '700' } }, 'Cancel'),
+        h('button', { onClick: confirmTimeAndLog, style: { flex: '1', minHeight: '50px', borderRadius: '13px', background: '#0F9D6B', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(11,90,64,0.35)' } }, 'Confirm')
+      )
+    )
+  );
 }
 
 function renderToday(now, mg, pct, tyColor, ceiling) {
