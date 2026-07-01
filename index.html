@@ -101,7 +101,7 @@ function latest(id) { const es = entriesFor(id); return es.length ? es.reduce((a
 function tempSuffix() { return CONFIG.tempUnit === 'Celsius' ? '°C' : '°F'; }
 function tempFever() { return CONFIG.tempUnit === 'Celsius' ? 38.0 : 100.4; }
 function tempHigh() { return CONFIG.tempUnit === 'Celsius' ? 39.4 : 103; }
-function tylenolMg() { const c = state.now - 24 * 3600000; return entriesFor('tylenol').filter(e => e.ts > c).reduce((s, e) => s + (e.mg || 0), 0); }
+function tylenolMg() { const c = dayStart(state.now); return entriesFor('tylenol').filter(e => e.ts >= c).reduce((s, e) => s + (e.mg || 0), 0); }
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
 function fmtCountdown(ms) {
   if (ms <= 0) return '0m';
