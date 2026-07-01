@@ -184,13 +184,13 @@ function afterLog(entry) {
     const near = state.entries.find(e => e.medId === other && e.id !== entry.id && Math.abs(e.ts - entry.ts) <= twoH);
     if (near) { setState({ warn: { tone: 'amber', title: 'Iron + Protonix timing', body: 'Iron and Protonix were logged within 2 hours of each other. Protonix (a PPI) lowers stomach acid, which can markedly reduce iron absorption. Aim to separate the two by at least 2 hours.' } }); return; }
   }
-  if (entry.medId === ‘tylenol’) {
+  if (entry.medId === 'tylenol') {
     const mg = tylenolMg();
-    if (mg > CONFIG.ceilingMg) { setState({ warn: { tone: ‘red’, title: ‘Acetaminophen ceiling exceeded’, body: ‘Today’s Tylenol total is ‘ + mg.toLocaleString() + ‘ mg, above the ‘ + CONFIG.ceilingMg.toLocaleString() + ‘ mg / 24 h limit. Do not give more without contacting the care team.’ } }); }
+    if (mg > CONFIG.ceilingMg) { setState({ warn: { tone: 'red', title: 'Acetaminophen ceiling exceeded', body: 'Today's Tylenol total is ' + mg.toLocaleString() + ' mg, above the ' + CONFIG.ceilingMg.toLocaleString() + ' mg / 24 h limit. Do not give more without contacting the care team.' } }); }
   }
-  if (entry.medId === ‘imodium’) {
-    const pills = dailyPills(‘imodium’);
-    if (pills > 4) { setState({ warn: { tone: ‘red’, title: ‘Imodium daily limit exceeded’, body: ‘Today’s Imodium total is ‘ + pills + ‘ pills, above the 4-pill daily limit. Do not give more without contacting the care team.’ } }); }
+  if (entry.medId === 'imodium') {
+    const pills = dailyPills('imodium');
+    if (pills > 4) { setState({ warn: { tone: 'red', title: 'Imodium daily limit exceeded', body: 'Today's Imodium total is ' + pills + ' pills, above the 4-pill daily limit. Do not give more without contacting the care team.' } }); }
   }
 }
 
