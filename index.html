@@ -85,7 +85,7 @@ const MEDS = [
 const CONFIG = { patientName: 'Brandi', ceilingMg: 4000, tempUnit: 'Fahrenheit' };
 
 // State
-let state = { entries: [], now: Date.now(), toast: null, warn: null, demo: false, tab: 'today', override: null, tempInput: '', weightInput: '', loaded: false };
+let state = { entries: [], now: Date.now(), toast: null, warn: null, demo: false, tab: 'today', override: null, tempInput: '', weightInput: '', weightRange: 'weeks', loaded: false };
 let toastTimer = null;
 let unsub = null;
 
@@ -296,13 +296,14 @@ function render() {
     h('div', { style: { position: 'sticky', top: '60px', zIndex: '15', background: 'rgba(10,10,10,0.6)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', padding: '8px 16px 6px' } },
       h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', gap: '5px', background: 'rgba(255,255,255,0.05)', borderRadius: '13px', padding: '4px', border: '1px solid rgba(255,255,255,0.08)' } },
         h('button', { onClick: () => setState({ tab: 'today' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'today' ? '#0F9D6B' : 'transparent', color: state.tab === 'today' ? '#fff' : '#8B9590', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'today' ? '0 1px 3px rgba(15,157,107,0.35)' : 'none' } }, 'Today'),
-        h('button', { onClick: () => setState({ tab: 'history' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'history' ? '#3D3420' : 'transparent', color: state.tab === 'history' ? '#F5EDCF' : '#8B9590', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'history' ? '0 1px 3px rgba(61,52,32,0.4)' : 'none' } }, 'History')
+        h('button', { onClick: () => setState({ tab: 'history' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'history' ? '#3D3420' : 'transparent', color: state.tab === 'history' ? '#F5EDCF' : '#8B9590', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'history' ? '0 1px 3px rgba(61,52,32,0.4)' : 'none' } }, 'History'),
+        h('button', { onClick: () => setState({ tab: 'weight' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'weight' ? '#2C4A73' : 'transparent', color: state.tab === 'weight' ? '#C8DEFF' : '#8B9590', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'weight' ? '0 1px 3px rgba(44,74,115,0.4)' : 'none' } }, 'Weight')
       )
     ),
     // Main
     h('main', { style: { maxWidth: '720px', margin: '0 auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '18px' } },
       // Tab content
-      ...(state.tab === 'today' ? renderToday(now, mg, pct, tyColor, ceiling) : renderHistory(now))
+      ...(state.tab === 'today' ? renderToday(now, mg, pct, tyColor, ceiling) : state.tab === 'weight' ? renderWeightTrend(now) : renderHistory(now))
     ),
     // Toast
     state.toast ? h('div', { style: { position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(19,33,29,0.82)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '99px', fontSize: '14px', fontWeight: '600', boxShadow: '0 10px 28px rgba(20,40,35,0.3), 0 0 0 1px rgba(255,255,255,0.08)', zIndex: '50', maxWidth: '90vw', textAlign: 'center', whiteSpace: 'nowrap' } }, state.toast) : null,
@@ -555,6 +556,171 @@ function renderHistory(now) {
       )
     ))
   )];
+}
+
+function renderWeightTrend(now) {
+  const weightEntries = state.entries.filter(e => e.medId === 'weight' && e.weight).sort((a, b) => a.ts - b.ts);
+  const range = state.weightRange;
+  const DAY = 86400000;
+
+  // Range toggle
+  const toggle = h('div', { style: { display: 'flex', gap: '5px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)', alignSelf: 'flex-start' } },
+    h('button', { onClick: () => setState({ weightRange: 'weeks' }), style: { padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', background: range === 'weeks' ? '#2C4A73' : 'transparent', color: range === 'weeks' ? '#C8DEFF' : '#5C6662' } }, 'Weeks'),
+    h('button', { onClick: () => setState({ weightRange: 'months' }), style: { padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', background: range === 'months' ? '#2C4A73' : 'transparent', color: range === 'months' ? '#C8DEFF' : '#5C6662' } }, 'Months')
+  );
+
+  if (weightEntries.length === 0) {
+    return [
+      toggle,
+      h('div', { style: { background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '16px', padding: '40px', textAlign: 'center', color: '#5C6662', fontSize: '14px', lineHeight: '1.5' } }, 'No weight readings logged yet.\nLog your first weight on the Today tab.')
+    ];
+  }
+
+  // Determine time range
+  const spanDays = range === 'weeks' ? 28 : 90;
+  const minTs = now - spanDays * DAY;
+  const filtered = weightEntries.filter(e => e.ts >= minTs);
+  const points = filtered.length > 0 ? filtered : weightEntries.slice(-2);
+
+  if (points.length === 0) {
+    return [toggle, h('div', { style: { color: '#5C6662', fontSize: '14px', textAlign: 'center', padding: '40px' } }, 'No data in this range.')];
+  }
+
+  // Calculate bounds
+  const weights = points.map(p => p.weight);
+  const allWeights = weightEntries.map(p => p.weight);
+  const minW = Math.floor(Math.min(...weights) - 2);
+  const maxW = Math.ceil(Math.max(...weights) + 2);
+  const wRange = maxW - minW || 4;
+  const tMin = points[0].ts;
+  const tMax = Math.max(points[points.length - 1].ts, tMin + DAY);
+  const tRange = tMax - tMin || DAY;
+
+  // SVG dimensions
+  const W = 680, H = 300;
+  const pad = { top: 30, right: 20, bottom: 50, left: 55 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+
+  const x = (ts) => pad.left + ((ts - tMin) / tRange) * cW;
+  const y = (w) => pad.top + cH - ((w - minW) / wRange) * cH;
+
+  // Build SVG path
+  let pathD = '';
+  let areaD = '';
+  const dots = [];
+  points.forEach((p, i) => {
+    const px = x(p.ts), py = y(p.weight);
+    pathD += (i === 0 ? 'M' : 'L') + px.toFixed(1) + ',' + py.toFixed(1);
+    if (i === 0) areaD = 'M' + px.toFixed(1) + ',' + (pad.top + cH);
+    areaD += 'L' + px.toFixed(1) + ',' + py.toFixed(1);
+    dots.push({ x: px, y: py, w: p.weight, ts: p.ts });
+  });
+  areaD += 'L' + x(points[points.length - 1].ts).toFixed(1) + ',' + (pad.top + cH) + 'Z';
+
+  // Y-axis labels (weight)
+  const ySteps = 5;
+  const yLabels = [];
+  for (let i = 0; i <= ySteps; i++) {
+    const val = minW + (wRange / ySteps) * i;
+    yLabels.push({ val: Math.round(val * 10) / 10, py: y(val) });
+  }
+
+  // X-axis labels (dates)
+  const xLabels = [];
+  const labelCount = range === 'weeks' ? 4 : 6;
+  for (let i = 0; i <= labelCount; i++) {
+    const ts = tMin + (tRange / labelCount) * i;
+    const d = new Date(ts);
+    const label = (d.getMonth() + 1) + '/' + d.getDate();
+    xLabels.push({ label, px: x(ts) });
+  }
+
+  // Stats
+  const latest = points[points.length - 1];
+  const first = points[0];
+  const change = latest.weight - first.weight;
+  const changeLabel = (change >= 0 ? '+' : '') + change.toFixed(1) + ' lbs';
+  const changeColor = Math.abs(change) < 0.5 ? '#8B9590' : change > 0 ? '#B5761E' : '#0F9D6B';
+  const avg = (weights.reduce((s, w) => s + w, 0) / weights.length).toFixed(1);
+
+  // Build SVG as string
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">';
+  // Grid lines
+  yLabels.forEach(yl => {
+    svg += '<line x1="' + pad.left + '" y1="' + yl.py.toFixed(1) + '" x2="' + (W - pad.right) + '" y2="' + yl.py.toFixed(1) + '" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>';
+    svg += '<text x="' + (pad.left - 10) + '" y="' + (yl.py + 4).toFixed(1) + '" fill="#5C6662" font-size="11" font-family="IBM Plex Mono,monospace" text-anchor="end">' + yl.val + '</text>';
+  });
+  // X labels
+  xLabels.forEach(xl => {
+    svg += '<text x="' + xl.px.toFixed(1) + '" y="' + (H - 10) + '" fill="#5C6662" font-size="11" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + xl.label + '</text>';
+  });
+  // Area gradient
+  svg += '<defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(74,126,181,0.25)"/><stop offset="100%" stop-color="rgba(74,126,181,0)"/></linearGradient></defs>';
+  svg += '<path d="' + areaD + '" fill="url(#wg)"/>';
+  // Line
+  svg += '<path d="' + pathD + '" fill="none" stroke="#4A7EB5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  // Dots
+  dots.forEach((d, i) => {
+    const isLast = i === dots.length - 1;
+    svg += '<circle cx="' + d.x.toFixed(1) + '" cy="' + d.y.toFixed(1) + '" r="' + (isLast ? 5 : 3.5) + '" fill="' + (isLast ? '#4A7EB5' : '#2C4A73') + '" stroke="' + (isLast ? '#C8DEFF' : '#4A7EB5') + '" stroke-width="' + (isLast ? 2 : 1.5) + '"/>';
+    // Value label on last dot
+    if (isLast) {
+      svg += '<text x="' + d.x.toFixed(1) + '" y="' + (d.y - 12).toFixed(1) + '" fill="#C8DEFF" font-size="13" font-weight="700" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + d.w + '</text>';
+    }
+  });
+  svg += '</svg>';
+
+  // Chart card
+  const chart = h('section', { style: { background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px', padding: '20px 16px 12px', boxShadow: '0 4px 24px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' } },
+      h('div', null,
+        h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8B9590' } }, 'Weight Trend'),
+        h('div', { style: { fontSize: '12.5px', color: '#5C6662', marginTop: '3px' } }, range === 'weeks' ? 'Last 4 weeks' : 'Last 3 months')
+      ),
+      h('div', { className: 'mono', style: { fontSize: '24px', fontWeight: '700', color: '#C8DEFF', letterSpacing: '-0.02em' } }, latest.weight + ' lbs')
+    ),
+    h('div', { innerHTML: svg })
+  );
+
+  // Stats row
+  const stats = h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' } },
+    h('div', { style: { background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)' } },
+      h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#5C6662', marginBottom: '6px' } }, 'Current'),
+      h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: '#E8EBE9' } }, latest.weight + '')
+    ),
+    h('div', { style: { background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)' } },
+      h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#5C6662', marginBottom: '6px' } }, 'Average'),
+      h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: '#E8EBE9' } }, avg)
+    ),
+    h('div', { style: { background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)' } },
+      h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#5C6662', marginBottom: '6px' } }, 'Change'),
+      h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: changeColor } }, changeLabel)
+    )
+  );
+
+  // Readings list
+  const readingsItems = points.slice().reverse().map((p, i) => {
+    const d = new Date(p.ts);
+    const day = d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const time = fmtTime(p.ts);
+    return h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none' } },
+      h('div', { style: { flex: '1' } },
+        h('div', { style: { fontSize: '14px', fontWeight: '700' } }, day),
+        h('div', { style: { fontSize: '12px', color: '#5C6662' } }, time)
+      ),
+      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight: '600', color: '#C8DEFF' } }, p.weight + ' lbs')
+    );
+  });
+
+  const readings = h('section', null,
+    h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8B9590', marginBottom: '10px' } }, 'All Readings'),
+    h('div', { style: { background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06)' } },
+      ...readingsItems
+    )
+  );
+
+  return [toggle, chart, stats, readings];
 }
 
 // Init
