@@ -15,7 +15,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
-body{-webkit-font-smoothing:antialiased;background:#EEF1F0;font-family:'Hanken Grotesk',system-ui,sans-serif;color:#13211D;}
+body{-webkit-font-smoothing:antialiased;background:#D6DDD9;font-family:'Hanken Grotesk',system-ui,sans-serif;color:#13211D;}
 button{-webkit-tap-highlight-color:transparent;font-family:inherit;cursor:pointer;border:none;background:none;}
 button:active{transform:translateY(1px);}
 input{-webkit-tap-highlight-color:transparent;font-family:inherit;}
@@ -260,9 +260,13 @@ function render() {
   const nowLabel = fmtTime(now);
 
   // Build page
-  const page = h('div', { style: { minHeight: '100vh', background: '#EEF1F0', color: '#13211D', paddingBottom: '48px' } },
+  const page = h('div', { style: { minHeight: '100vh', background: 'linear-gradient(145deg, #D2E4DC 0%, #D6DDD9 30%, #E0D9CE 60%, #D6DDD9 80%, #C9DCD6 100%)', color: '#13211D', paddingBottom: '48px', position: 'relative', overflow: 'hidden' } },
+    // Background orbs for glass depth
+    h('div', { style: { position: 'fixed', top: '-120px', right: '-80px', width: '360px', height: '360px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,157,107,0.18) 0%, transparent 70%)', pointerEvents: 'none', zIndex: '0' } }),
+    h('div', { style: { position: 'fixed', bottom: '-100px', left: '-60px', width: '300px', height: '300px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(181,118,30,0.12) 0%, transparent 70%)', pointerEvents: 'none', zIndex: '0' } }),
+    h('div', { style: { position: 'fixed', top: '40%', left: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,157,107,0.08) 0%, transparent 70%)', pointerEvents: 'none', zIndex: '0', transform: 'translateX(-50%)' } }),
     // Header
-    h('header', { style: { position: 'sticky', top: '0', zIndex: '20', background: 'rgba(238,241,240,0.86)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E7E5', padding: '13px 16px' } },
+    h('header', { style: { position: 'sticky', top: '0', zIndex: '20', background: 'rgba(255,255,255,0.42)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderBottom: '1px solid rgba(255,255,255,0.5)', padding: '13px 16px', boxShadow: '0 4px 30px rgba(20,40,35,0.05)' } },
       h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },
         h('div', null,
           h('div', { style: { fontSize: '17px', fontWeight: '800', letterSpacing: '-0.02em' } }, title),
@@ -278,8 +282,8 @@ function render() {
       )
     ),
     // Sticky tab switch
-    h('div', { style: { position: 'sticky', top: '60px', zIndex: '15', background: 'rgba(238,241,240,0.92)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', padding: '8px 16px 6px' } },
-      h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', gap: '5px', background: '#E2E7E5', borderRadius: '13px', padding: '4px' } },
+    h('div', { style: { position: 'sticky', top: '60px', zIndex: '15', background: 'rgba(255,255,255,0.3)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', padding: '8px 16px 6px' } },
+      h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', gap: '5px', background: 'rgba(226,231,229,0.45)', borderRadius: '13px', padding: '4px', border: '1px solid rgba(255,255,255,0.35)' } },
         h('button', { onClick: () => setState({ tab: 'today' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'today' ? '#0F9D6B' : 'transparent', color: state.tab === 'today' ? '#fff' : '#647069', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'today' ? '0 1px 3px rgba(15,157,107,0.25)' : 'none' } }, 'Today'),
         h('button', { onClick: () => setState({ tab: 'history' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'history' ? '#F5EDCF' : 'transparent', color: state.tab === 'history' ? '#6B5A1E' : '#647069', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'history' ? '0 1px 3px rgba(107,90,30,0.15)' : 'none' } }, 'History')
       )
@@ -290,9 +294,9 @@ function render() {
       ...(state.tab === 'today' ? renderToday(now, mg, pct, tyColor, ceiling) : renderHistory(now))
     ),
     // Toast
-    state.toast ? h('div', { style: { position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: '#13211D', color: '#fff', padding: '12px 20px', borderRadius: '99px', fontSize: '14px', fontWeight: '600', boxShadow: '0 10px 28px rgba(20,40,35,0.3)', zIndex: '50', maxWidth: '90vw', textAlign: 'center', whiteSpace: 'nowrap' } }, state.toast) : null,
+    state.toast ? h('div', { style: { position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(19,33,29,0.82)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '99px', fontSize: '14px', fontWeight: '600', boxShadow: '0 10px 28px rgba(20,40,35,0.3), 0 0 0 1px rgba(255,255,255,0.08)', zIndex: '50', maxWidth: '90vw', textAlign: 'center', whiteSpace: 'nowrap' } }, state.toast) : null,
     // Loading overlay
-    !state.loaded ? h('div', { style: { position: 'fixed', inset: '0', background: '#EEF1F0', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '100' } },
+    !state.loaded ? h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(214,221,217,0.92)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '100' } },
       h('div', { style: { textAlign: 'center' } },
         h('div', { style: { fontSize: '24px', fontWeight: '800', color: '#0F9D6B', marginBottom: '8px' } }, '⚕️ CareTracker'),
         h('div', { style: { fontSize: '14px', color: '#647069' } }, 'Connecting...')
@@ -309,7 +313,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
 
   // Demo banner
   if (state.demo) {
-    parts.push(h('div', { style: { background: '#EAF1FB', border: '1px solid #CBDDF5', borderRadius: '16px', padding: '12px 14px', display: 'flex', gap: '12px', alignItems: 'center' } },
+    parts.push(h('div', { style: { background: 'rgba(234,241,251,0.5)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(203,221,245,0.45)', borderRadius: '16px', padding: '12px 14px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' } },
       h('div', { style: { flex: '1', color: '#2C4A73', fontSize: '13px', lineHeight: '1.45' } }, 'Showing sample data so you can see the tracker in action. Log a real dose or clear it to start fresh.'),
       h('button', { onClick: clearAll, style: { flexShrink: '0', background: '#2C4A73', color: '#fff', borderRadius: '11px', padding: '10px 14px', fontSize: '13px', fontWeight: '700' } }, 'Start fresh')
     ));
@@ -337,7 +341,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
 
   parts.push(h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '12px' } },
     // Acetaminophen meter
-    h('section', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+    h('section', { style: { background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(20,40,35,0.06), 0 1px 2px rgba(20,40,35,0.04), inset 0 1px 0 rgba(255,255,255,0.6)' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
         h('div', null,
           h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#647069' } }, 'Acetaminophen · 24 h'),
@@ -348,12 +352,12 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           h('span', { style: { color: '#94A09B', fontSize: '13px', fontWeight: '400' } }, ' / ' + ceiling.toLocaleString() + ' mg')
         )
       ),
-      h('div', { style: { height: '12px', background: '#EEF1F0', borderRadius: '99px', overflow: 'hidden', marginTop: '12px' } },
+      h('div', { style: { height: '12px', background: 'rgba(238,241,240,0.6)', borderRadius: '99px', overflow: 'hidden', marginTop: '12px', border: '1px solid rgba(255,255,255,0.3)' } },
         h('div', { style: { height: '100%', width: Math.round(pct) + '%', background: tyColor, borderRadius: '99px', transition: 'width .45s ease, background .3s' } })
       )
     ),
     // Temperature
-    h('section', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+    h('section', { style: { background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(20,40,35,0.06), 0 1px 2px rgba(20,40,35,0.04), inset 0 1px 0 rgba(255,255,255,0.6)' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' } },
         h('div', null,
           h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#647069' } }, 'Temperature'),
@@ -362,7 +366,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
         lastTemp ? h('div', { className: 'mono', style: { fontSize: '22px', fontWeight: '600', letterSpacing: '-0.02em', color: tempColor, whiteSpace: 'nowrap' } }, lastTemp.temp + tempSuffix()) : null
       ),
       h('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } },
-        h('input', { type: 'number', inputMode: 'decimal', step: '0.1', placeholder: CONFIG.tempUnit === 'Celsius' ? '37.5' : '99.8', value: state.tempInput, onInput: (e) => { state.tempInput = e.target.value; }, className: 'mono', style: { flex: '1', minWidth: '0', minHeight: '52px', border: '1px solid #E2E7E5', borderRadius: '13px', padding: '0 14px', fontSize: '16px', background: '#F9FAFA', color: '#13211D' } }),
+        h('input', { type: 'number', inputMode: 'decimal', step: '0.1', placeholder: CONFIG.tempUnit === 'Celsius' ? '37.5' : '99.8', value: state.tempInput, onInput: (e) => { state.tempInput = e.target.value; }, className: 'mono', style: { flex: '1', minWidth: '0', minHeight: '52px', border: '1px solid rgba(255,255,255,0.45)', borderRadius: '13px', padding: '0 14px', fontSize: '16px', background: 'rgba(249,250,250,0.6)', color: '#13211D' } }),
         h('button', { onClick: logTemp, style: { flexShrink: '0', minHeight: '52px', padding: '0 18px', borderRadius: '13px', background: '#13211D', color: '#fff', fontSize: '15px', fontWeight: '700' } }, 'Log')
       )
     )
@@ -407,7 +411,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       );
     }
 
-    return h('div', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '18px', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+    return h('div', { style: { background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '18px', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 24px rgba(20,40,35,0.06), 0 1px 2px rgba(20,40,35,0.04), inset 0 1px 0 rgba(255,255,255,0.6)' } },
       // Header row
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
         h('div', null,
@@ -454,7 +458,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '11px' } },
         ...journalGroups.map(g => h('div', null,
           h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94A09B', marginBottom: '8px' } }, g.label),
-          h('div', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '16px', overflow: 'hidden' } },
+          h('div', { style: { background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(20,40,35,0.06), inset 0 1px 0 rgba(255,255,255,0.6)' } },
             ...g.items.map((e, i) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: i > 0 ? '1px solid #F0F3F2' : 'none' } },
               h('div', { className: 'mono', style: { fontSize: '13px', color: '#647069', minWidth: '66px' } }, fmtTime(e.ts)),
               h('div', { style: { flex: '1' } },
@@ -469,7 +473,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           )
         ))
       ) :
-      h('div', { style: { background: '#fff', border: '1px dashed #D8DEDC', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#94A09B', fontSize: '14px', marginTop: '11px', lineHeight: '1.5' } }, 'No doses logged yet today.\nUse the buttons above to log the first one.')
+      h('div', { style: { background: 'rgba(255,255,255,0.35)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(255,255,255,0.6)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#94A09B', fontSize: '14px', marginTop: '11px', lineHeight: '1.5' } }, 'No doses logged yet today.\nUse the buttons above to log the first one.')
   ));
 
   return parts;
@@ -496,7 +500,7 @@ function renderHistory(now) {
   });
 
   if (historyDays.length === 0) {
-    return [h('div', { style: { background: '#fff', border: '1px dashed #D8DEDC', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#94A09B', fontSize: '14px', lineHeight: '1.5' } }, 'No history yet.')];
+    return [h('div', { style: { background: 'rgba(255,255,255,0.35)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(255,255,255,0.6)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#94A09B', fontSize: '14px', lineHeight: '1.5' } }, 'No history yet.')];
   }
 
   return [h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
@@ -505,7 +509,7 @@ function renderHistory(now) {
         h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.03em', textTransform: 'uppercase', color: '#647069' } }, d.label),
         h('div', { className: 'mono', style: { fontSize: '12px', color: '#94A09B' } }, d.summary)
       ),
-      h('div', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+      h('div', { style: { background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(20,40,35,0.06), 0 1px 2px rgba(20,40,35,0.04), inset 0 1px 0 rgba(255,255,255,0.6)' } },
         ...d.items.map((e, i) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: i > 0 ? '1px solid #F0F3F2' : 'none' } },
           h('div', { className: 'mono', style: { fontSize: '13px', color: '#647069', minWidth: '66px' } }, fmtTime(e.ts)),
           h('div', { style: { flex: '1' } },
