@@ -80,6 +80,8 @@ const MEDS = [
     windows:[{start:17,end:24,name:'Evening'}] },
   { id:'iron', name:'Iron', sub:'Ferrous sulfate', type:'win', note:'Once daily · anytime',
     windows:[{start:0,end:24,name:'Anytime'}] },
+  { id:'imodium', name:'Imodium', sub:'Loperamide', type:'gap', gapH:0, ceiling:true, ceilingMax:4, ceilingUnit:'pills', note:'Max 4 pills per day',
+    doses:[{label:'2 pills (onset)',pills:2,mg:0},{label:'1 pill',pills:1,mg:0}] },
 ];
 
 const CONFIG = { patientName: 'Brandi', ceilingMg: 4000, tempUnit: 'Fahrenheit' };
@@ -108,6 +110,12 @@ function tempSuffix() { return CONFIG.tempUnit === 'Celsius' ? '°C' : '°F'; }
 function tempFever() { return CONFIG.tempUnit === 'Celsius' ? 38.0 : 100.4; }
 function tempHigh() { return CONFIG.tempUnit === 'Celsius' ? 39.4 : 103; }
 function tylenolMg() { const c = dayStart(state.now); return entriesFor('tylenol').filter(e => e.ts >= c).reduce((s, e) => s + (e.mg || 0), 0); }
+function dailyPills(medId) { const c = dayStart(state.now); return entriesFor(medId).filter(e => e.ts >= c).reduce((s, e) => s + (e.pills || 0), 0); }
+function dailyCeiling(med) {
+  if (!med.ceiling) return null;
+  if (med.ceilingUnit === 'pills') return { used: dailyPills(med.id), max: med.ceilingMax, unit: 'pills', label: med.ceilingMax + ' pills' };
+  return { used: tylenolMg(), max: CONFIG.ceilingMg, unit: 'mg', label: CONFIG.ceilingMg.toLocaleString() + ' mg' };
+}
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
 function fmtCountdown(ms) {
   if (ms <= 0) return '0m';
@@ -139,9 +147,12 @@ function status(med) {
   const now = state.now;
   const es = entriesFor(med.id).slice().sort((a, b) => a.ts - b.ts);
   if (med.type === 'gap') {
-    // Check daily ceiling first (Tylenol)
-    if (med.ceiling && tylenolMg() >= CONFIG.ceilingMg) {
-      return { locked: true, ceilingHit: true };
+    // Check daily ceiling first (Tylenol mg or Imodium pills)
+    if (med.ceiling) {
+      const dc = dailyCeiling(med);
+      if (dc && dc.used >= dc.max) {
+        return { locked: true, ceilingHit: true, ceilingLabel: dc.label };
+      }
     }
     const last = es[es.length - 1];
     if (!last) return { locked: false };
@@ -173,9 +184,13 @@ function afterLog(entry) {
     const near = state.entries.find(e => e.medId === other && e.id !== entry.id && Math.abs(e.ts - entry.ts) <= twoH);
     if (near) { setState({ warn: { tone: 'amber', title: 'Iron + Protonix timing', body: 'Iron and Protonix were logged within 2 hours of each other. Protonix (a PPI) lowers stomach acid, which can markedly reduce iron absorption. Aim to separate the two by at least 2 hours.' } }); return; }
   }
-  if (entry.medId === 'tylenol') {
+  if (entry.medId === ‘tylenol’) {
     const mg = tylenolMg();
-    if (mg > CONFIG.ceilingMg) { setState({ warn: { tone: 'red', title: 'Acetaminophen ceiling exceeded', body: 'Today’s Tylenol total is ' + mg.toLocaleString() + ' mg, above the ' + CONFIG.ceilingMg.toLocaleString() + ' mg / 24 h limit. Do not give more without contacting the care team.' } }); }
+    if (mg > CONFIG.ceilingMg) { setState({ warn: { tone: ‘red’, title: ‘Acetaminophen ceiling exceeded’, body: ‘Today’s Tylenol total is ‘ + mg.toLocaleString() + ‘ mg, above the ‘ + CONFIG.ceilingMg.toLocaleString() + ‘ mg / 24 h limit. Do not give more without contacting the care team.’ } }); }
+  }
+  if (entry.medId === ‘imodium’) {
+    const pills = dailyPills(‘imodium’);
+    if (pills > 4) { setState({ warn: { tone: ‘red’, title: ‘Imodium daily limit exceeded’, body: ‘Today’s Imodium total is ‘ + pills + ‘ pills, above the 4-pill daily limit. Do not give more without contacting the care team.’ } }); }
   }
 }
 
@@ -209,7 +224,8 @@ async function confirmTimeAndLog() {
 
   if (m.type === 'med') {
     const med = MEDS.find(x => x.id === m.medId);
-    const entry = { medId: m.medId, dose: m.dose ? m.dose.label : null, mg: m.dose ? m.dose.mg : 0, ts };
+    const entry = { medId: m.medId, dose: m.dose ? m.dose.label : null, mg: m.dose ? (m.dose.mg || 0) : 0, ts };
+    if (m.dose && m.dose.pills) entry.pills = m.dose.pills;
     if (m.opts && m.opts.force) entry.override = true;
     setState({ timeModal: null });
     await addEntryDB(entry);
@@ -433,6 +449,27 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     )
   ));
 
+  // Imodium pill counter
+  const imoPills = dailyPills('imodium');
+  const imoMax = 4;
+  const imoPct = Math.min(100, imoPills / imoMax * 100);
+  const imoColor = imoPills >= imoMax ? '#C0453B' : imoPills >= 3 ? '#B5761E' : '#0F9D6B';
+  parts.push(h('section', { style: { background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
+      h('div', null,
+        h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8B9590' } }, 'Imodium · 24 h'),
+        h('div', { style: { fontSize: '12.5px', color: '#5C6662', marginTop: '3px' } }, Math.max(0, imoMax - imoPills) + ' pill' + (Math.max(0, imoMax - imoPills) === 1 ? '' : 's') + ' left before limit')
+      ),
+      h('div', { className: 'mono', style: { fontSize: '20px', fontWeight: '600', letterSpacing: '-0.02em', whiteSpace: 'nowrap' } },
+        String(imoPills),
+        h('span', { style: { color: '#5C6662', fontSize: '13px', fontWeight: '400' } }, ' / ' + imoMax + ' pills')
+      )
+    ),
+    h('div', { style: { height: '12px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden', marginTop: '12px', border: '1px solid rgba(255,255,255,0.06)' } },
+      h('div', { style: { height: '100%', width: Math.round(imoPct) + '%', background: imoColor, borderRadius: '99px', transition: 'width .45s ease, background .3s' } })
+    )
+  ));
+
   // Temperature + Weight row
   parts.push(h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '12px' } },
     // Temperature
@@ -472,10 +509,22 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     const last = latest(med.id);
     const doseList = med.doses || [{ single: true }];
     const countdownLabel = locked && st.availableAt ? fmtCountdown(st.availableAt - now) : '';
-    const lastLabel = last ? ('Last dose ' + fmtDateLabel(last.ts) + (last.dose ? (' · ' + last.dose) : '')) : 'Not logged today';
-    let subStatus = '';
+    const lastLabel = last ? ('Last dose ' + fmtDateLabel(last.ts) + (last.dose ? (' · ' + last.dose) : '')) : 'No doses logged';
+    // Next dose label
+    let nextDoseLabel = '';
     if (st.ceilingHit) {
-      subStatus = 'Daily limit reached (' + CONFIG.ceilingMg.toLocaleString() + ' mg)';
+      const tmrw = dayStart(now) + 86400000;
+      nextDoseLabel = 'Next dose tomorrow after midnight';
+    } else if (locked && st.availableAt) {
+      nextDoseLabel = 'Next dose at ' + fmtTime(st.availableAt);
+    } else {
+      nextDoseLabel = 'Available now';
+    }
+    // Sub-status
+    let subStatus = '';
+    const dc = med.ceiling ? dailyCeiling(med) : null;
+    if (st.ceilingHit) {
+      subStatus = 'Daily limit reached (' + (dc ? dc.label : CONFIG.ceilingMg.toLocaleString() + ' mg') + ')';
     } else if (locked) {
       subStatus = 'Opens ' + fmtTime(st.availableAt) + (st.windowName ? (' · ' + st.windowName + ' window') : '');
     } else if (st.windowName) {
@@ -497,7 +546,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       buttonArea = h('div', { style: { background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.25)', borderRadius: '14px', padding: '11px 12px', display: 'flex', flexDirection: 'column', gap: '9px' } },
         h('div', { style: { fontSize: '12.5px', color: '#F08880', fontWeight: '600', lineHeight: '1.4', display: 'flex', alignItems: 'center', gap: '7px' } },
           h('span', { style: { flexShrink: '0', width: '18px', height: '18px', borderRadius: '50%', background: '#C0453B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '12px' } }, '!'),
-          st.ceilingHit ? ('Daily ' + CONFIG.ceilingMg.toLocaleString() + ' mg ceiling reached. Log more anyway?') : ('Closed — opens in ' + countdownLabel + '. Log it early anyway?')
+          st.ceilingHit ? ('Daily ' + (dc ? dc.label : CONFIG.ceilingMg.toLocaleString() + ' mg') + ' ceiling reached. Log more anyway?') : ('Closed — opens in ' + countdownLabel + '. Log it early anyway?')
         ),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
           ...doseList.map(d => h('button', { onClick: () => logMed(med.id, d.single ? null : d, { force: true }), style: { flex: '1', minWidth: '92px', minHeight: '48px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '14.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(120,40,34,0.4)' } }, d.single ? 'Override — log now' : ('Log ' + d.label + ' now'))),
@@ -523,6 +572,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       // Meta lines
       h('div', { style: { fontSize: '12.5px', color: '#8B9590', display: 'flex', flexDirection: 'column', gap: '2px' } },
         h('span', null, lastLabel),
+        h('span', { style: { color: st.ceilingHit ? '#F08880' : locked ? '#B5761E' : '#2DD4A0', fontWeight: '600', fontSize: '12px' } }, nextDoseLabel),
         subStatus ? h('span', { style: { color: '#5C6662' } }, subStatus) : null,
         h('span', { style: { color: '#4A5550', fontSize: '11.5px' } }, med.note)
       ),
@@ -593,6 +643,8 @@ function renderHistory(now) {
     if (temps) summary += ' · ' + temps + ' temp' + (temps === 1 ? '' : 's');
     if (weights) summary += ' · ' + weights + ' wt';
     if (tyDay) summary += ' · ' + tyDay.toLocaleString() + ' mg APAP';
+    const imoDay = items.filter(e => e.medId === 'imodium').reduce((s, e) => s + (e.pills || 0), 0);
+    if (imoDay) summary += ' · ' + imoDay + ' Imodium';
     return { key: k, label, summary, items };
   });
 
