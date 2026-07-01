@@ -66,7 +66,7 @@ async function clearAllDB() {
 
 const MEDS = [
   { id:'tylenol', name:'Tylenol', sub:'Acetaminophen', type:'gap', gapH:4, ceiling:true, note:'Min 4-hour gap',
-    doses:[{label:'500 mg',mg:500},{label:'650 mg',mg:650},{label:'1000 mg',mg:1000}] },
+    doses:[{label:'500 mg',mg:500},{label:'1000 mg',mg:1000}] },
   { id:'zofran', name:'Zofran', sub:'Ondansetron', type:'gap', gapH:8, note:'Strict 8-hour gap' },
   { id:'compazine', name:'Compazine', sub:'Prochlorperazine', type:'gap', gapH:6, note:'Min 6h · evening/night preferred' },
   { id:'morphine', name:'Morphine', sub:'Immediate release', type:'gap', gapH:4, note:'4-hour gap',
@@ -110,6 +110,18 @@ function fmtCountdown(ms) {
   return Math.max(1, Math.floor(ms / 1000)) + 's';
 }
 function nameOf(id) { if (id === 'temp') return 'Temperature'; const m = MEDS.find(x => x.id === id); return m ? m.name : id; }
+
+function fmtDateLabel(ts) {
+  const d0 = dayStart(Date.now());
+  const entryDay = dayStart(ts);
+  const time = new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const weekday = new Date(ts).toLocaleDateString([], { weekday: 'long' });
+  const md = (new Date(ts).getMonth() + 1) + '/' + new Date(ts).getDate();
+  if (entryDay === d0) {
+    return 'Today - ' + weekday + ' ' + md + ' at ' + time;
+  }
+  return weekday + ', ' + md + ' at ' + time;
+}
 
 function status(med) {
   const now = state.now;
@@ -191,11 +203,11 @@ async function seedDemo() {
   const n = Date.now(), H = 3600000, d0 = dayStart(n);
   const y = d0 - 24 * H;
   const seeds = [
-    { medId: 'tylenol', dose: '650 mg', mg: 650, ts: y + 9 * H },
+    { medId: 'tylenol', dose: '500 mg', mg: 500, ts: y + 9 * H },
     { medId: 'temp', temp: 100.9, dose: '100.9 °F', mg: 0, ts: y + 9 * H },
     { medId: 'zofran', dose: null, mg: 0, ts: y + 13 * H },
     { medId: 'protonix', dose: null, mg: 0, ts: y + 19 * H },
-    { medId: 'tylenol', dose: '650 mg', mg: 650, ts: n - 2 * H },
+    { medId: 'tylenol', dose: '1000 mg', mg: 1000, ts: n - 2 * H },
     { medId: 'tylenol', dose: '500 mg', mg: 500, ts: n - 6.5 * H },
     { medId: 'zofran', dose: null, mg: 0, ts: n - 3.2 * H },
     { medId: 'morphine', dose: 'Full · 15 mg', mg: 15, ts: n - 1.1 * H },
@@ -265,13 +277,15 @@ function render() {
         )
       )
     ),
+    // Sticky tab switch
+    h('div', { style: { position: 'sticky', top: '60px', zIndex: '15', background: 'rgba(238,241,240,0.92)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', padding: '8px 16px 6px' } },
+      h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', gap: '5px', background: '#E2E7E5', borderRadius: '13px', padding: '4px' } },
+        h('button', { onClick: () => setState({ tab: 'today' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'today' ? '#0F9D6B' : 'transparent', color: state.tab === 'today' ? '#fff' : '#647069', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'today' ? '0 1px 3px rgba(15,157,107,0.25)' : 'none' } }, 'Today'),
+        h('button', { onClick: () => setState({ tab: 'history' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'history' ? '#F5EDCF' : 'transparent', color: state.tab === 'history' ? '#6B5A1E' : '#647069', fontSize: '14px', fontWeight: '700', boxShadow: state.tab === 'history' ? '0 1px 3px rgba(107,90,30,0.15)' : 'none' } }, 'History')
+      )
+    ),
     // Main
     h('main', { style: { maxWidth: '720px', margin: '0 auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '18px' } },
-      // Tab switch
-      h('div', { style: { display: 'flex', gap: '5px', background: '#E2E7E5', borderRadius: '13px', padding: '4px' } },
-        h('button', { onClick: () => setState({ tab: 'today' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'today' ? '#fff' : 'transparent', color: state.tab === 'today' ? '#13211D' : '#647069', fontSize: '14px', fontWeight: state.tab === 'today' ? '700' : '600', boxShadow: state.tab === 'today' ? '0 1px 2px rgba(20,40,35,0.1)' : 'none' } }, 'Today'),
-        h('button', { onClick: () => setState({ tab: 'history' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'history' ? '#fff' : 'transparent', color: state.tab === 'history' ? '#13211D' : '#647069', fontSize: '14px', fontWeight: state.tab === 'history' ? '700' : '600', boxShadow: state.tab === 'history' ? '0 1px 2px rgba(20,40,35,0.1)' : 'none' } }, 'History')
-      ),
       // Tab content
       ...(state.tab === 'today' ? renderToday(now, mg, pct, tyColor, ceiling) : renderHistory(now))
     ),
@@ -361,7 +375,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     const last = latest(med.id);
     const doseList = med.doses || [{ single: true }];
     const countdownLabel = locked ? fmtCountdown(st.availableAt - now) : '';
-    const lastLabel = last ? ('Last dose ' + fmtTime(last.ts) + (last.dose ? (' · ' + last.dose) : '')) : 'Not logged today';
+    const lastLabel = last ? ('Last dose ' + fmtDateLabel(last.ts) + (last.dose ? (' · ' + last.dose) : '')) : 'Not logged today';
     let subStatus = '';
     if (locked) {
       subStatus = 'Opens ' + fmtTime(st.availableAt) + (st.windowName ? (' · ' + st.windowName + ' window') : '');
@@ -472,7 +486,9 @@ function renderHistory(now) {
     const tyDay = items.filter(e => e.medId === 'tylenol').reduce((s, e) => s + (e.mg || 0), 0);
     const doses = items.filter(e => e.medId !== 'temp').length;
     const temps = items.filter(e => e.medId === 'temp').length;
-    const label = k === d0 ? 'Today' : (k === yStart ? 'Yesterday' : new Date(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }));
+    const wkday = new Date(k).toLocaleDateString([], { weekday: 'long' });
+    const md = (new Date(k).getMonth() + 1) + '/' + new Date(k).getDate();
+    const label = k === d0 ? ('Today - ' + wkday + ' ' + md) : (wkday + ', ' + md);
     let summary = doses + ' dose' + (doses === 1 ? '' : 's');
     if (temps) summary += ' · ' + temps + ' temp' + (temps === 1 ? '' : 's');
     if (tyDay) summary += ' · ' + tyDay.toLocaleString() + ' mg APAP';
