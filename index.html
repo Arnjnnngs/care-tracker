@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0F9D6B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>CareTracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{-webkit-font-smoothing:antialiased;background:#EEF1F0;font-family:'Hanken Grotesk',system-ui,sans-serif;color:#13211D;}
+button{-webkit-tap-highlight-color:transparent;font-family:inherit;cursor:pointer;border:none;background:none;}
+button:active{transform:translateY(1px);}
+input{-webkit-tap-highlight-color:transparent;font-family:inherit;}
+input:focus{outline:2px solid #0F9D6B;outline-offset:0;border-color:#0F9D6B;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+#root{min-height:100vh;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// Firebase config — using FuelForge project, isolated collection
+const firebaseConfig = {
+  apiKey: "AIzaSyCHn2cS3uDB4mvFMJcV-Z3QCK0kp2y11Y0",
+  authDomain: "fuelforge-7c132.firebaseapp.com",
+  projectId: "fuelforge-7c132",
+  storageBucket: "fuelforge-7c132.firebasestorage.app",
+  messagingSenderId: "368300007566",
+  appId: "1:368300007566:web:1ecf9ac9926c80c87769df",
+  measurementId: "G-FDYC15ZWV9"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const col = collection(db, "caretracker_entries");
+
+function subscribeEntries(callback) {
+  const q = query(col, orderBy("ts", "asc"));
+  return onSnapshot(q, (snap) => {
+    const entries = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    callback(entries);
+  });
+}
+async function addEntryDB(entry) { await addDoc(col, entry); }
+async function removeEntryDB(id) { await deleteDoc(doc(db, "caretracker_entries", id)); }
+async function clearAllDB() {
+  const q = query(col);
+  const snap = await getDocs(q);
+  const promises = snap.docs.map(d => deleteDoc(d.ref));
+  await Promise.all(promises);
+}
+
+// ---------- React via htm + preact-like approach using vanilla ----------
+// Using a minimal reactive approach with vanilla JS for zero build step
+
+const MEDS = [
+  { id:'tylenol', name:'Tylenol', sub:'Acetaminophen', type:'gap', gapH:4, ceiling:true, note:'Min 4-hour gap',
+    doses:[{label:'500 mg',mg:500},{label:'650 mg',mg:650},{label:'1000 mg',mg:1000}] },
+  { id:'zofran', name:'Zofran', sub:'Ondansetron', type:'gap', gapH:8, note:'Strict 8-hour gap' },
+  { id:'compazine', name:'Compazine', sub:'Prochlorperazine', type:'gap', gapH:6, note:'Min 6h · evening/night preferred' },
+  { id:'morphine', name:'Morphine', sub:'Immediate release', type:'gap', gapH:4, note:'4-hour gap',
+    doses:[{label:'½ tab · 7.5 mg',mg:7.5},{label:'Full · 15 mg',mg:15}] },
+  { id:'protonix', name:'Protonix', sub:'Pantoprazole', type:'win', note:'Twice daily · morning & evening',
+    windows:[{start:5,end:12,name:'Morning'},{start:17,end:22,name:'Evening'}] },
+  { id:'buspirone', name:'Buspirone', sub:'BuSpar', type:'win', note:'Once daily · evening only',
+    windows:[{start:17,end:24,name:'Evening'}] },
+  { id:'paroxetine', name:'Paroxetine', sub:'Paxil', type:'win', note:'Once daily · evening only',
+    windows:[{start:17,end:24,name:'Evening'}] },
+  { id:'iron', name:'Iron', sub:'Ferrous sulfate', type:'win', note:'Once daily · anytime',
+    windows:[{start:0,end:24,name:'Anytime'}] },
+];
+
+const CONFIG = { patientName: 'Brandi', ceilingMg: 4000, tempUnit: 'Fahrenheit' };
+
+// State
+let state = { entries: [], now: Date.now(), toast: null, warn: null, demo: false, tab: 'today', override: null, tempInput: '', loaded: false };
+let toastTimer = null;
+let unsub = null;
+
+function setState(patch) {
+  Object.assign(state, patch);
+  render();
+}
+
+// Helpers
+function dayStart(ts) { const d = new Date(ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }
+function entriesFor(id) { return state.entries.filter(e => e.medId === id); }
+function latest(id) { const es = entriesFor(id); return es.length ? es.reduce((a, b) => a.ts > b.ts ? a : b) : null; }
+function tempSuffix() { return CONFIG.tempUnit === 'Celsius' ? '°C' : '°F'; }
+function tempFever() { return CONFIG.tempUnit === 'Celsius' ? 38.0 : 100.4; }
+function tempHigh() { return CONFIG.tempUnit === 'Celsius' ? 39.4 : 103; }
+function tylenolMg() { const c = state.now - 24 * 3600000; return entriesFor('tylenol').filter(e => e.ts > c).reduce((s, e) => s + (e.mg || 0), 0); }
+function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+function fmtCountdown(ms) {
+  if (ms <= 0) return '0m';
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  if (h > 0) return h + 'h ' + m + 'm';
+  if (m >= 1) { if (m < 5) { const s = Math.floor((ms % 60000) / 1000); return m + 'm ' + s + 's'; } return m + 'm'; }
+  return Math.max(1, Math.floor(ms / 1000)) + 's';
+}
+function nameOf(id) { if (id === 'temp') return 'Temperature'; const m = MEDS.find(x => x.id === id); return m ? m.name : id; }
+
+function status(med) {
+  const now = state.now;
+  const es = entriesFor(med.id).slice().sort((a, b) => a.ts - b.ts);
+  if (med.type === 'gap') {
+    const last = es[es.length - 1];
+    if (!last) return { locked: false };
+    const at = last.ts + med.gapH * 3600000;
+    return { locked: now < at, availableAt: at };
+  }
+  const d0 = dayStart(now), atH = (h) => d0 + h * 3600000;
+  for (const w of med.windows) {
+    const ws = atH(w.start), we = atH(w.end);
+    const used = es.some(e => e.ts >= ws && e.ts < we);
+    if (used) continue;
+    if (now < ws) return { locked: true, availableAt: ws, windowName: w.name };
+    if (now >= ws && now < we) return { locked: false, windowName: w.name };
+  }
+  const first = med.windows[0];
+  return { locked: true, availableAt: d0 + 86400000 + first.start * 3600000, windowName: first.name };
+}
+
+function setToast(msg) {
+  setState({ toast: msg });
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => setState({ toast: null }), 4500);
+}
+
+function afterLog(entry) {
+  const twoH = 2 * 3600000;
+  if (entry.medId === 'iron' || entry.medId === 'protonix') {
+    const other = entry.medId === 'iron' ? 'protonix' : 'iron';
+    const near = state.entries.find(e => e.medId === other && e.id !== entry.id && Math.abs(e.ts - entry.ts) <= twoH);
+    if (near) { setState({ warn: { tone: 'amber', title: 'Iron + Protonix timing', body: 'Iron and Protonix were logged within 2 hours of each other. Protonix (a PPI) lowers stomach acid, which can markedly reduce iron absorption. Aim to separate the two by at least 2 hours.' } }); return; }
+  }
+  if (entry.medId === 'tylenol') {
+    const mg = tylenolMg();
+    if (mg > CONFIG.ceilingMg) { setState({ warn: { tone: 'red', title: 'Acetaminophen ceiling exceeded', body: 'Today’s Tylenol total is ' + mg.toLocaleString() + ' mg, above the ' + CONFIG.ceilingMg.toLocaleString() + ' mg / 24 h limit. Do not give more without contacting the care team.' } }); }
+  }
+}
+
+async function logMed(medId, dose, opts) {
+  opts = opts || {};
+  const med = MEDS.find(m => m.id === medId);
+  const st = status(med);
+  if (st.locked && !opts.force) { setState({ override: { medId } }); return; }
+  const entry = { medId, dose: dose ? dose.label : null, mg: dose ? dose.mg : 0, ts: Date.now() };
+  if (opts.force) entry.override = true;
+  setState({ override: null });
+  await addEntryDB(entry);
+  setToast(med.name + ' logged' + (dose ? (' · ' + dose.label) : '') + (opts.force ? ' (early)' : '') + ' at ' + fmtTime(entry.ts));
+  // afterLog will run after the listener updates entries
+  setTimeout(() => afterLog({ ...entry, id: 'pending' }), 500);
+}
+
+async function logTemp() {
+  const raw = (state.tempInput || '').trim();
+  const v = parseFloat(raw);
+  if (!raw || isNaN(v) || v <= 0 || v > 120) { setToast('Enter a valid temperature'); return; }
+  const suffix = tempSuffix();
+  const entry = { medId: 'temp', temp: v, dose: v + ' ' + suffix, mg: 0, ts: Date.now() };
+  setState({ tempInput: '' });
+  await addEntryDB(entry);
+  setToast('Temperature ' + v + ' ' + suffix + ' logged at ' + fmtTime(entry.ts));
+}
+
+async function removeEntry(id) {
+  await removeEntryDB(id);
+}
+
+async function clearAll() {
+  await clearAllDB();
+  setState({ demo: false, warn: null, override: null });
+  setToast('All entries cleared');
+}
+
+// Seed demo data
+async function seedDemo() {
+  const n = Date.now(), H = 3600000, d0 = dayStart(n);
+  const y = d0 - 24 * H;
+  const seeds = [
+    { medId: 'tylenol', dose: '650 mg', mg: 650, ts: y + 9 * H },
+    { medId: 'temp', temp: 100.9, dose: '100.9 °F', mg: 0, ts: y + 9 * H },
+    { medId: 'zofran', dose: null, mg: 0, ts: y + 13 * H },
+    { medId: 'protonix', dose: null, mg: 0, ts: y + 19 * H },
+    { medId: 'tylenol', dose: '650 mg', mg: 650, ts: n - 2 * H },
+    { medId: 'tylenol', dose: '500 mg', mg: 500, ts: n - 6.5 * H },
+    { medId: 'zofran', dose: null, mg: 0, ts: n - 3.2 * H },
+    { medId: 'morphine', dose: 'Full · 15 mg', mg: 15, ts: n - 1.1 * H },
+    { medId: 'protonix', dose: null, mg: 0, ts: d0 + 8 * H },
+    { medId: 'iron', dose: null, mg: 0, ts: n - 5 * H },
+    { medId: 'temp', temp: 99.8, dose: '99.8 °F', mg: 0, ts: n - 1.5 * H },
+  ].filter(e => e.ts <= n);
+  for (const s of seeds) await addEntryDB(s);
+  setState({ demo: true });
+}
+
+// Lock SVG
+const lockSVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8A9691" stroke-width="2.4"><rect x="4" y="10.5" width="16" height="10" rx="2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg>';
+
+// --------- Render ---------
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'style' && typeof v === 'object') {
+        Object.assign(el.style, v);
+      } else if (k.startsWith('on') && typeof v === 'function') {
+        el.addEventListener(k.slice(2).toLowerCase(), v);
+      } else if (k === 'innerHTML') {
+        el.innerHTML = v;
+      } else if (k === 'className') {
+        el.className = v;
+      } else {
+        el.setAttribute(k, v);
+      }
+    }
+  }
+  for (const child of children.flat(Infinity)) {
+    if (child == null || child === false) continue;
+    el.appendChild(typeof child === 'string' || typeof child === 'number' ? document.createTextNode(String(child)) : child);
+  }
+  return el;
+}
+
+function render() {
+  const root = document.getElementById('root');
+  const now = state.now;
+  const ceiling = CONFIG.ceilingMg;
+  const mg = tylenolMg();
+  const pct = ceiling > 0 ? Math.min(100, mg / ceiling * 100) : 0;
+  const tyColor = mg >= ceiling ? '#C0453B' : pct >= 90 ? '#C0453B' : pct >= 60 ? '#B5761E' : '#0F9D6B';
+  const name = (CONFIG.patientName || '').trim();
+  const title = name ? (name + '’s care tracker') : 'Care Tracker';
+  const dateLabel = new Date(now).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  const nowLabel = fmtTime(now);
+
+  // Build page
+  const page = h('div', { style: { minHeight: '100vh', background: '#EEF1F0', color: '#13211D', paddingBottom: '48px' } },
+    // Header
+    h('header', { style: { position: 'sticky', top: '0', zIndex: '20', background: 'rgba(238,241,240,0.86)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E7E5', padding: '13px 16px' } },
+      h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },
+        h('div', null,
+          h('div', { style: { fontSize: '17px', fontWeight: '800', letterSpacing: '-0.02em' } }, title),
+          h('div', { style: { fontSize: '12.5px', color: '#647069' } }, dateLabel)
+        ),
+        h('div', { style: { textAlign: 'right' } },
+          h('div', { className: 'mono', style: { fontSize: '21px', fontWeight: '600', lineHeight: '1', letterSpacing: '-0.01em' } }, nowLabel),
+          h('div', { style: { fontSize: '11px', color: '#0B7A54', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'flex-end', marginTop: '4px', fontWeight: '600' } },
+            h('span', { style: { width: '7px', height: '7px', borderRadius: '50%', background: '#0F9D6B', display: 'inline-block', boxShadow: '0 0 0 3px rgba(15,157,107,0.18)' } }),
+            'Live sync'
+          )
+        )
+      )
+    ),
+    // Main
+    h('main', { style: { maxWidth: '720px', margin: '0 auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '18px' } },
+      // Tab switch
+      h('div', { style: { display: 'flex', gap: '5px', background: '#E2E7E5', borderRadius: '13px', padding: '4px' } },
+        h('button', { onClick: () => setState({ tab: 'today' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'today' ? '#fff' : 'transparent', color: state.tab === 'today' ? '#13211D' : '#647069', fontSize: '14px', fontWeight: state.tab === 'today' ? '700' : '600', boxShadow: state.tab === 'today' ? '0 1px 2px rgba(20,40,35,0.1)' : 'none' } }, 'Today'),
+        h('button', { onClick: () => setState({ tab: 'history' }), style: { flex: '1', minHeight: '42px', borderRadius: '10px', background: state.tab === 'history' ? '#fff' : 'transparent', color: state.tab === 'history' ? '#13211D' : '#647069', fontSize: '14px', fontWeight: state.tab === 'history' ? '700' : '600', boxShadow: state.tab === 'history' ? '0 1px 2px rgba(20,40,35,0.1)' : 'none' } }, 'History')
+      ),
+      // Tab content
+      ...(state.tab === 'today' ? renderToday(now, mg, pct, tyColor, ceiling) : renderHistory(now))
+    ),
+    // Toast
+    state.toast ? h('div', { style: { position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: '#13211D', color: '#fff', padding: '12px 20px', borderRadius: '99px', fontSize: '14px', fontWeight: '600', boxShadow: '0 10px 28px rgba(20,40,35,0.3)', zIndex: '50', maxWidth: '90vw', textAlign: 'center', whiteSpace: 'nowrap' } }, state.toast) : null,
+    // Loading overlay
+    !state.loaded ? h('div', { style: { position: 'fixed', inset: '0', background: '#EEF1F0', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '100' } },
+      h('div', { style: { textAlign: 'center' } },
+        h('div', { style: { fontSize: '24px', fontWeight: '800', color: '#0F9D6B', marginBottom: '8px' } }, '⚕️ CareTracker'),
+        h('div', { style: { fontSize: '14px', color: '#647069' } }, 'Connecting...')
+      )
+    ) : null
+  );
+
+  root.innerHTML = '';
+  root.appendChild(page);
+}
+
+function renderToday(now, mg, pct, tyColor, ceiling) {
+  const parts = [];
+
+  // Demo banner
+  if (state.demo) {
+    parts.push(h('div', { style: { background: '#EAF1FB', border: '1px solid #CBDDF5', borderRadius: '16px', padding: '12px 14px', display: 'flex', gap: '12px', alignItems: 'center' } },
+      h('div', { style: { flex: '1', color: '#2C4A73', fontSize: '13px', lineHeight: '1.45' } }, 'Showing sample data so you can see the tracker in action. Log a real dose or clear it to start fresh.'),
+      h('button', { onClick: clearAll, style: { flexShrink: '0', background: '#2C4A73', color: '#fff', borderRadius: '11px', padding: '10px 14px', fontSize: '13px', fontWeight: '700' } }, 'Start fresh')
+    ));
+  }
+
+  // Warning banners
+  if (state.warn) {
+    const w = state.warn;
+    const isRed = w.tone === 'red';
+    parts.push(h('div', { style: { background: isRed ? '#FBEAE8' : '#FBF2DD', border: '1px solid ' + (isRed ? '#F0C7C2' : '#EBD199'), borderRadius: '16px', padding: '14px 15px', display: 'flex', gap: '12px', alignItems: 'flex-start' } },
+      h('span', { style: { flexShrink: '0', width: '24px', height: '24px', borderRadius: '50%', background: isRed ? '#C0453B' : '#B5761E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '15px' } }, '!'),
+      h('div', { style: { flex: '1' } },
+        h('div', { style: { fontWeight: '800', color: isRed ? '#9E3229' : '#8A5A12', fontSize: '14.5px', marginBottom: '3px' } }, w.title),
+        h('div', { style: { color: isRed ? '#7A3A34' : '#785016', fontSize: '13px', lineHeight: '1.5' } }, w.body)
+      ),
+      h('button', { onClick: () => setState({ warn: null }), style: { color: isRed ? '#9E3229' : '#8A5A12', fontSize: '20px', lineHeight: '1', padding: '0 2px' } }, '×')
+    ));
+  }
+
+  // Summary row
+  const lastTemp = latest('temp');
+  let tempColor = '#13211D';
+  if (lastTemp) { if (lastTemp.temp >= tempHigh()) tempColor = '#C0453B'; else if (lastTemp.temp >= tempFever()) tempColor = '#B5761E'; }
+  const tempSubLabel = lastTemp ? ('Last reading ' + fmtTime(lastTemp.ts)) : 'No readings yet';
+
+  parts.push(h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '12px' } },
+    // Acetaminophen meter
+    h('section', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
+        h('div', null,
+          h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#647069' } }, 'Acetaminophen · 24 h'),
+          h('div', { style: { fontSize: '12.5px', color: '#94A09B', marginTop: '3px' } }, Math.max(0, ceiling - mg).toLocaleString() + ' mg left before ceiling')
+        ),
+        h('div', { className: 'mono', style: { fontSize: '20px', fontWeight: '600', letterSpacing: '-0.02em', whiteSpace: 'nowrap' } },
+          mg.toLocaleString(),
+          h('span', { style: { color: '#94A09B', fontSize: '13px', fontWeight: '400' } }, ' / ' + ceiling.toLocaleString() + ' mg')
+        )
+      ),
+      h('div', { style: { height: '12px', background: '#EEF1F0', borderRadius: '99px', overflow: 'hidden', marginTop: '12px' } },
+        h('div', { style: { height: '100%', width: Math.round(pct) + '%', background: tyColor, borderRadius: '99px', transition: 'width .45s ease, background .3s' } })
+      )
+    ),
+    // Temperature
+    h('section', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' } },
+        h('div', null,
+          h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#647069' } }, 'Temperature'),
+          h('div', { style: { fontSize: '12.5px', color: '#94A09B', marginTop: '3px' } }, tempSubLabel)
+        ),
+        lastTemp ? h('div', { className: 'mono', style: { fontSize: '22px', fontWeight: '600', letterSpacing: '-0.02em', color: tempColor, whiteSpace: 'nowrap' } }, lastTemp.temp + tempSuffix()) : null
+      ),
+      h('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } },
+        h('input', { type: 'number', inputMode: 'decimal', step: '0.1', placeholder: CONFIG.tempUnit === 'Celsius' ? '37.5' : '99.8', value: state.tempInput, onInput: (e) => { state.tempInput = e.target.value; }, className: 'mono', style: { flex: '1', minWidth: '0', minHeight: '52px', border: '1px solid #E2E7E5', borderRadius: '13px', padding: '0 14px', fontSize: '16px', background: '#F9FAFA', color: '#13211D' } }),
+        h('button', { onClick: logTemp, style: { flexShrink: '0', minHeight: '52px', padding: '0 18px', borderRadius: '13px', background: '#13211D', color: '#fff', fontSize: '15px', fontWeight: '700' } }, 'Log')
+      )
+    )
+  ));
+
+  // Quick Log section
+  const medCards = MEDS.map(med => {
+    const st = status(med);
+    const locked = !!st.locked;
+    const last = latest(med.id);
+    const doseList = med.doses || [{ single: true }];
+    const countdownLabel = locked ? fmtCountdown(st.availableAt - now) : '';
+    const lastLabel = last ? ('Last dose ' + fmtTime(last.ts) + (last.dose ? (' · ' + last.dose) : '')) : 'Not logged today';
+    let subStatus = '';
+    if (locked) {
+      subStatus = 'Opens ' + fmtTime(st.availableAt) + (st.windowName ? (' · ' + st.windowName + ' window') : '');
+    } else if (st.windowName) {
+      subStatus = st.windowName + ' window open';
+    }
+    const isOverriding = !!(state.override && state.override.medId === med.id);
+
+    // Buttons
+    let buttonArea;
+    if (!locked) {
+      buttonArea = h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+        ...doseList.map(d => h('button', { onClick: () => logMed(med.id, d.single ? null : d), style: { flex: '1', minWidth: '92px', minHeight: '52px', borderRadius: '13px', background: '#0F9D6B', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(11,90,64,0.35)' } }, d.single ? ('Log ' + med.name) : d.label))
+      );
+    } else if (!isOverriding) {
+      buttonArea = h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+        ...doseList.map(d => h('button', { onClick: () => setState({ override: { medId: med.id } }), style: { flex: '1', minWidth: '92px', minHeight: '52px', border: '1px dashed #CBD3D0', borderRadius: '13px', background: '#F4F6F5', color: '#9AA5A0', fontSize: '15px', fontWeight: '600' } }, d.single ? ('Log ' + med.name) : d.label))
+      );
+    } else {
+      buttonArea = h('div', { style: { background: '#FBEAE8', border: '1px solid #F0C7C2', borderRadius: '14px', padding: '11px 12px', display: 'flex', flexDirection: 'column', gap: '9px' } },
+        h('div', { style: { fontSize: '12.5px', color: '#9E3229', fontWeight: '600', lineHeight: '1.4', display: 'flex', alignItems: 'center', gap: '7px' } },
+          h('span', { style: { flexShrink: '0', width: '18px', height: '18px', borderRadius: '50%', background: '#C0453B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '12px' } }, '!'),
+          'Closed — opens in ' + countdownLabel + '. Log it early anyway?'
+        ),
+        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+          ...doseList.map(d => h('button', { onClick: () => logMed(med.id, d.single ? null : d, { force: true }), style: { flex: '1', minWidth: '92px', minHeight: '48px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '14.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(120,40,34,0.4)' } }, d.single ? 'Override — log now' : ('Log ' + d.label + ' now'))),
+          h('button', { onClick: () => setState({ override: null }), style: { flexShrink: '0', minHeight: '48px', padding: '0 15px', border: '1px solid #E2C4C0', borderRadius: '11px', background: '#fff', color: '#9E3229', fontSize: '14px', fontWeight: '600' } }, 'Cancel')
+        )
+      );
+    }
+
+    return h('div', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '18px', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+      // Header row
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
+        h('div', null,
+          h('div', { style: { fontSize: '17px', fontWeight: '800', letterSpacing: '-0.01em' } }, med.name),
+          h('div', { style: { fontSize: '12.5px', color: '#647069' } }, med.sub)
+        ),
+        locked ?
+          h('div', { className: 'mono', innerHTML: lockSVG + ' ' + countdownLabel, style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#F1F3F2', color: '#8A9691', border: '1px solid #E2E7E5', borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '600', flexShrink: '0' } }) :
+          h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#E4F5EE', color: '#0B7A54', border: '1px solid #B7E4D2', borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '700', flexShrink: '0' } },
+            h('span', { style: { width: '7px', height: '7px', borderRadius: '50%', background: '#0F9D6B', display: 'inline-block' } }),
+            'Open'
+          )
+      ),
+      // Meta lines
+      h('div', { style: { fontSize: '12.5px', color: '#647069', display: 'flex', flexDirection: 'column', gap: '2px' } },
+        h('span', null, lastLabel),
+        subStatus ? h('span', { style: { color: '#8A9691' } }, subStatus) : null,
+        h('span', { style: { color: '#9AA5A0', fontSize: '11.5px' } }, med.note)
+      ),
+      // Buttons
+      buttonArea
+    );
+  });
+
+  parts.push(h('section', null,
+    h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#647069' } }, 'Quick log'),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '12px', marginTop: '11px' } }, ...medCards)
+  ));
+
+  // Today's journal
+  const d0 = dayStart(now);
+  const todayEntries = state.entries.filter(e => e.ts >= d0).slice().sort((a, b) => a.ts - b.ts);
+  const bucket = (ts) => { const hr = new Date(ts).getHours(); if (hr >= 5 && hr < 12) return 'Morning'; if (hr >= 12 && hr < 17) return 'Afternoon'; if (hr >= 17 && hr < 22) return 'Evening'; return 'Night'; };
+  const tmap = {};
+  todayEntries.forEach(e => { const bk = bucket(e.ts); (tmap[bk] = tmap[bk] || []).push(e); });
+  const journalGroups = Object.keys(tmap).map(label => ({ label, minTs: tmap[label][0].ts, items: tmap[label] })).sort((a, b) => a.minTs - b.minTs);
+
+  parts.push(h('section', null,
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+      h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#647069' } }, 'Today’s journal'),
+      journalGroups.length > 0 ? h('button', { onClick: clearAll, style: { color: '#94A09B', fontSize: '12.5px' } }, 'Clear all') : null
+    ),
+    journalGroups.length > 0 ?
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '11px' } },
+        ...journalGroups.map(g => h('div', null,
+          h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#94A09B', marginBottom: '8px' } }, g.label),
+          h('div', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '16px', overflow: 'hidden' } },
+            ...g.items.map((e, i) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: i > 0 ? '1px solid #F0F3F2' : 'none' } },
+              h('div', { className: 'mono', style: { fontSize: '13px', color: '#647069', minWidth: '66px' } }, fmtTime(e.ts)),
+              h('div', { style: { flex: '1' } },
+                h('div', { style: { fontSize: '15px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' } },
+                  nameOf(e.medId),
+                  e.override ? h('span', { style: { fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9E3229', background: '#FBEAE8', border: '1px solid #F0C7C2', borderRadius: '6px', padding: '1px 6px' } }, 'Early') : null
+                ),
+                e.dose ? h('div', { style: { fontSize: '12.5px', color: '#647069' } }, e.dose) : null
+              ),
+              h('button', { onClick: () => removeEntry(e.id), style: { color: '#B4453B', fontSize: '12.5px', padding: '6px' } }, 'Remove')
+            ))
+          )
+        ))
+      ) :
+      h('div', { style: { background: '#fff', border: '1px dashed #D8DEDC', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#94A09B', fontSize: '14px', marginTop: '11px', lineHeight: '1.5' } }, 'No doses logged yet today.\nUse the buttons above to log the first one.')
+  ));
+
+  return parts;
+}
+
+function renderHistory(now) {
+  const d0 = dayStart(now);
+  const yStart = d0 - 86400000;
+  const dmap = {};
+  state.entries.forEach(e => { const k = dayStart(e.ts); (dmap[k] = dmap[k] || []).push(e); });
+
+  const historyDays = Object.keys(dmap).map(k => +k).sort((a, b) => b - a).map(k => {
+    const items = dmap[k].slice().sort((a, b) => a.ts - b.ts);
+    const tyDay = items.filter(e => e.medId === 'tylenol').reduce((s, e) => s + (e.mg || 0), 0);
+    const doses = items.filter(e => e.medId !== 'temp').length;
+    const temps = items.filter(e => e.medId === 'temp').length;
+    const label = k === d0 ? 'Today' : (k === yStart ? 'Yesterday' : new Date(k).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }));
+    let summary = doses + ' dose' + (doses === 1 ? '' : 's');
+    if (temps) summary += ' · ' + temps + ' temp' + (temps === 1 ? '' : 's');
+    if (tyDay) summary += ' · ' + tyDay.toLocaleString() + ' mg APAP';
+    return { key: k, label, summary, items };
+  });
+
+  if (historyDays.length === 0) {
+    return [h('div', { style: { background: '#fff', border: '1px dashed #D8DEDC', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#94A09B', fontSize: '14px', lineHeight: '1.5' } }, 'No history yet.')];
+  }
+
+  return [h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
+    ...historyDays.map(d => h('div', null,
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', marginBottom: '8px' } },
+        h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.03em', textTransform: 'uppercase', color: '#647069' } }, d.label),
+        h('div', { className: 'mono', style: { fontSize: '12px', color: '#94A09B' } }, d.summary)
+      ),
+      h('div', { style: { background: '#fff', border: '1px solid #E2E7E5', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 2px rgba(20,40,35,0.04)' } },
+        ...d.items.map((e, i) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: i > 0 ? '1px solid #F0F3F2' : 'none' } },
+          h('div', { className: 'mono', style: { fontSize: '13px', color: '#647069', minWidth: '66px' } }, fmtTime(e.ts)),
+          h('div', { style: { flex: '1' } },
+            h('div', { style: { fontSize: '15px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' } },
+              nameOf(e.medId),
+              e.override ? h('span', { style: { fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9E3229', background: '#FBEAE8', border: '1px solid #F0C7C2', borderRadius: '6px', padding: '1px 6px' } }, 'Early') : null
+            ),
+            e.dose ? h('div', { style: { fontSize: '12.5px', color: '#647069' } }, e.dose) : null
+          ),
+          h('button', { onClick: () => removeEntry(e.id), style: { color: '#B4453B', fontSize: '12.5px', padding: '6px' } }, 'Remove')
+        ))
+      )
+    ))
+  )];
+}
+
+// Init
+unsub = subscribeEntries((entries) => {
+  const wasEmpty = state.entries.length === 0 && !state.loaded;
+  setState({ entries, loaded: true });
+  // If first load and no entries, offer to seed demo data
+  if (wasEmpty && entries.length === 0) {
+    seedDemo();
+  }
+});
+
+setInterval(() => { state.now = Date.now(); render(); }, 1000);
+render();
+
+// Service worker registration
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
