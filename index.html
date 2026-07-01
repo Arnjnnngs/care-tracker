@@ -139,6 +139,10 @@ function status(med) {
   const now = state.now;
   const es = entriesFor(med.id).slice().sort((a, b) => a.ts - b.ts);
   if (med.type === 'gap') {
+    // Check daily ceiling first (Tylenol)
+    if (med.ceiling && tylenolMg() >= CONFIG.ceilingMg) {
+      return { locked: true, ceilingHit: true };
+    }
     const last = es[es.length - 1];
     if (!last) return { locked: false };
     const at = last.ts + med.gapH * 3600000;
@@ -467,10 +471,12 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     const locked = !!st.locked;
     const last = latest(med.id);
     const doseList = med.doses || [{ single: true }];
-    const countdownLabel = locked ? fmtCountdown(st.availableAt - now) : '';
+    const countdownLabel = locked && st.availableAt ? fmtCountdown(st.availableAt - now) : '';
     const lastLabel = last ? ('Last dose ' + fmtDateLabel(last.ts) + (last.dose ? (' · ' + last.dose) : '')) : 'Not logged today';
     let subStatus = '';
-    if (locked) {
+    if (st.ceilingHit) {
+      subStatus = 'Daily limit reached (' + CONFIG.ceilingMg.toLocaleString() + ' mg)';
+    } else if (locked) {
       subStatus = 'Opens ' + fmtTime(st.availableAt) + (st.windowName ? (' · ' + st.windowName + ' window') : '');
     } else if (st.windowName) {
       subStatus = st.windowName + ' window open';
@@ -491,7 +497,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       buttonArea = h('div', { style: { background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.25)', borderRadius: '14px', padding: '11px 12px', display: 'flex', flexDirection: 'column', gap: '9px' } },
         h('div', { style: { fontSize: '12.5px', color: '#F08880', fontWeight: '600', lineHeight: '1.4', display: 'flex', alignItems: 'center', gap: '7px' } },
           h('span', { style: { flexShrink: '0', width: '18px', height: '18px', borderRadius: '50%', background: '#C0453B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '12px' } }, '!'),
-          'Closed — opens in ' + countdownLabel + '. Log it early anyway?'
+          st.ceilingHit ? ('Daily ' + CONFIG.ceilingMg.toLocaleString() + ' mg ceiling reached. Log more anyway?') : ('Closed — opens in ' + countdownLabel + '. Log it early anyway?')
         ),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
           ...doseList.map(d => h('button', { onClick: () => logMed(med.id, d.single ? null : d, { force: true }), style: { flex: '1', minWidth: '92px', minHeight: '48px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '14.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(120,40,34,0.4)' } }, d.single ? 'Override — log now' : ('Log ' + d.label + ' now'))),
@@ -508,7 +514,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           h('div', { style: { fontSize: '12.5px', color: '#8B9590' } }, med.sub)
         ),
         locked ?
-          h('div', { className: 'mono', innerHTML: lockSVG + ' ' + countdownLabel, style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.06)', color: '#5C6662', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '600', flexShrink: '0' } }) :
+          h('div', { className: 'mono', innerHTML: lockSVG + ' ' + (st.ceilingHit ? 'Limit' : countdownLabel), style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: st.ceilingHit ? 'rgba(192,69,59,0.15)' : 'rgba(255,255,255,0.06)', color: st.ceilingHit ? '#F08880' : '#5C6662', border: '1px solid ' + (st.ceilingHit ? 'rgba(192,69,59,0.25)' : 'rgba(255,255,255,0.08)'), borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '600', flexShrink: '0' } }) :
           h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(15,157,107,0.12)', color: '#2DD4A0', border: '1px solid rgba(15,157,107,0.25)', borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '700', flexShrink: '0' } },
             h('span', { style: { width: '7px', height: '7px', borderRadius: '50%', background: '#0F9D6B', display: 'inline-block' } }),
             'Open'
