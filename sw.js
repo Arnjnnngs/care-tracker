@@ -1,4 +1,4 @@
-const CACHE = 'caretracker-v9';
+const CACHE = 'caretracker-v10';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {

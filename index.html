@@ -88,9 +88,15 @@ const CONFIG = { patientName: 'Brandi', ceilingMg: 4000, tempUnit: 'Fahrenheit' 
 let state = { entries: [], now: Date.now(), toast: null, warn: null, demo: false, tab: 'today', override: null, tempInput: '', weightInput: '', weightRange: 'weeks', timeModal: null, loaded: false };
 let toastTimer = null;
 let unsub = null;
+let pendingEntries = null;
 
 function setState(patch) {
   Object.assign(state, patch);
+  // Flush any deferred Firestore entries when the time modal closes
+  if (!state.timeModal && pendingEntries) {
+    state.entries = pendingEntries;
+    pendingEntries = null;
+  }
   render();
 }
 
@@ -779,6 +785,12 @@ function renderWeightTrend(now) {
 // Init
 unsub = subscribeEntries((entries) => {
   const wasEmpty = state.entries.length === 0 && !state.loaded;
+  if (state.timeModal) {
+    // Defer update so the modal isn't destroyed mid-interaction
+    pendingEntries = entries;
+    if (!state.loaded) { state.loaded = true; state.entries = entries; }
+    return;
+  }
   setState({ entries, loaded: true });
   // If first load and no entries, offer to seed demo data
   if (wasEmpty && entries.length === 0) {
@@ -786,7 +798,10 @@ unsub = subscribeEntries((entries) => {
   }
 });
 
-setInterval(() => { state.now = Date.now(); render(); }, 1000);
+setInterval(() => {
+  state.now = Date.now();
+  if (!state.timeModal) render();
+}, 1000);
 render();
 
 // Service worker registration
