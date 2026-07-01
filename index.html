@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>CareTracker</title>
+<title>Brandi's Meds / Vitals Historical</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -266,7 +266,7 @@ function render() {
   const pct = ceiling > 0 ? Math.min(100, mg / ceiling * 100) : 0;
   const tyColor = mg >= ceiling ? '#C0453B' : pct >= 90 ? '#C0453B' : pct >= 60 ? '#B5761E' : '#0F9D6B';
   const name = (CONFIG.patientName || '').trim();
-  const title = name ? (name + '’s care tracker') : 'Care Tracker';
+  const title = name ? (name + '’s Meds / Vitals Historical') : 'Meds / Vitals Historical';
   const dateLabel = new Date(now).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
   const nowLabel = fmtTime(now);
 
