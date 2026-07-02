@@ -1,0 +1,27 @@
+name: Send Med Reminders
+
+on:
+  schedule:
+    # 8:30 AM CDT = 1:30 PM UTC (during CDT/summer)
+    - cron: '30 13 * * *'
+    # 8:00 PM CDT = 1:00 AM UTC next day (during CDT/summer)
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install firebase-admin@12
+
+      - name: Send notifications
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node send-reminders.js
