@@ -840,6 +840,152 @@ function renderWeightTrend(now) {
   return [toggle, chart, stats, readings];
 }
 
+
+// --------- Notification System ---------
+let notifSentToday = {};  // key: 'scheduled-8pm' or 'avail-tylenol-{ts}', value: true
+
+function resetNotifTracking() {
+  const today = dayStart(Date.now());
+  if (notifSentToday._day !== today) {
+    notifSentToday = { _day: today };
+  }
+}
+
+function requestNotifPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function sendNotif(title, body, tag) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, { body, icon: 'icon-192.png', tag, requireInteraction: false });
+  } catch(e) {
+    // Fallback for mobile: use service worker registration
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.showNotification(title, { body, icon: 'icon-192.png', tag, requireInteraction: false });
+      }).catch(() => {});
+    }
+  }
+}
+
+function checkNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!state.loaded || state.entries.length === 0 && !state.demo) return;
+
+  resetNotifTracking();
+  const now = new Date();
+  const h = now.getHours();
+  const m = now.getMinutes();
+  const nowTs = now.getTime();
+
+  // Quiet hours: no notifications between 10 PM (22) and 8 AM (8)
+  if (h >= 22 || h < 8) return;
+
+  // --- SCHEDULED REMINDERS ---
+
+  // 8:00 PM reminder (20:00) - evening meds
+  // Fire between 8:00 PM and 8:05 PM
+  if (h === 20 && m < 5 && !notifSentToday['sched-8pm']) {
+    const eveningMeds = ['protonix', 'iron', 'buspirone', 'paroxetine', 'compazine'];
+    const due = [];
+    const d0 = dayStart(nowTs);
+    eveningMeds.forEach(medId => {
+      const med = MEDS.find(x => x.id === medId);
+      if (!med) return;
+      // Check if already taken in the evening window today
+      if (med.type === 'win') {
+        const eveningWin = med.windows.find(w => w.start >= 17);
+        if (eveningWin) {
+          const ws = d0 + eveningWin.start * 3600000;
+          const we = d0 + eveningWin.end * 3600000;
+          const taken = state.entries.some(e => e.medId === medId && e.ts >= ws && e.ts < we);
+          if (!taken) due.push(med.name);
+        } else {
+          // Anytime window (iron) - check if taken today at all
+          const taken = state.entries.some(e => e.medId === medId && e.ts >= d0);
+          if (!taken) due.push(med.name);
+        }
+      } else if (med.type === 'gap') {
+        // Compazine is gap-based but reminder at 8pm
+        const st = status(med);
+        if (!st.locked) due.push(med.name);
+      }
+    });
+    if (due.length > 0) {
+      sendNotif('Evening Meds Due', due.join(', ') + ' — time for evening doses', 'evening-8pm');
+    }
+    notifSentToday['sched-8pm'] = true;
+  }
+
+  // 8:30 AM reminder (8:30) - morning meds
+  // Fire between 8:30 AM and 8:35 AM
+  if (h === 8 && m >= 30 && m < 35 && !notifSentToday['sched-830am']) {
+    const morningMeds = [];
+    const d0 = dayStart(nowTs);
+    // Protonix morning window
+    const protonix = MEDS.find(x => x.id === 'protonix');
+    if (protonix) {
+      const mornWin = protonix.windows.find(w => w.start < 12);
+      if (mornWin) {
+        const ws = d0 + mornWin.start * 3600000;
+        const we = d0 + mornWin.end * 3600000;
+        const taken = state.entries.some(e => e.medId === 'protonix' && e.ts >= ws && e.ts < we);
+        if (!taken) morningMeds.push('Protonix');
+      }
+    }
+    // Zofran morning reminder
+    const zofran = MEDS.find(x => x.id === 'zofran');
+    if (zofran) {
+      const st = status(zofran);
+      if (!st.locked) morningMeds.push('Zofran');
+    }
+    if (morningMeds.length > 0) {
+      sendNotif('Morning Meds Due', morningMeds.join(', ') + ' — time for morning doses', 'morning-830am');
+    }
+    notifSentToday['sched-830am'] = true;
+  }
+
+  // --- GAP-BASED REMINDERS (fire when med becomes available) ---
+  const gapMeds = ['tylenol', 'morphine', 'imodium', 'zofran'];
+  gapMeds.forEach(medId => {
+    const med = MEDS.find(x => x.id === medId);
+    if (!med) return;
+    const st = status(med);
+
+    // Only notify when med just became available (was locked, now open)
+    if (st.locked) return;
+
+    // Check daily ceiling - don't notify if ceiling hit
+    if (st.ceilingHit) return;
+
+    // For Zofran: the 8:30 AM reminder already covers morning.
+    // Only send gap-based for later-in-day availability.
+    const last = latest(medId);
+    if (!last) return; // No previous dose, don't spam
+
+    // Create a unique key based on the dose timestamp so we only notify once per availability window
+    const notifKey = 'avail-' + medId + '-' + last.ts;
+    if (notifSentToday[notifKey]) return;
+
+    // Only notify if the gap JUST expired (within the last 2 minutes)
+    // This prevents firing on every render cycle
+    if (med.type === 'gap' && med.gapH > 0) {
+      const gapEnd = last.ts + med.gapH * 3600000;
+      const sinceFree = nowTs - gapEnd;
+      if (sinceFree >= 0 && sinceFree < 120000) {
+        sendNotif(med.name + ' Available', med.name + ' gap timer is up — ready to dose', 'avail-' + medId);
+        notifSentToday[notifKey] = true;
+      }
+    }
+  });
+}
+
+// Request permission on load
+requestNotifPermission();
+
 // Init
 unsub = subscribeEntries((entries) => {
   const wasEmpty = state.entries.length === 0 && !state.loaded;
@@ -859,6 +1005,7 @@ unsub = subscribeEntries((entries) => {
 setInterval(() => {
   state.now = Date.now();
   if (!state.timeModal && !(document.activeElement && document.activeElement.tagName === 'INPUT')) render();
+  checkNotifications();
 }, 1000);
 render();
 
