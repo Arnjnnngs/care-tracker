@@ -858,7 +858,7 @@ unsub = subscribeEntries((entries) => {
 
 setInterval(() => {
   state.now = Date.now();
-  if (!state.timeModal) render();
+  if (!state.timeModal && !(document.activeElement && document.activeElement.tagName === 'INPUT')) render();
 }, 1000);
 render();
 
