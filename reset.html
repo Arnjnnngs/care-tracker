@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CareTracker - Resetting Cache</title>
+<style>
+body { background: #0A0A0A; color: #E8EBE9; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; padding: 20px; }
+.box { max-width: 400px; }
+h1 { font-size: 20px; margin-bottom: 12px; }
+p { font-size: 15px; color: #8B9590; margin-bottom: 8px; }
+.done { color: #0F9D6B; font-weight: 600; }
+.err { color: #E85D5D; }
+</style>
+</head>
+<body>
+<div class="box">
+<h1>Resetting CareTracker...</h1>
+<p id="status">Clearing old cache and service worker...</p>
+</div>
+<script>
+(async function() {
+  const el = document.getElementById('status');
+  try {
+    // Unregister all service workers
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) await r.unregister();
+    el.textContent = 'Service worker removed. Clearing caches...';
+
+    // Delete all caches
+    const keys = await caches.keys();
+    for (const k of keys) await caches.delete(k);
+    el.innerHTML = '<span class="done">Cache cleared! Redirecting...</span>';
+
+    // Redirect to main app after brief pause
+    setTimeout(() => { window.location.href = './index.html?' + Date.now(); }, 1500);
+  } catch(e) {
+    el.innerHTML = '<span class="err">Error: ' + e.message + '</span><br><br><a href="./index.html?' + Date.now() + '" style="color:#0F9D6B">Tap here to load the app</a>';
+  }
+})();
+</script>
+</body>
+</html>
