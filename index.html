@@ -30,7 +30,8 @@ input:focus{outline:2px solid #D4688A;outline-offset:0;border-color:#D4688A;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
 // Firebase config — using FuelForge project, isolated collection
 const firebaseConfig = {
@@ -45,6 +46,39 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const col = collection(db, "caretracker_entries");
+
+// Firebase Cloud Messaging setup
+let messaging = null;
+try {
+  messaging = getMessaging(app);
+} catch(e) { console.log('FCM init error:', e); }
+
+async function subscribePush() {
+  if (!messaging) return;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const token = await getToken(messaging, { vapidKey: 'BDtWQsiOtaDFUOMrkM0KY3bTXIZix0MRcYFZUrpjuYDsc4qDQbFM7DvNrRZaKA_0kQ_vo7JHQnlEetZ0NP3tRvw' });
+    if (token) {
+      // Store token in Firestore (use token as doc ID to prevent duplicates)
+      await setDoc(doc(db, 'fcm_tokens', token), {
+        token: token,
+        updatedAt: Date.now(),
+        userAgent: navigator.userAgent
+      });
+      console.log('FCM token saved');
+    }
+  } catch(e) { console.log('FCM subscribe error:', e); }
+}
+
+// Handle foreground messages
+if (messaging) {
+  onMessage(messaging, (payload) => {
+    const n = payload.notification || {};
+    setToast(n.body || n.title || 'New notification');
+  });
+}
+
 
 function subscribeEntries(callback) {
   const q = query(col, orderBy("ts", "asc"));
@@ -983,8 +1017,8 @@ function checkNotifications() {
   });
 }
 
-// Request permission on load
-requestNotifPermission();
+// Request push notification permission and subscribe to FCM
+subscribePush();
 
 // Init
 unsub = subscribeEntries((entries) => {
