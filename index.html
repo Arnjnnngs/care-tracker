@@ -949,7 +949,7 @@ function checkNotifications() {
   }
 
   // --- GAP-BASED REMINDERS (fire when med becomes available) ---
-  const gapMeds = ['tylenol', 'morphine', 'imodium', 'zofran'];
+  const gapMeds = ['zofran'];
   gapMeds.forEach(medId => {
     const med = MEDS.find(x => x.id === medId);
     if (!med) return;
