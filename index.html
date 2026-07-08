@@ -89,12 +89,7 @@ function subscribeEntries(callback) {
 }
 async function addEntryDB(entry) { await addDoc(col, entry); }
 async function removeEntryDB(id) { await deleteDoc(doc(db, "caretracker_entries", id)); }
-async function clearAllDB() {
-  const q = query(col);
-  const snap = await getDocs(q);
-  const promises = snap.docs.map(d => deleteDoc(d.ref));
-  await Promise.all(promises);
-}
+// clearAllDB removed - history must be preserved
 
 // ---------- React via htm + preact-like approach using vanilla ----------
 // Using a minimal reactive approach with vanilla JS for zero build step
@@ -285,11 +280,7 @@ async function removeEntry(id) {
   await removeEntryDB(id);
 }
 
-async function clearAll() {
-  await clearAllDB();
-  setState({ demo: false, warn: null, override: null });
-  setToast('All entries cleared');
-}
+// clearAll removed - history must be preserved
 
 // Seed demo data
 async function seedDemo() {
@@ -439,8 +430,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // Demo banner
   if (state.demo) {
     parts.push(h('div', { style: { background: 'rgba(212,104,138,0.08)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '16px', padding: '12px 14px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' } },
-      h('div', { style: { flex: '1', color: '#9B7088', fontSize: '13px', lineHeight: '1.45' } }, 'Showing sample data so you can see the tracker in action. Log a real dose or clear it to start fresh.'),
-      h('button', { onClick: clearAll, style: { flexShrink: '0', background: '#D4688A', color: '#fff', borderRadius: '11px', padding: '10px 14px', fontSize: '13px', fontWeight: '700' } }, 'Start fresh')
+      h('div', { style: { flex: '1', color: '#9B7088', fontSize: '13px', lineHeight: '1.45' } }, 'Showing sample data so you can see the tracker in action. Log a real dose or clear it to start fresh.')
     ));
   }
 
@@ -631,7 +621,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   parts.push(h('section', null,
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
       h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#9B7088' } }, 'Today’s journal'),
-      journalGroups.length > 0 ? h('button', { onClick: clearAll, style: { color: '#B89AAB', fontSize: '12.5px' } }, 'Clear all') : null
+      null
     ),
     journalGroups.length > 0 ?
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '11px' } },
