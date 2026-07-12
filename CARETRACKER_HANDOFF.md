@@ -260,3 +260,22 @@ A report of "all blank" on a device was investigated. Loading the app in a fresh
 - **The app rendered fully** with all data visible
 
 **Conclusion:** The blank-screen issue is device-specific, likely a stale service worker cache. The reset page (`reset.html`) or clearing site data on the affected device should resolve it.
+
+---
+
+## 14. Keeping These Docs Updated
+
+**IMPORTANT: When you make any changes to CareTracker, update both documentation files in the same commit.**
+
+### What to update in README.md:
+- Add a new row to the **Version History** table
+- Revise any sections affected by the change (Tracked Medications, Service Worker Strategy, Push Notification Reminders, Project Structure, etc.)
+
+### What to update in CARETRACKER_HANDOFF.md (this file):
+- Change the **"Last updated"** date and **"Current version"** at the top of this document
+- Add a new row to the **Version History** table (Section 11)
+- Revise any affected sections: medication definitions (Section 6), Firebase collections (Section 5), reminder schedule (Section 8), service worker details (Section 7), known issues (Section 10), etc.
+- If you added a new file, update the **Repository Structure** (Section 3)
+
+### Why this matters:
+These two files are the single source of truth for onboarding new contributors or AI agents to this project. Stale documentation leads to incorrect assumptions and wasted debugging time. Treat doc updates as part of the feature — not a follow-up task.

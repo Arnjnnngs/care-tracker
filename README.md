@@ -113,3 +113,12 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 | v15 | Jul 2, 2026 | Light pink glassmorphism theme + fix sticky tabs |
 | v14 | Jul 1, 2026 | Fix input focus loss on mobile during render cycle |
 | v13 | Jul 1, 2026 | Bump SW cache to force refresh on all devices |
+
+## Maintaining This Documentation
+
+**When making changes to CareTracker, update these docs in the same commit:**
+
+- **README.md** (this file) — Update the Version History table, and revise any sections affected by the change (e.g., if you add a new medication, update the Tracked Medications table; if you change the service worker cache strategy, update that section).
+- **CARETRACKER_HANDOFF.md** — Update the "Last updated" date at the top, add the new version to the Version History table, and revise any affected sections (medication definitions, Firebase collections, reminder schedule, known issues, etc.).
+
+Both files live in the repo root and serve as the single source of truth for onboarding new contributors or AI agents.
