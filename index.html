@@ -98,19 +98,19 @@ const MEDS = [
   { id:'tylenol', name:'Tylenol', sub:'Acetaminophen', type:'gap', gapH:4, ceiling:true, note:'Min 4-hour gap',
     doses:[{label:'500 mg',mg:500},{label:'1000 mg',mg:1000}] },
   { id:'zofran', name:'Zofran', sub:'Ondansetron', type:'gap', gapH:8, note:'Strict 8-hour gap' },
-  { id:'compazine', name:'Compazine', sub:'Prochlorperazine', type:'gap', gapH:6, note:'Min 6h · evening/night preferred' },
+  { id:'compazine', name:'Compazine', sub:'Prochlorperazine', type:'gap', gapH:6, note:'10 PM · earlier as needed · min 6h gap' },
   { id:'morphine', name:'Morphine', sub:'Immediate release', type:'gap', gapH:4, note:'4-hour gap',
     doses:[{label:'½ tab · 7.5 mg',mg:7.5},{label:'Full · 15 mg',mg:15}] },
   { id:'lidocaine', name:'Lidocaine', sub:'Topical cream', type:'gap', gapH:4, ceiling:true, ceilingMax:4, ceilingUnit:'applications', note:'Min 4-hour gap · max 4 applications/day',
     doses:[{label:'Apply',pills:1,mg:0}] },
   { id:'protonix', name:'Protonix', sub:'Pantoprazole', type:'win', note:'Twice daily · 8 AM & 8 PM',
     windows:[{start:8,end:12,name:'Morning'},{start:20,end:22,name:'Evening'}] },
-  { id:'buspirone', name:'Buspirone', sub:'BuSpar', type:'win', note:'Once daily · evening only',
-    windows:[{start:17,end:24,name:'Evening'}] },
-  { id:'paroxetine', name:'Paroxetine', sub:'Paxil', type:'win', note:'Once daily · evening only',
-    windows:[{start:17,end:24,name:'Evening'}] },
-  { id:'iron', name:'Iron', sub:'Ferrous sulfate', type:'win', note:'Once daily · anytime',
-    windows:[{start:0,end:24,name:'Anytime'}] },
+  { id:'buspirone', name:'Buspirone', sub:'BuSpar', type:'win', note:'Once daily · 10 PM',
+    windows:[{start:22,end:24,name:'Night'}] },
+  { id:'paroxetine', name:'Paroxetine', sub:'Paxil', type:'win', note:'Once daily · 10 PM',
+    windows:[{start:22,end:24,name:'Night'}] },
+  { id:'iron', name:'Iron', sub:'Ferrous sulfate', type:'win', note:'Once daily · 10 PM',
+    windows:[{start:22,end:24,name:'Night'}] },
   { id:'imodium', name:'Imodium', sub:'Loperamide', type:'gap', gapH:0, ceiling:true, ceilingMax:4, ceilingUnit:'pills', note:'Max 4 pills per day',
     doses:[{label:'2 pills (onset)',pills:2,mg:0},{label:'1 pill',pills:1,mg:0}] },
 ];
@@ -142,6 +142,15 @@ function tempFever() { return CONFIG.tempUnit === 'Celsius' ? 38.0 : 100.4; }
 function tempHigh() { return CONFIG.tempUnit === 'Celsius' ? 39.4 : 103; }
 function tylenolMg() { const c = dayStart(state.now); return entriesFor('tylenol').filter(e => e.ts >= c).reduce((s, e) => s + (e.mg || 0), 0); }
 function dailyPills(medId) { const c = dayStart(state.now); return entriesFor(medId).filter(e => e.ts >= c).reduce((s, e) => s + (e.pills || 0), 0); }
+function isEarlyAt(med, ts) {
+  if (med.type === 'gap') {
+    if (!med.gapH) return false;
+    const prev = entriesFor(med.id).filter(e => e.ts < ts).sort((a, b) => a.ts - b.ts).pop();
+    return !!prev && ts < prev.ts + med.gapH * 3600000;
+  }
+  const d0 = dayStart(ts);
+  return !med.windows.some(w => ts >= d0 + w.start * 3600000 && ts < d0 + w.end * 3600000);
+}
 function usedRecently(id) { return entriesFor(id).some(e => e.ts >= state.now - 7 * 86400000); }
 function dailyCeiling(med) {
   if (!med.ceiling) return null;
@@ -263,10 +272,11 @@ async function confirmTimeAndLog() {
     const med = MEDS.find(x => x.id === m.medId);
     const entry = { medId: m.medId, dose: m.dose ? m.dose.label : null, mg: m.dose ? (m.dose.mg || 0) : 0, ts };
     if (m.dose && m.dose.pills) entry.pills = m.dose.pills;
-    if (m.opts && m.opts.force) entry.override = true;
+    const early = !!(m.opts && m.opts.force) && isEarlyAt(med, ts);
+    if (early) entry.override = true;
     setState({ timeModal: null });
     await addEntryDB(entry);
-    setToast(med.name + ' logged' + (m.dose ? (' · ' + m.dose.label) : '') + (m.opts && m.opts.force ? ' (early)' : '') + ' at ' + fmtTime(ts));
+    setToast(med.name + ' logged' + (m.dose ? (' · ' + m.dose.label) : '') + (early ? ' (early)' : '') + ' at ' + fmtTime(ts));
     setTimeout(() => afterLog({ ...entry, id: 'pending' }), 500);
   } else if (m.type === 'temp') {
     const v = m.tempValue;
@@ -281,6 +291,12 @@ async function confirmTimeAndLog() {
     setState({ weightInput: '', timeModal: null });
     await addEntryDB(entry);
     setToast('Weight ' + v + ' lbs logged at ' + fmtTime(ts));
+  } else if (m.type === 'multi') {
+    const ids = m.medIds;
+    setState({ timeModal: null });
+    for (const id of ids) { await addEntryDB({ medId: id, dose: null, mg: 0, ts }); }
+    setToast(ids.length + ' meds logged at ' + fmtTime(ts));
+    setTimeout(() => { if (ids.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
   }
 }
 
@@ -410,6 +426,8 @@ function renderTimeModal() {
   if (m.type === 'med') {
     const med = MEDS.find(x => x.id === m.medId);
     title = 'Log ' + med.name + (m.dose ? ' · ' + m.dose.label : '');
+  } else if (m.type === 'multi') {
+    title = 'Log ' + m.medIds.length + ' meds · ' + m.medIds.map(id => nameOf(id)).join(', ');
   } else if (m.type === 'temp') {
     title = 'Log Temperature · ' + m.tempValue + tempSuffix();
   } else {
@@ -568,7 +586,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   ));
 
   // Quick Log section
-  const medCards = MEDS.filter(m => m.type === 'gap').map(med => {
+  const medCards = MEDS.filter(m => m.type === 'gap' && m.id !== 'compazine').map(med => {
     const st = status(med);
     const locked = !!st.locked;
     const last = latest(med.id);
@@ -594,16 +612,24 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       subStatus = st.windowName + ' window open';
     }
     const isOverriding = !!(state.override && state.override.medId === med.id);
+    // A dose is blocked if it would push past the daily ceiling (unless the ceiling is already
+    // hit, in which case the explicit red override flow is the only path and stays available)
+    const doseBlocked = (d) => {
+      if (!med.ceiling || !dc || st.ceilingHit) return false;
+      const amt = med.ceilingUnit ? (d.pills || 0) : (d.mg || 0);
+      return amt > 0 && amt > (dc.max - dc.used);
+    };
+    const blockedBtn = (d) => h('button', { onClick: () => setToast('Exceeds today’s ' + dc.label + ' limit — ' + (med.ceilingUnit ? (dc.max - dc.used) + ' ' + dc.unit : (dc.max - dc.used).toLocaleString() + ' mg') + ' left'), style: { flex: '1', minWidth: '92px', minHeight: '52px', borderRadius: '13px', background: 'rgba(255,255,255,0.35)', border: '1px dashed rgba(138,100,121,0.35)', color: '#9A8390', fontSize: '15px', fontWeight: '600', cursor: 'not-allowed' } }, (d.single ? ('Log ' + med.name) : d.label) + ' · over limit');
 
     // Buttons
     let buttonArea;
     if (!locked) {
       buttonArea = h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        ...doseList.map(d => h('button', { onClick: () => logMed(med.id, d.single ? null : d), style: { flex: '1', minWidth: '92px', minHeight: '52px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, d.single ? ('Log ' + med.name) : d.label))
+        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d), style: { flex: '1', minWidth: '92px', minHeight: '52px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, d.single ? ('Log ' + med.name) : d.label))
       );
     } else if (!isOverriding) {
       buttonArea = h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        ...doseList.map(d => h('button', { onClick: () => setState({ override: { medId: med.id } }), style: { flex: '1', minWidth: '92px', minHeight: '52px', border: '1px dashed rgba(255,255,255,0.12)', borderRadius: '13px', background: 'rgba(255,255,255,0.04)', color: '#7D6A74', fontSize: '15px', fontWeight: '600' } }, d.single ? ('Log ' + med.name) : d.label))
+        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => setState({ override: { medId: med.id } }), style: { flex: '1', minWidth: '92px', minHeight: '52px', border: '1px dashed rgba(255,255,255,0.12)', borderRadius: '13px', background: 'rgba(255,255,255,0.04)', color: '#7D6A74', fontSize: '15px', fontWeight: '600' } }, d.single ? ('Log ' + med.name) : d.label))
       );
     } else {
       buttonArea = h('div', { style: { background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.25)', borderRadius: '14px', padding: '11px 12px', display: 'flex', flexDirection: 'column', gap: '9px' } },
@@ -612,7 +638,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           st.ceilingHit ? ('Daily ' + (dc ? dc.label : CONFIG.ceilingMg.toLocaleString() + ' mg') + ' ceiling reached. Log more anyway?') : ('Closed — opens in ' + countdownLabel + '. Log it early anyway?')
         ),
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-          ...doseList.map(d => h('button', { onClick: () => logMed(med.id, d.single ? null : d, { force: true }), style: { flex: '1', minWidth: '92px', minHeight: '48px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '14.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(120,40,34,0.4)' } }, d.single ? 'Override — log now' : ('Log ' + d.label + ' now'))),
+          ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d, { force: true }), style: { flex: '1', minWidth: '92px', minHeight: '48px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '14.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(120,40,34,0.4)' } }, d.single ? 'Override — log now' : ('Log ' + d.label + ' now'))),
           h('button', { onClick: () => setState({ override: null }), style: { flexShrink: '0', minHeight: '48px', padding: '0 15px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '11px', background: 'rgba(255,255,255,0.5)', color: '#A15B56', fontSize: '14px', fontWeight: '600' } }, 'Cancel')
         )
       );
@@ -650,11 +676,15 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   ));
 
   // Scheduled meds (window-based) — one grouped card
-  const winMeds = MEDS.filter(m => m.type === 'win');
+  const schedMeds = [...MEDS.filter(m => m.type === 'win'), MEDS.find(m => m.id === 'compazine')];
+  const dueMeds = schedMeds.filter(m => { const s = status(m); return !s.locked; });
   parts.push(h('section', null,
-    h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, 'Scheduled meds'),
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' } },
+      h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, 'Scheduled meds'),
+      dueMeds.length >= 2 ? h('button', { onClick: () => setState({ timeModal: { type: 'multi', medIds: dueMeds.map(m => m.id), timeValue: nowLocalISO() } }), style: { minHeight: '40px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Take all (' + dueMeds.length + ')') : null
+    ),
     h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', overflow: 'hidden', marginTop: '11px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
-      ...winMeds.map((med, i) => {
+      ...schedMeds.map((med, i) => {
         const st = status(med);
         const todayLogs = entriesFor(med.id).filter(e => e.ts >= dayStart(now));
         const lastToday = todayLogs[todayLogs.length - 1];

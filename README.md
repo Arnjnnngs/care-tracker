@@ -69,14 +69,14 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 |---|---|---|
 | Tylenol | Acetaminophen | Daily limit (2500 mg, resets midnight), 4h min gap, 500/1000 mg doses |
 | Zofran | Ondansetron | 8h gap timer, push notification when available |
-| Compazine | Prochlorperazine | 6h min gap (evening/night preferred) |
+| Compazine | Prochlorperazine | 6h min gap; 10 PM routine + earlier as needed (in Scheduled Meds card) |
 | Morphine | Immediate release | 4h min gap, ½ tab (7.5 mg) / full tab (15 mg) doses |
 | Lidocaine | Topical cream | 4h min gap, max 4 applications per day |
 | Imodium | Loperamide | Daily pill count limit (4 pills) |
 | Protonix | Pantoprazole | Twice daily windows (8 AM–noon, 8–10 PM) + reminders |
-| Buspirone | BuSpar | Once daily, evening window |
-| Paroxetine | Paxil | Once daily, evening window |
-| Iron | Ferrous sulfate | Once daily, anytime |
+| Buspirone | BuSpar | Once daily, 10 PM |
+| Paroxetine | Paxil | Once daily, 10 PM |
+| Iron | Ferrous sulfate | Once daily, 10 PM |
 
 ## Vitals Tracking
 
@@ -86,7 +86,7 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 
 ## App Views
 
-- **Today** — dose counters (shown only for meds used in the last 7 days), vitals inputs, quick-log cards for gap-timed meds, and a grouped "Scheduled meds" card for Protonix/Buspirone/Paroxetine/Iron
+- **Today** — dose counters (shown only for meds used in the last 7 days), vitals inputs, quick-log cards for gap-timed meds, and a grouped "Scheduled meds" card for Protonix/Buspirone/Paroxetine/Iron/Compazine with a one-tap "Take all" button
 - **History** — historical view of logged entries
 - **Weight** — weight tracking over time
 
@@ -110,6 +110,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v22 | Jul 12, 2026 | Block dose buttons that would exceed remaining daily limit; Buspirone/Paroxetine/Iron 10 PM windows; Compazine joins Scheduled Meds card; "Take all" one-tap logging; Early tag now based on logged time, not click time |
 | v21 | Jul 11, 2026 | Tylenol ceiling 2500 mg; Protonix windows 8 AM/8 PM; future-time log warning; delete confirmation + 48h delete window; grouped Scheduled Meds card; conditional counters + Lidocaine counter; WCAG AA contrast pass (pink theme kept) |
 | v20 | Jul 11, 2026 | Add Lidocaine topical cream (4h gap, max 4 applications/day); generalize daily-count ceiling; doc corrections |
 | v19 | Jul 7, 2026 | Remove "Clear all" buttons, preserve history |
