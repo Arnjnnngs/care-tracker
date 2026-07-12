@@ -101,6 +101,8 @@ const MEDS = [
   { id:'compazine', name:'Compazine', sub:'Prochlorperazine', type:'gap', gapH:6, note:'Min 6h · evening/night preferred' },
   { id:'morphine', name:'Morphine', sub:'Immediate release', type:'gap', gapH:4, note:'4-hour gap',
     doses:[{label:'½ tab · 7.5 mg',mg:7.5},{label:'Full · 15 mg',mg:15}] },
+  { id:'lidocaine', name:'Lidocaine', sub:'Topical cream', type:'gap', gapH:4, ceiling:true, ceilingMax:4, ceilingUnit:'applications', note:'Min 4-hour gap · max 4 applications/day',
+    doses:[{label:'Apply',pills:1,mg:0}] },
   { id:'protonix', name:'Protonix', sub:'Pantoprazole', type:'win', note:'Twice daily · morning & evening',
     windows:[{start:5,end:12,name:'Morning'},{start:17,end:22,name:'Evening'}] },
   { id:'buspirone', name:'Buspirone', sub:'BuSpar', type:'win', note:'Once daily · evening only',
@@ -142,7 +144,7 @@ function tylenolMg() { const c = dayStart(state.now); return entriesFor('tylenol
 function dailyPills(medId) { const c = dayStart(state.now); return entriesFor(medId).filter(e => e.ts >= c).reduce((s, e) => s + (e.pills || 0), 0); }
 function dailyCeiling(med) {
   if (!med.ceiling) return null;
-  if (med.ceilingUnit === 'pills') return { used: dailyPills(med.id), max: med.ceilingMax, unit: 'pills', label: med.ceilingMax + ' pills' };
+  if (med.ceilingUnit) return { used: dailyPills(med.id), max: med.ceilingMax, unit: med.ceilingUnit, label: med.ceilingMax + ' ' + med.ceilingUnit };
   return { used: tylenolMg(), max: CONFIG.ceilingMg, unit: 'mg', label: CONFIG.ceilingMg.toLocaleString() + ' mg' };
 }
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
@@ -220,6 +222,10 @@ function afterLog(entry) {
   if (entry.medId === 'imodium') {
     const pills = dailyPills('imodium');
     if (pills > 4) { setState({ warn: { tone: 'red', title: 'Imodium daily limit exceeded', body: "Today's Imodium total is " + pills + " pills, above the 4-pill daily limit. Do not give more without contacting the care team." } }); }
+  }
+  if (entry.medId === 'lidocaine') {
+    const apps = dailyPills('lidocaine');
+    if (apps > 4) { setState({ warn: { tone: 'red', title: 'Lidocaine daily limit exceeded', body: "Today's Lidocaine total is " + apps + " applications, above the 4-application daily limit. Do not apply more without contacting the care team." } }); }
   }
 }
 

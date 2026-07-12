@@ -67,12 +67,16 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 
 | Medication | Generic | Tracking Type |
 |---|---|---|
-| Tylenol | Acetaminophen | 24h rolling limit (4000 mg), 4h min gap, 500/1000 mg doses |
+| Tylenol | Acetaminophen | Daily limit (4000 mg), 4h min gap, 500/1000 mg doses |
 | Zofran | Ondansetron | 8h gap timer, push notification when available |
-| Compazine | Prochlorperazine | Dose logging |
-| Morphine | Immediate release | Dose logging |
-| Imodium | Loperamide | 24h pill count limit (4 pills) |
-| Protonix | Pantoprazole | Scheduled (morning/evening reminders only) |
+| Compazine | Prochlorperazine | 6h min gap (evening/night preferred) |
+| Morphine | Immediate release | 4h min gap, ½ tab (7.5 mg) / full tab (15 mg) doses |
+| Lidocaine | Topical cream | 4h min gap, max 4 applications per day |
+| Imodium | Loperamide | Daily pill count limit (4 pills) |
+| Protonix | Pantoprazole | Twice daily windows (morning/evening) + reminders |
+| Buspirone | BuSpar | Once daily, evening window |
+| Paroxetine | Paxil | Once daily, evening window |
+| Iron | Ferrous sulfate | Once daily, anytime |
 
 ## Vitals Tracking
 
@@ -106,6 +110,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v20 | Jul 11, 2026 | Add Lidocaine topical cream (4h gap, max 4 applications/day); generalize daily-count ceiling; doc corrections |
 | v19 | Jul 7, 2026 | Remove "Clear all" buttons, preserve history |
 | v18 | Jul 2, 2026 | Add FCM push notifications + firebase-messaging-sw.js |
 | v17 | Jul 2, 2026 | Remove Tylenol/Morphine/Imodium from reminders |

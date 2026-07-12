@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for an AI assistant (Fable or any Cowork model) to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 11, 2026  
-> **Current version:** v19 (commit 591a271)
+> **Current version:** v20
 
 ---
 
@@ -77,12 +77,14 @@ care-tracker/
 ### `caretracker_entries`
 The main data collection. Each document is a single logged event.
 
-**Document fields (inferred from app behavior):**
-- `medId` — string identifier for the medication (e.g., `"tylenol"`, `"zofran"`, `"compazine"`, `"morphine"`, `"imodium"`)
+**Document fields (verified against live data, July 11, 2026):**
+- `medId` — string identifier: `"tylenol"`, `"zofran"`, `"compazine"`, `"morphine"`, `"lidocaine"`, `"imodium"`, `"protonix"`, `"buspirone"`, `"paroxetine"`, `"iron"`, or `"temp"` / `"weight"` for vitals
 - `ts` — timestamp (milliseconds since epoch) of when the dose was taken
-- `dose` — dosage amount (e.g., 500, 1000 for Tylenol mg)
-- `type` — entry type for vitals (e.g., `"temperature"`, `"weight"`)
-- `value` — numeric value for vitals entries
+- `dose` — human-readable dose label string (e.g., `"1000 mg"`, `"½ tab · 7.5 mg"`, `"99.8 °F"`) or null
+- `mg` — numeric milligrams (0 for non-mg meds)
+- `pills` — count for pill/application-limited meds (Imodium, Lidocaine); only present when applicable
+- `temp` / `weight` — numeric value on vitals entries
+- `override` — boolean, present when the dose was logged early past a lock
 
 ### `fcm_tokens`
 Stores device push notification tokens.
@@ -104,11 +106,16 @@ Prevents duplicate notifications.
 
 | ID | Display Name | Generic | Dosing Rules |
 |---|---|---|---|
-| `tylenol` | Tylenol | Acetaminophen | 24h rolling max: 4000 mg. Min gap: 4 hours. Quick-log buttons: 500 mg, 1000 mg |
+| `tylenol` | Tylenol | Acetaminophen | Daily max: 4000 mg (resets at midnight). Min gap: 4 hours. Quick-log buttons: 500 mg, 1000 mg |
 | `zofran` | Zofran | Ondansetron | 8-hour gap between doses. Shows countdown timer. Push notification when gap expires |
-| `compazine` | Compazine | Prochlorperazine | Dose logging (open dosing) |
-| `morphine` | Morphine | Immediate release | Dose logging (open dosing) |
-| `imodium` | Imodium | Loperamide | 24h limit: 4 pills |
+| `compazine` | Compazine | Prochlorperazine | 6-hour min gap. Evening/night preferred |
+| `morphine` | Morphine | Immediate release | 4-hour min gap. Quick-log buttons: ½ tab (7.5 mg), full tab (15 mg) |
+| `lidocaine` | Lidocaine | Topical cream | 4-hour min gap. Daily max: 4 applications (resets at midnight). Quick-log button: Apply |
+| `imodium` | Imodium | Loperamide | Daily limit: 4 pills (resets at midnight). Quick-log buttons: 2 pills, 1 pill |
+| `protonix` | Protonix | Pantoprazole | Twice daily windows: morning (5–12) & evening (17–22) |
+| `buspirone` | Buspirone | BuSpar | Once daily, evening window (17–24) |
+| `paroxetine` | Paroxetine | Paxil | Once daily, evening window (17–24) |
+| `iron` | Iron | Ferrous sulfate | Once daily, anytime |
 
 ### Vitals
 - **Temperature** — logged in °F, shows last reading time
@@ -206,6 +213,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v20 | Jul 11, 2026 | — | Add Lidocaine topical cream (4h gap, max 4 applications/day, no reminders); generalize daily-count ceiling label; correct med table & Firestore field docs |
 | v19 | Jul 7, 2026 | 591a271 | Remove "Clear all" buttons, preserve history |
 | v18 | Jul 2, 2026 | 8f185cc | Add FCM push notifications + firebase-messaging-sw.js |
 | v17 | Jul 2, 2026 | c49adf3 | Remove Tylenol/Morphine/Imodium from reminders |
