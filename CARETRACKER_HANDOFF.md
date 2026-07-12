@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for an AI assistant (Fable or any Cowork model) to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 11, 2026  
-> **Current version:** v20
+> **Current version:** v21
 
 ---
 
@@ -106,13 +106,13 @@ Prevents duplicate notifications.
 
 | ID | Display Name | Generic | Dosing Rules |
 |---|---|---|---|
-| `tylenol` | Tylenol | Acetaminophen | Daily max: 4000 mg (resets at midnight). Min gap: 4 hours. Quick-log buttons: 500 mg, 1000 mg |
+| `tylenol` | Tylenol | Acetaminophen | Daily max: 2500 mg (resets at midnight). Min gap: 4 hours. Quick-log buttons: 500 mg, 1000 mg |
 | `zofran` | Zofran | Ondansetron | 8-hour gap between doses. Shows countdown timer. Push notification when gap expires |
 | `compazine` | Compazine | Prochlorperazine | 6-hour min gap. Evening/night preferred |
 | `morphine` | Morphine | Immediate release | 4-hour min gap. Quick-log buttons: ½ tab (7.5 mg), full tab (15 mg) |
 | `lidocaine` | Lidocaine | Topical cream | 4-hour min gap. Daily max: 4 applications (resets at midnight). Quick-log button: Apply |
 | `imodium` | Imodium | Loperamide | Daily limit: 4 pills (resets at midnight). Quick-log buttons: 2 pills, 1 pill |
-| `protonix` | Protonix | Pantoprazole | Twice daily windows: morning (5–12) & evening (17–22) |
+| `protonix` | Protonix | Pantoprazole | Twice daily windows: morning (8–12) & evening (20–22). Early logging allowed via override |
 | `buspirone` | Buspirone | BuSpar | Once daily, evening window (17–24) |
 | `paroxetine` | Paroxetine | Paxil | Once daily, evening window (17–24) |
 | `iron` | Iron | Ferrous sulfate | Once daily, anytime |
@@ -205,7 +205,9 @@ If a device shows a blank screen or stale content:
 
 6. **FCM token management** — Tokens can go stale if a user uninstalls the PWA or clears browser data. The `send-reminders.js` script auto-cleans invalid tokens, but there's no UI to re-subscribe.
 
-7. **Timezone hardcoded** — The reminder system uses `America/Chicago` (Central Time). If the user moves timezone, both `send-reminders.js` and any time-display logic in `index.html` may need updating.
+7. **UI/rules coupling** — The Remove button is hidden for entries older than 48h because Firestore security rules (published July 2026) block those deletes. If the rules' delete window changes, update the `48 * 3600000` constant in `removeBtn()` in index.html to match.
+
+8. **Timezone hardcoded** — The reminder system uses `America/Chicago` (Central Time). If the user moves timezone, both `send-reminders.js` and any time-display logic in `index.html` may need updating.
 
 ---
 
@@ -213,6 +215,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v21 | Jul 11, 2026 | — | Tylenol ceiling 2500 mg (midnight reset, per care team); Protonix windows 8 AM & 8 PM; future-timestamp double-confirm in time modal; two-step delete confirmation, Remove hidden for entries >48h old (matches Firestore rules); window meds grouped into one "Scheduled Meds" card; ceiling counters render only if med used in last 7 days, Lidocaine counter added; all text colors darkened to WCAG AA 4.5:1 against the pink theme |
 | v20 | Jul 11, 2026 | — | Add Lidocaine topical cream (4h gap, max 4 applications/day, no reminders); generalize daily-count ceiling label; correct med table & Firestore field docs |
 | v19 | Jul 7, 2026 | 591a271 | Remove "Clear all" buttons, preserve history |
 | v18 | Jul 2, 2026 | 8f185cc | Add FCM push notifications + firebase-messaging-sw.js |
