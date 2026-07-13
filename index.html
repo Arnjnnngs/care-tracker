@@ -111,6 +111,9 @@ const MEDS = [
     windows:[{start:22,end:24,name:'Night'}] },
   { id:'iron', name:'Iron', sub:'Ferrous sulfate', type:'win', note:'Once daily · 10 PM',
     windows:[{start:22,end:24,name:'Night'}] },
+  { id:'senokot', name:'Senokot', sub:'Senna', type:'win', note:'2 pills · 8 AM & 10 PM · as needed',
+    doses:[{label:'2 pills',pills:2,mg:0}],
+    windows:[{start:8,end:12,name:'Morning'},{start:22,end:24,name:'Night'}] },
   { id:'imodium', name:'Imodium', sub:'Loperamide', type:'gap', gapH:0, ceiling:true, ceilingMax:4, ceilingUnit:'pills', note:'Max 4 pills per day',
     doses:[{label:'2 pills (onset)',pills:2,mg:0},{label:'1 pill',pills:1,mg:0}] },
 ];
@@ -294,7 +297,13 @@ async function confirmTimeAndLog() {
   } else if (m.type === 'multi') {
     const ids = m.medIds;
     setState({ timeModal: null });
-    for (const id of ids) { await addEntryDB({ medId: id, dose: null, mg: 0, ts }); }
+    for (const id of ids) {
+      const md = MEDS.find(x => x.id === id);
+      const d0 = md && md.doses ? md.doses[0] : null;
+      const en = { medId: id, dose: d0 ? d0.label : null, mg: d0 ? (d0.mg || 0) : 0, ts };
+      if (d0 && d0.pills) en.pills = d0.pills;
+      await addEntryDB(en);
+    }
     setToast(ids.length + ' meds logged at ' + fmtTime(ts));
     setTimeout(() => { if (ids.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
   }
@@ -692,11 +701,11 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
         let right;
         if (isOv) {
           right = h('div', { style: { display: 'flex', gap: '7px', flexShrink: '0' } },
-            h('button', { onClick: () => logMed(med.id, null, { force: true }), style: { minHeight: '42px', padding: '0 13px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '13px', fontWeight: '700' } }, 'Log early'),
+            h('button', { onClick: () => logMed(med.id, med.doses ? med.doses[0] : null, { force: true }), style: { minHeight: '42px', padding: '0 13px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '13px', fontWeight: '700' } }, 'Log early'),
             h('button', { onClick: () => setState({ override: null }), style: { minHeight: '42px', padding: '0 11px', borderRadius: '11px', background: 'rgba(255,255,255,0.5)', border: '1px solid rgba(212,104,138,0.15)', color: '#7D6974', fontSize: '13px', fontWeight: '600' } }, 'Cancel')
           );
         } else if (!st.locked) {
-          right = h('button', { onClick: () => logMed(med.id, null), style: { minHeight: '44px', padding: '0 20px', borderRadius: '12px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)', flexShrink: '0' } }, 'Log');
+          right = h('button', { onClick: () => logMed(med.id, med.doses ? med.doses[0] : null), style: { minHeight: '44px', padding: '0 20px', borderRadius: '12px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)', flexShrink: '0' } }, 'Log');
         } else {
           right = h('button', { onClick: () => setState({ override: { medId: med.id } }), className: 'mono', style: { minHeight: '38px', padding: '0 12px', borderRadius: '99px', background: 'rgba(255,255,255,0.4)', border: '1px solid rgba(212,104,138,0.15)', color: '#5C6662', fontSize: '12.5px', fontWeight: '600', flexShrink: '0' } }, 'Opens ' + fmtTime(st.availableAt));
         }

@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for an AI assistant (Fable or any Cowork model) to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 11, 2026  
-> **Current version:** v22
+> **Current version:** v23
 
 ---
 
@@ -78,7 +78,7 @@ care-tracker/
 The main data collection. Each document is a single logged event.
 
 **Document fields (verified against live data, July 11, 2026):**
-- `medId` — string identifier: `"tylenol"`, `"zofran"`, `"compazine"`, `"morphine"`, `"lidocaine"`, `"imodium"`, `"protonix"`, `"buspirone"`, `"paroxetine"`, `"iron"`, or `"temp"` / `"weight"` for vitals
+- `medId` — string identifier: `"tylenol"`, `"zofran"`, `"compazine"`, `"morphine"`, `"lidocaine"`, `"imodium"`, `"protonix"`, `"buspirone"`, `"paroxetine"`, `"iron"`, `"senokot"`, or `"temp"` / `"weight"` for vitals
 - `ts` — timestamp (milliseconds since epoch) of when the dose was taken
 - `dose` — human-readable dose label string (e.g., `"1000 mg"`, `"½ tab · 7.5 mg"`, `"99.8 °F"`) or null
 - `mg` — numeric milligrams (0 for non-mg meds)
@@ -116,6 +116,7 @@ Prevents duplicate notifications.
 | `buspirone` | Buspirone | BuSpar | Once daily, 10 PM window (22–24) |
 | `paroxetine` | Paroxetine | Paxil | Once daily, 10 PM window (22–24) |
 | `iron` | Iron | Ferrous sulfate | Once daily, 10 PM window (22–24) |
+| `senokot` | Senokot | Senna | As needed: 2 pills, morning window (8–12) & night window (22–24). Default dose "2 pills" (pills: 2) recorded on log |
 
 ### Vitals
 - **Temperature** — logged in °F, shows last reading time
@@ -215,6 +216,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v23 | Jul 12, 2026 | — | Add Senokot (senna laxative): win-type med with morning (8–12) and night (22–24) windows, as-needed, no reminders. Scheduled-card Log/Log-early and the Take-all flow now pass a med's default `doses[0]` so entries record dose label and pill count |
 | v22 | Jul 12, 2026 | — | Dose buttons that would exceed the remaining daily ceiling are disabled (Tylenol mg, Imodium/Lidocaine counts); the red override path only remains once the ceiling is fully hit. Buspirone/Paroxetine/Iron moved to a 22–24 (10 PM) window. Compazine moved into the Scheduled Meds card (6h gap kept). "Take all (N)" button logs all currently-due scheduled meds in one time-modal. `isEarlyAt(med, ts)` now decides the Early tag from the logged timestamp instead of the lock state at click time (fixes false Early on backdated logs). |
 | v21 | Jul 11, 2026 | — | Tylenol ceiling 2500 mg (midnight reset, per care team); Protonix windows 8 AM & 8 PM; future-timestamp double-confirm in time modal; two-step delete confirmation, Remove hidden for entries >48h old (matches Firestore rules); window meds grouped into one "Scheduled Meds" card; ceiling counters render only if med used in last 7 days, Lidocaine counter added; all text colors darkened to WCAG AA 4.5:1 against the pink theme |
 | v20 | Jul 11, 2026 | — | Add Lidocaine topical cream (4h gap, max 4 applications/day, no reminders); generalize daily-count ceiling label; correct med table & Firestore field docs |
