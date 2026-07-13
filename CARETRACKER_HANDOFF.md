@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for an AI assistant (Fable or any Cowork model) to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 11, 2026  
-> **Current version:** v26
+> **Current version:** v27
 
 ---
 
@@ -216,6 +216,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v27 | Jul 13, 2026 | — | Today's missed-dose banner now includes yesterday's misses (labeled "Yesterday:"), so a late-evening miss isn't hidden after midnight. Journal/History rows unchanged (per-day) |
 | v26 | Jul 12, 2026 | — | Missed-dose alerts. Meds with `alerts:true` (protonix, buspirone, paroxetine, iron) are checked by `missedDosesFor(dayTs, now)`: each schedule window that has closed with no covering dose emits a `{missed:true, medId, ts: windowStart, windowName}` pseudo-entry. Coverage rule: any dose logged after the previous window closed and before this window closed counts (early logs covered). Rendered as: non-dismissible red banner atop Today, red `missedRow()` entries in Today's Journal buckets, red rows + "N MISSED" summaries in History. `MISSED_TRACK_SINCE` (Jul 12, 2026) prevents retroactive flags. As-needed meds are never flagged |
 | v25 | Jul 12, 2026 | — | Shared `timeBucket(ts)` groups entries as Overnight (0–6), Morning (6–12), Afternoon (12–17), Evening (17–24). Used by Today's Journal and now also by the History tab, which shows category label rows inside each day's card. Old "Night" category removed |
 | v24 | Jul 12, 2026 | — | Layout only: Protonix and Senokot pulled out of the group into individual Quick Log cards (window logic unchanged); group card renamed "Evening meds" and now contains exactly Buspirone, Paroxetine, Iron, Compazine; "Take all" counts only those four |

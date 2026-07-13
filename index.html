@@ -510,15 +510,18 @@ function removeBtn(e) {
 function renderToday(now, mg, pct, tyColor, ceiling) {
   const parts = [];
   const missedToday = missedDosesFor(now, now);
+  // Banner also carries yesterday's misses so an overnight miss is still seen next morning
+  const missedYesterday = missedDosesFor(now - 86400000, now);
+  const bannerItems = [...missedYesterday.map(m => ({ ...m, when: 'Yesterday' })), ...missedToday.map(m => ({ ...m, when: 'Today' }))];
 
   // MISSED DOSE ALERT — always on top, cannot be dismissed
-  if (missedToday.length) {
+  if (bannerItems.length) {
     parts.push(h('div', { style: { background: 'rgba(192,69,59,0.16)', border: '2px solid #C0453B', borderRadius: '16px', padding: '15px 16px', display: 'flex', gap: '12px', alignItems: 'flex-start', boxShadow: '0 4px 24px rgba(192,69,59,0.25)' } },
       h('span', { style: { flexShrink: '0', width: '28px', height: '28px', borderRadius: '50%', background: '#C0453B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '17px' } }, '!'),
       h('div', { style: { flex: '1' } },
-        h('div', { style: { fontWeight: '800', color: '#C0453B', fontSize: '15.5px', letterSpacing: '0.02em', marginBottom: '4px', textTransform: 'uppercase' } }, 'Missed dose' + (missedToday.length > 1 ? 's' : '') + ' today'),
+        h('div', { style: { fontWeight: '800', color: '#C0453B', fontSize: '15.5px', letterSpacing: '0.02em', marginBottom: '4px', textTransform: 'uppercase' } }, 'Missed dose' + (bannerItems.length > 1 ? 's' : '')),
         h('div', { style: { color: '#A13830', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' } },
-          missedToday.map(m => nameOf(m.medId) + ' — ' + m.windowName + ' window (' + fmtTime(m.ts) + ') closed with no dose logged').join(' · '))
+          bannerItems.map(m => m.when + ': ' + nameOf(m.medId) + ' — ' + m.windowName + ' window (' + fmtTime(m.ts) + ') closed with no dose logged').join(' · '))
       )
     ));
   }
