@@ -108,7 +108,7 @@ Prevents duplicate notifications.
 |---|---|---|---|
 | `tylenol` | Tylenol | Acetaminophen | Daily max: 2500 mg (resets at midnight). Min gap: 4 hours. Quick-log buttons: 500 mg, 1000 mg |
 | `zofran` | Zofran | Ondansetron | 8-hour gap between doses. Shows countdown timer. Push notification when gap expires |
-| `compazine` | Compazine | Prochlorperazine | 6-hour min gap. 10 PM routine, earlier as needed. Shown in the Scheduled Meds card, not Quick Log |
+| `compazine` | Compazine | Prochlorperazine | 6-hour min gap. 10 PM routine, earlier as needed. Shown in the Evening Meds group card, not Quick Log |
 | `morphine` | Morphine | Immediate release | 4-hour min gap. Quick-log buttons: ½ tab (7.5 mg), full tab (15 mg) |
 | `lidocaine` | Lidocaine | Topical cream | 4-hour min gap. Daily max: 4 applications (resets at midnight). Quick-log button: Apply |
 | `imodium` | Imodium | Loperamide | Daily limit: 4 pills (resets at midnight). Quick-log buttons: 2 pills, 1 pill |
@@ -216,6 +216,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v24 | Jul 12, 2026 | — | Layout only: Protonix and Senokot pulled out of the group into individual Quick Log cards (window logic unchanged); group card renamed "Evening meds" and now contains exactly Buspirone, Paroxetine, Iron, Compazine; "Take all" counts only those four |
 | v23 | Jul 12, 2026 | — | Add Senokot (senna laxative): win-type med with morning (8–12) and night (22–24) windows, as-needed, no reminders. Scheduled-card Log/Log-early and the Take-all flow now pass a med's default `doses[0]` so entries record dose label and pill count |
 | v22 | Jul 12, 2026 | — | Dose buttons that would exceed the remaining daily ceiling are disabled (Tylenol mg, Imodium/Lidocaine counts); the red override path only remains once the ceiling is fully hit. Buspirone/Paroxetine/Iron moved to a 22–24 (10 PM) window. Compazine moved into the Scheduled Meds card (6h gap kept). "Take all (N)" button logs all currently-due scheduled meds in one time-modal. `isEarlyAt(med, ts)` now decides the Early tag from the logged timestamp instead of the lock state at click time (fixes false Early on backdated logs). |
 | v21 | Jul 11, 2026 | — | Tylenol ceiling 2500 mg (midnight reset, per care team); Protonix windows 8 AM & 8 PM; future-timestamp double-confirm in time modal; two-step delete confirmation, Remove hidden for entries >48h old (matches Firestore rules); window meds grouped into one "Scheduled Meds" card; ceiling counters render only if med used in last 7 days, Lidocaine counter added; all text colors darkened to WCAG AA 4.5:1 against the pink theme |

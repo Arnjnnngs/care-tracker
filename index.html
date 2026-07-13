@@ -595,7 +595,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   ));
 
   // Quick Log section
-  const medCards = MEDS.filter(m => m.type === 'gap' && m.id !== 'compazine').map(med => {
+  const medCards = MEDS.filter(m => (m.type === 'gap' && m.id !== 'compazine') || m.id === 'protonix' || m.id === 'senokot').map(med => {
     const st = status(med);
     const locked = !!st.locked;
     const last = latest(med.id);
@@ -684,12 +684,12 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '12px', marginTop: '11px' } }, ...medCards)
   ));
 
-  // Scheduled meds (window-based) — one grouped card
-  const schedMeds = [...MEDS.filter(m => m.type === 'win'), MEDS.find(m => m.id === 'compazine')];
+  // Evening meds — one grouped card (Buspirone, Paroxetine, Iron, Compazine)
+  const schedMeds = ['buspirone', 'paroxetine', 'iron', 'compazine'].map(id => MEDS.find(m => m.id === id));
   const dueMeds = schedMeds.filter(m => { const s = status(m); return !s.locked; });
   parts.push(h('section', null,
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' } },
-      h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, 'Scheduled meds'),
+      h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, 'Evening meds'),
       dueMeds.length >= 2 ? h('button', { onClick: () => setState({ timeModal: { type: 'multi', medIds: dueMeds.map(m => m.id), timeValue: nowLocalISO() } }), style: { minHeight: '40px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Take all (' + dueMeds.length + ')') : null
     ),
     h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', overflow: 'hidden', marginTop: '11px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },

@@ -87,7 +87,7 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 
 ## App Views
 
-- **Today** — dose counters (shown only for meds used in the last 7 days), vitals inputs, quick-log cards for gap-timed meds, and a grouped "Scheduled meds" card for Protonix/Buspirone/Paroxetine/Iron/Senokot/Compazine with a one-tap "Take all" button
+- **Today** — dose counters (shown only for meds used in the last 7 days), vitals inputs, individual quick-log cards (incl. Protonix and Senokot), and a grouped "Evening meds" card for Buspirone/Paroxetine/Iron/Compazine with a one-tap "Take all" button
 - **History** — historical view of logged entries
 - **Weight** — weight tracking over time
 
@@ -111,6 +111,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v24 | Jul 12, 2026 | Layout: Protonix and Senokot get individual cards; group card renamed "Evening meds" (Buspirone, Paroxetine, Iron, Compazine) |
 | v23 | Jul 12, 2026 | Add Senokot (senna): 2 pills, 8 AM & 10 PM windows, as needed; scheduled-card and Take-all logs now record each med's default dose |
 | v22 | Jul 12, 2026 | Block dose buttons that would exceed remaining daily limit; Buspirone/Paroxetine/Iron 10 PM windows; Compazine joins Scheduled Meds card; "Take all" one-tap logging; Early tag now based on logged time, not click time |
 | v21 | Jul 11, 2026 | Tylenol ceiling 2500 mg; Protonix windows 8 AM/8 PM; future-time log warning; delete confirmation + 48h delete window; grouped Scheduled Meds card; conditional counters + Lidocaine counter; WCAG AA contrast pass (pink theme kept) |
