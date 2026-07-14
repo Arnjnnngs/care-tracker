@@ -1,6 +1,6 @@
 # CareTracker — AI Agent Handoff Document
 
-> **Purpose:** Complete context for an AI assistant (Fable or any Cowork model) to understand, maintain, and extend the CareTracker project without prior knowledge.
+> **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 11, 2026  
 > **Current version:** v27
