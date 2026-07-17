@@ -1,9 +1,9 @@
-# CareTracker — AI Agent Handoff Document
+—# CareTracker — AI Agent Handoff Document
 
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
-> **Last updated:** July 11, 2026  
-> **Current version:** v27
+> **Last updated:** July 17, 2026
+> **Current version:** v29
 
 ---
 
@@ -209,6 +209,7 @@ If a device shows a blank screen or stale content:
 7. **UI/rules coupling** — The Remove button is hidden for entries older than 48h because Firestore security rules (published July 2026) block those deletes. If the rules' delete window changes, update the `48 * 3600000` constant in `removeBtn()` in index.html to match.
 
 8. **Timezone hardcoded** — The reminder system uses `America/Chicago` (Central Time). If the user moves timezone, both `send-reminders.js` and any time-display logic in `index.html` may need updating.
+9. **seedDemo() fake-data bug (fixed v28, Jul 17, 2026)** — A dormant seedDemo() function fired whenever the app's first Firestore snapshot returned empty entries, intended only for a genuinely fresh install, but cold caches and brief network blips produce the same "empty" signal, so it could fire unpredictably during real usage. It silently wrote 10+ hardcoded fake medication entries per trigger directly into caretracker_entries — Brandi's real medical data. Fix: the function, the demo state flag, its banner UI, and the auto-seed call were all removed entirely in v28 (see Version History). All fake entries were identified by timestamp fingerprint and deleted from Firestore via the admin console, re-verified via a fresh collection query (0 matches). Deleting the older fake entries (dated 7/6-7/7) required a temporary one-time unlock of the 48h removeBtn() edit-lock (see item 7 above), which was reverted in v29 immediately after cleanup. Lesson for future fixture/demo-data functions: never gate a write on "the collection looks empty" as a proxy for "this is the user's first real launch" — a cold local cache or a dropped network request looks identical to genuine emptiness from the client's point of view. If a demo-seeding feature is ever wanted again, it should require an explicit user action (a button), not fire automatically off a snapshot listener.
 
 ---
 
@@ -216,7 +217,9 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
-| v27 | Jul 13, 2026 | — | Today's missed-dose banner now includes yesterday's misses (labeled "Yesterday:"), so a late-evening miss isn't hidden after midnight. Journal/History rows unchanged (per-day) |
+| v29 | Jul 17, 2026 | — | Re-enabled the 48-hour edit-lock check in removeBtn(), reverting a Jul 16 temporary unlock that had allowed manual deletion of fake seedDemo() entries dated 7/6-7/7 (see v28 and Known Issues item 9) |
+| v28 | Jul 17, 2026 | — | Data-integrity fix. Removed the dormant seedDemo() function entirely, along with the demo state flag, its banner UI, and the wasEmpty-triggered auto-seed call in the Firestore subscription callback. This function had silently written hardcoded fake medication entries into caretracker_entries (Brandi's real medical data) whenever the app's first Firestore snapshot came back empty. All fake entries identified and deleted from Firestore. See Known Issues item 9 for full incident details |
+| — | Today's missed-dose banner now includes yesterday's misses (labeled "Yesterday:"), so a late-evening miss isn't hidden after midnight. Journal/History rows unchanged (per-day) |
 | v26 | Jul 12, 2026 | — | Missed-dose alerts. Meds with `alerts:true` (protonix, buspirone, paroxetine, iron) are checked by `missedDosesFor(dayTs, now)`: each schedule window that has closed with no covering dose emits a `{missed:true, medId, ts: windowStart, windowName}` pseudo-entry. Coverage rule: any dose logged after the previous window closed and before this window closed counts (early logs covered). Rendered as: non-dismissible red banner atop Today, red `missedRow()` entries in Today's Journal buckets, red rows + "N MISSED" summaries in History. `MISSED_TRACK_SINCE` (Jul 12, 2026) prevents retroactive flags. As-needed meds are never flagged |
 | v25 | Jul 12, 2026 | — | Shared `timeBucket(ts)` groups entries as Overnight (0–6), Morning (6–12), Afternoon (12–17), Evening (17–24). Used by Today's Journal and now also by the History tab, which shows category label rows inside each day's card. Old "Night" category removed |
 | v24 | Jul 12, 2026 | — | Layout only: Protonix and Senokot pulled out of the group into individual Quick Log cards (window logic unchanged); group card renamed "Evening meds" and now contains exactly Buspirone, Paroxetine, Iron, Compazine; "Take all" counts only those four |
