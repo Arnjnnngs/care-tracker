@@ -476,9 +476,7 @@ function missedRow(e, i) {
 }
 
 function removeBtn(e) {
-  // TEMP-UNLOCK (Jul 16, 2026): 48h lock disabled for one-time removal of fake seedDemo
-  // entries on 7/6-7/7. Revert this line immediately after cleanup — see v29.
-  // if (state.now - e.ts > 48 * 3600000) return null; // entries older than 48h are permanent history
+  if (state.now - e.ts > 48 * 3600000) return null; // entries older than 48h are permanent history
   if (state.confirmRemove === e.id) {
     return h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
       h('button', { onClick: () => { setState({ confirmRemove: null }); removeEntry(e.id); }, style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px' } }, 'Delete'),
