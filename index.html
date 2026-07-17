@@ -121,7 +121,7 @@ const MEDS = [
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 
 // State
-let state = { entries: [], now: Date.now(), toast: null, warn: null, demo: false, tab: 'today', override: null, confirmRemove: null, tempInput: '', weightInput: '', weightRange: 'weeks', timeModal: null, loaded: false };
+let state = { entries: [], now: Date.now(), toast: null, warn: null, tab: 'today', override: null, confirmRemove: null, tempInput: '', weightInput: '', weightRange: 'weeks', timeModal: null, loaded: false };
 let toastTimer = null;
 let unsub = null;
 let pendingEntries = null;
@@ -338,27 +338,6 @@ async function removeEntry(id) {
 
 // clearAll removed - history must be preserved
 
-// Seed demo data
-async function seedDemo() {
-  const n = Date.now(), H = 3600000, d0 = dayStart(n);
-  const y = d0 - 24 * H;
-  const seeds = [
-    { medId: 'tylenol', dose: '500 mg', mg: 500, ts: y + 9 * H },
-    { medId: 'temp', temp: 100.9, dose: '100.9 °F', mg: 0, ts: y + 9 * H },
-    { medId: 'zofran', dose: null, mg: 0, ts: y + 13 * H },
-    { medId: 'protonix', dose: null, mg: 0, ts: y + 19 * H },
-    { medId: 'tylenol', dose: '1000 mg', mg: 1000, ts: n - 2 * H },
-    { medId: 'tylenol', dose: '500 mg', mg: 500, ts: n - 6.5 * H },
-    { medId: 'zofran', dose: null, mg: 0, ts: n - 3.2 * H },
-    { medId: 'morphine', dose: 'Full · 15 mg', mg: 15, ts: n - 1.1 * H },
-    { medId: 'protonix', dose: null, mg: 0, ts: d0 + 8 * H },
-    { medId: 'iron', dose: null, mg: 0, ts: n - 5 * H },
-    { medId: 'temp', temp: 99.8, dose: '99.8 °F', mg: 0, ts: n - 1.5 * H },
-  ].filter(e => e.ts <= n);
-  for (const s of seeds) await addEntryDB(s);
-  setState({ demo: true });
-}
-
 // Lock SVG
 const lockSVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7D6974" stroke-width="2.4"><rect x="4" y="10.5" width="16" height="10" rx="2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg>';
 
@@ -497,7 +476,9 @@ function missedRow(e, i) {
 }
 
 function removeBtn(e) {
-  if (state.now - e.ts > 48 * 3600000) return null; // entries older than 48h are permanent history
+  // TEMP-UNLOCK (Jul 16, 2026): 48h lock disabled for one-time removal of fake seedDemo
+  // entries on 7/6-7/7. Revert this line immediately after cleanup — see v29.
+  // if (state.now - e.ts > 48 * 3600000) return null; // entries older than 48h are permanent history
   if (state.confirmRemove === e.id) {
     return h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
       h('button', { onClick: () => { setState({ confirmRemove: null }); removeEntry(e.id); }, style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px' } }, 'Delete'),
@@ -523,13 +504,6 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
         h('div', { style: { color: '#A13830', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' } },
           bannerItems.map(m => m.when + ': ' + nameOf(m.medId) + ' — ' + m.windowName + ' window (' + fmtTime(m.ts) + ') closed with no dose logged').join(' · '))
       )
-    ));
-  }
-
-  // Demo banner
-  if (state.demo) {
-    parts.push(h('div', { style: { background: 'rgba(212,104,138,0.08)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '16px', padding: '12px 14px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' } },
-      h('div', { style: { flex: '1', color: '#8A6479', fontSize: '13px', lineHeight: '1.45' } }, 'Showing sample data so you can see the tracker in action. Log a real dose or clear it to start fresh.')
     ));
   }
 
@@ -1074,7 +1048,7 @@ function sendNotif(title, body, tag) {
 
 function checkNotifications() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  if (!state.loaded || state.entries.length === 0 && !state.demo) return;
+  if (!state.loaded || state.entries.length === 0) return;
 
   resetNotifTracking();
   const now = new Date();
@@ -1189,7 +1163,6 @@ subscribePush();
 
 // Init
 unsub = subscribeEntries((entries) => {
-  const wasEmpty = state.entries.length === 0 && !state.loaded;
   if (state.timeModal) {
     // Defer update so the modal isn't destroyed mid-interaction
     pendingEntries = entries;
@@ -1197,10 +1170,6 @@ unsub = subscribeEntries((entries) => {
     return;
   }
   setState({ entries, loaded: true });
-  // If first load and no entries, offer to seed demo data
-  if (wasEmpty && entries.length === 0) {
-    seedDemo();
-  }
 });
 
 setInterval(() => {
