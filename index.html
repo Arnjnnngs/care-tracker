@@ -158,7 +158,7 @@ function isEarlyAt(med, ts) {
     return !!prev && ts < prev.ts + med.gapH * 3600000;
   }
   const d0 = dayStart(ts);
-  return !med.windows.some(w => ts >= d0 + w.start * 3600000 && ts < d0 + w.end * 3600000);
+  return ts < d0 + med.windows[0].start * 3600000;
 }
 function usedRecently(id) { return entriesFor(id).some(e => e.ts >= state.now - 7 * 86400000); }
 function dailyCeiling(med) {
@@ -194,14 +194,24 @@ function missedDosesFor(dayTs, now) {
   MEDS.filter(m => m.alerts && m.windows).forEach(med => {
     if (med.chemoOnly && !dexActiveOn(d0)) return;
     const dayEntries = entriesFor(med.id).filter(e => e.ts >= d0 && e.ts < d0 + 86400000).sort((a, b) => a.ts - b.ts);
-    let segStart = d0;
-    med.windows.forEach(w => {
-      const ws = d0 + w.start * 3600000, we = d0 + w.end * 3600000;
-      if (now >= we) {
-        const covered = dayEntries.some(e => e.ts >= segStart && e.ts < we);
-        if (!covered) out.push({ missed: true, medId: med.id, ts: ws, windowName: w.name });
-      }
-      segStart = we;
+    const used = new Set();
+    const wins = med.windows.map((w, i) => ({ w,
+      ws: d0 + w.start * 3600000, we: d0 + w.end * 3600000,
+      nextStart: i + 1 < med.windows.length ? d0 + med.windows[i + 1].start * 3600000 : d0 + 86400000,
+      covered: false }));
+    // Pass 1: in-window or early doses cover their window
+    wins.forEach(win => {
+      const hit = dayEntries.find(e => !used.has(e) && e.ts < win.we);
+      if (hit) { used.add(hit); win.covered = true; }
+    });
+    // Pass 2: late doses (after close, before the next window opens) still count
+    wins.forEach(win => {
+      if (win.covered) return;
+      const hit = dayEntries.find(e => !used.has(e) && e.ts >= win.we && e.ts < win.nextStart);
+      if (hit) { used.add(hit); win.covered = true; }
+    });
+    wins.forEach(win => {
+      if (!win.covered && now >= win.we) out.push({ missed: true, medId: med.id, ts: win.ws, windowName: win.w.name });
     });
   });
   return out.sort((a, b) => a.ts - b.ts);
