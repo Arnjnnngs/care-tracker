@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 17, 2026
-> **Current version:** v29
+> **Current version:** v30
 
 ---
 
@@ -107,7 +107,7 @@ Prevents duplicate notifications.
 | ID | Display Name | Generic | Dosing Rules |
 |---|---|---|---|
 | `tylenol` | Tylenol | Acetaminophen | Daily max: 2500 mg (resets at midnight). Min gap: 4 hours. Quick-log buttons: 500 mg, 1000 mg |
-| `zofran` | Zofran | Ondansetron | 8-hour gap between doses. Shows countdown timer. Push notification when gap expires |
+| `zofran` | Zofran | Ondansetron | As needed — no gap timer, no gap push (since v30). Restricted on chemo days 1–2 (override available) |
 | `compazine` | Compazine | Prochlorperazine | 6-hour min gap. 10 PM routine, earlier as needed. Shown in the Evening Meds group card, not Quick Log |
 | `morphine` | Morphine | Immediate release | 4-hour min gap. Quick-log buttons: ½ tab (7.5 mg), full tab (15 mg) |
 | `lidocaine` | Lidocaine | Topical cream | 4-hour min gap. Daily max: 4 applications (resets at midnight). Quick-log button: Apply |
@@ -217,6 +217,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v30 | Jul 17, 2026 | — | Promote tested features from care-tracker-testing (t-v28–v33): chemo cycle system (chemo date scheduling, auto-appearing Dexamethasone 2 tablets 8 AM & 2 PM day −1..+1, Zofran restricted on chemo days 1–2 with override, phased banners + Zofran-Restricted / Dexamethasone-Due badges); menstrual Cycle tab (Period Start/End, day counter, active banner, history); In-Patient tracking (Start/End/Undo, active banner, meds shown as Restricted, missed-dose alerts suppressed on in-patient days, In-Patient tab with stay ranges); 1–10 pain scale required on Tylenol & Morphine logs (shown in Journal/History); Zofran converted to plain as-needed (no 8h gap timer; gap-based push reminder removed from send-reminders.js); Temperature/Weight inputs use placeholders, must be typed. Testing-only code stripped (TEST_MODE flag, orange banner, date-override control, seedDemo remains removed). Code-only promotion — production Firestore data untouched (verified by before/after ID snapshot). New entry medIds: `chemo_date`, `cycle_start`, `cycle_end`, `inpatient_start`, `inpatient_end` (legacy `inpatient` still honored); `painLevel` field on Tylenol/Morphine entries. KNOWN MISMATCH: the 8:00 PM push reminder still lists Iron/Buspirone/Paroxetine which open in-app at 10 PM (pre-existing since v22 — pending decision) |
 | v29 | Jul 17, 2026 | — | Re-enabled the 48-hour edit-lock check in removeBtn(), reverting a Jul 16 temporary unlock that had allowed manual deletion of fake seedDemo() entries dated 7/6-7/7 (see v28 and Known Issues item 9) |
 | v28 | Jul 17, 2026 | — | Data-integrity fix. Removed the dormant seedDemo() function entirely, along with the demo state flag, its banner UI, and the wasEmpty-triggered auto-seed call in the Firestore subscription callback. This function had silently written hardcoded fake medication entries into caretracker_entries (Brandi's real medical data) whenever the app's first Firestore snapshot came back empty. All fake entries identified and deleted from Firestore. See Known Issues item 9 for full incident details |
 | v27 | Jul 13, 2026 | — | Today's missed-dose banner now includes yesterday's misses (labeled "Yesterday:"), so a late-evening miss isn't hidden after midnight. Journal/History rows unchanged (per-day) |

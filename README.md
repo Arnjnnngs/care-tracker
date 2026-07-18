@@ -68,7 +68,7 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 | Medication | Generic | Tracking Type |
 |---|---|---|
 | Tylenol | Acetaminophen | Daily limit (2500 mg, resets midnight), 4h min gap, 500/1000 mg doses |
-| Zofran | Ondansetron | 8h gap timer, push notification when available |
+| Zofran | Ondansetron | As needed — no gap timer (restricted on chemo days 1–2) |
 | Compazine | Prochlorperazine | 6h min gap; 10 PM routine + earlier as needed (in Scheduled Meds card) |
 | Morphine | Immediate release | 4h min gap, ½ tab (7.5 mg) / full tab (15 mg) doses |
 | Lidocaine | Topical cream | 4h min gap, max 4 applications per day |
@@ -78,10 +78,15 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 | Paroxetine | Paxil | Once daily, 10 PM |
 | Iron | Ferrous sulfate | Once daily, 10 PM |
 | Senokot | Senna | 2 pills, 8 AM & 10 PM windows, as needed |
+| Dexamethasone | Steroid (chemo premed) | 2 tablets, 8 AM & 2 PM — auto-appears day before chemo through day after only |
 
 ## Missed Dose Alerts
 
 Protonix, Buspirone, Paroxetine, and Iron are tracked for missed doses. When one of their schedule windows closes with no dose logged, the app shows a red alert banner at the top of Today (covering today's and yesterday's misses, so an overnight miss is still visible the next morning), a red MISSED row in Today's Journal under the matching time category, and red MISSED rows plus a "N MISSED" day summary in History. A dose logged early (before the window opened, same day) counts as covering that window. As-needed meds (Senokot, Compazine, Tylenol, Zofran, Morphine, Lidocaine, Imodium) are never flagged. Tracking starts July 12, 2026 — no retroactive flags before that date.
+
+## Chemo Cycle, Menstrual Cycle & In-Patient (v30+)
+
+Set the next chemo date on the Today tab: Dexamethasone appears automatically for its 3-day premed window, Zofran is restricted on chemo days 1–2 (override available), and phased red banners with Zofran-Restricted / Dexamethasone-Due badges run from 2 days before chemo through the day after. The Cycle tab tracks periods (Start/End, day counter, non-dismissible active banner, history). The In-Patient tab tracks hospital stays (Start/End/Undo) — while a stay is open all meds show as Restricted and missed-dose alerts are suppressed. Tylenol and Morphine require a 1–10 pain level before logging.
 
 ## Vitals Tracking
 
@@ -115,6 +120,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v30 | Jul 17, 2026 | Promote tested features from care-tracker-testing (t-v28–v33): chemo cycle system (chemo date scheduling, auto-appearing Dexamethasone 2 tablets 8 AM & 2 PM day −1..+1, Zofran restricted on chemo days 1–2 with override, phased banners + Zofran-Restricted / Dexamethasone-Due badges); menstrual Cycle tab (Period Start/End, day counter, active banner, history); In-Patient tracking (Start/End/Undo, active banner, meds shown as Restricted, missed-dose alerts suppressed on in-patient days, In-Patient tab with stay ranges); 1–10 pain scale required on Tylenol & Morphine logs (shown in Journal/History); Zofran converted to plain as-needed (no 8h gap timer; gap-based push reminder removed from send-reminders.js); Temperature/Weight inputs use placeholders, must be typed. Testing-only code stripped (TEST_MODE flag, orange banner, date-override control, seedDemo remains removed). Code-only promotion — production Firestore data untouched (verified by before/after ID snapshot) |
 | v29 | Jul 17, 2026 | Re-enable the 48-hour edit-lock check in removeBtn(), reverting a Jul 16 temporary unlock that had allowed manual deletion of fake seedDemo() entries dated 7/6-7/7 (otherwise locked from removal after 48h) |
 | v28 | Jul 17, 2026 | Data-integrity fix. Removed the dormant seedDemo() function entirely, along with the demo state flag, its banner UI, and the wasEmpty-triggered auto-seed call in the Firestore subscription callback, which had silently written hardcoded fake medication entries into caretracker_entries (Brandi's real medical data) whenever the app's first Firestore snapshot came back empty. All fake entries identified and deleted from Firestore; see Known Issues section below for full incident details |
 | v27 | Jul 13, 2026 | Missed-dose banner also shows yesterday's misses (overnight rollover fix) |

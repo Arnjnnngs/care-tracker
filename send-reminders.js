@@ -8,7 +8,6 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-const ZOFRAN_GAP_HOURS = 8;
 
 async function sendToAll(title, body, tag) {
   const tokensSnap = await db.collection('fcm_tokens').get();
@@ -53,56 +52,6 @@ async function sendToAll(title, body, tag) {
   console.log('Done: ' + sent + ' sent, ' + failed + ' failed');
 }
 
-async function checkZofranGap() {
-  // Look at caretracker_entries for the most recent zofran dose
-  const entriesSnap = await db.collection('caretracker_entries')
-    .where('medId', '==', 'zofran')
-    .orderBy('ts', 'desc')
-    .limit(1)
-    .get();
-
-  if (entriesSnap.empty) {
-    console.log('No zofran entries found, skipping gap check.');
-    return false;
-  }
-
-  const lastDose = entriesSnap.docs[0].data();
-  const lastTs = lastDose.ts;
-  const nowMs = Date.now();
-  const gapMs = ZOFRAN_GAP_HOURS * 3600000;
-  const elapsed = nowMs - lastTs;
-  const elapsedHours = (elapsed / 3600000).toFixed(1);
-
-  console.log('Last zofran dose: ' + new Date(lastTs).toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-  console.log('Elapsed: ' + elapsedHours + ' hours');
-
-  if (elapsed < gapMs) {
-    console.log('Zofran gap not yet expired (' + elapsedHours + 'h / ' + ZOFRAN_GAP_HOURS + 'h), skipping.');
-    return false;
-  }
-
-  // Check if we already sent a reminder for this gap window
-  // Use a Firestore doc to track the last notified dose timestamp
-  const trackRef = db.collection('fcm_tracking').doc('zofran_gap');
-  const trackDoc = await trackRef.get();
-  const lastNotifiedTs = trackDoc.exists ? trackDoc.data().lastDoseTs : 0;
-
-  if (lastNotifiedTs === lastTs) {
-    console.log('Already sent reminder for this zofran gap window, skipping.');
-    return false;
-  }
-
-  // Send the reminder
-  await sendToAll(
-    'Zofran Available',
-    'Zofran 8-hour gap is up - ready to dose',
-    'zofran-gap'
-  );
-
-  // Mark this gap as notified
-  await trackRef.set({ lastDoseTs: lastTs, notifiedAt: nowMs });
-  return true;
-}
 
 async function sendReminders() {
   const now = new Date();
@@ -124,7 +73,7 @@ async function sendReminders() {
   if (hour === 8 && minute >= 25 && minute <= 35) {
     await sendToAll(
       'Morning Meds Due',
-      'Protonix (morning) & Zofran - time for morning doses',
+      'Protonix - time for morning doses',
       'morning-meds'
     );
   }
@@ -138,8 +87,6 @@ async function sendReminders() {
     );
   }
 
-  // --- GAP-BASED: Zofran (runs every 30 min, checks if 8h gap expired) ---
-  await checkZofranGap();
 }
 
 sendReminders().catch(console.error);
