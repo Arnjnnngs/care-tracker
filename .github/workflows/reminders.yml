@@ -2,11 +2,12 @@ name: Send Med Reminders
 
 on:
   schedule:
-    # Every 30 minutes from 8 AM to 10 PM CDT (1 PM to 3 AM UTC during CDT/summer)
-    # Covers: scheduled meds at 8:30 AM and 8 PM, plus Zofran gap checks throughout the day
-    # 1 PM - 3 AM UTC = 8 AM - 10 PM CDT
+    # Every 30 minutes from 8 AM through the 10:00 PM send, Central time.
+    # 0-4 UTC keeps the 10:00 PM run covered in BOTH daylight (CDT, 03:00 UTC)
+    # and standard (CST, 04:00 UTC) time; quiet hours in send-reminders.js
+    # silence any extra late runs.
     - cron: '0,30 13-23 * * *'
-    - cron: '0,30 0-3 * * *'
+    - cron: '0,30 0-4 * * *'
   workflow_dispatch:
 
 jobs:
