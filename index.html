@@ -116,9 +116,8 @@ const MEDS = [
     windows:[{start:22,end:24,name:'Night'}] },
   { id:'iron', name:'Iron', sub:'Ferrous sulfate', type:'win', alerts:true, note:'Once daily · 10 PM',
     windows:[{start:22,end:24,name:'Night'}] },
-  { id:'senokot', name:'Senokot', sub:'Senna', type:'win', note:'2 pills · 8 AM & 10 PM · as needed',
-    doses:[{label:'2 pills',pills:2,mg:0}],
-    windows:[{start:8,end:12,name:'Morning'},{start:22,end:24,name:'Night'}] },
+  { id:'senokot', name:'Senokot', sub:'Senna', type:'gap', gapH:0, note:'As needed · 1–2 pills',
+    doses:[{label:'1 pill',pills:1,mg:0},{label:'2 pills',pills:2,mg:0}] },
   { id:'imodium', name:'Imodium', sub:'Loperamide', type:'gap', gapH:0, ceiling:true, ceilingMax:4, ceilingUnit:'pills', note:'Max 4 pills per day',
     doses:[{label:'2 pills (onset)',pills:2,mg:0},{label:'1 pill',pills:1,mg:0}] },
 ];

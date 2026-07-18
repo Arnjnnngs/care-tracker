@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 17, 2026
-> **Current version:** v32
+> **Current version:** v33
 
 ---
 
@@ -116,7 +116,7 @@ Prevents duplicate notifications.
 | `buspirone` | Buspirone | BuSpar | Once daily, 10 PM window (22–24) |
 | `paroxetine` | Paroxetine | Paxil | Once daily, 10 PM window (22–24) |
 | `iron` | Iron | Ferrous sulfate | Once daily, 10 PM window (22–24) |
-| `senokot` | Senokot | Senna | As needed: 2 pills, morning window (8–12) & night window (22–24). Default dose "2 pills" (pills: 2) recorded on log |
+| `senokot` | Senokot | Senna | As needed — no schedule, no lock (type gap, gapH 0). Quick-log buttons: 1 pill, 2 pills |
 
 ### Vitals
 - **Temperature** — logged in °F, shows last reading time
@@ -218,6 +218,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v33 | Jul 18, 2026 | — | Senokot converted to plain as-needed: schedule windows (8 AM & 10 PM) removed, quick-log now offers 1 pill or 2 pills (type win→gap/0; never in missed-dose alerts, unchanged) |
 | v32 | Jul 18, 2026 | — | Fix false MISSED alert when a dose was logged the same day: dose-to-window assignment is now two-pass — in-window/early doses first, then late doses (after a window closed, before the next opened) credit the window they follow. Two logged doses on a two-window day can no longer produce a MISSED row (was: an at/after-window-edge dose like 6:00 PM credited nothing). A genuinely skipped window still alerts. Early tag now only applies to doses logged before the day's first window — after-window doses are late, not Early. `missedDosesFor()` uses a used-set greedy assignment over the day's entries; `isEarlyAt()` win-branch is now `ts < first window start` |
 | v31 | Jul 18, 2026 | — | Evening push reminders split to match app windows: Protonix nudge stays at 8:00 PM (its window closes 10 PM), Iron/Buspirone/Paroxetine/Compazine reminder moved to 10:00 PM. Quiet hours now start 10:05 PM so the 10 PM send goes through; workflow cron extended (0–4 UTC) so the 10 PM run is covered in winter (CST) too. Resolves the v30 known mismatch. App code unchanged; SW cache bumped per standard workflow |
 | v30 | Jul 17, 2026 | — | Promote tested features from care-tracker-testing (t-v28–v33): chemo cycle system (chemo date scheduling, auto-appearing Dexamethasone 2 tablets 8 AM & 2 PM day −1..+1, Zofran restricted on chemo days 1–2 with override, phased banners + Zofran-Restricted / Dexamethasone-Due badges); menstrual Cycle tab (Period Start/End, day counter, active banner, history); In-Patient tracking (Start/End/Undo, active banner, meds shown as Restricted, missed-dose alerts suppressed on in-patient days, In-Patient tab with stay ranges); 1–10 pain scale required on Tylenol & Morphine logs (shown in Journal/History); Zofran converted to plain as-needed (no 8h gap timer; gap-based push reminder removed from send-reminders.js); Temperature/Weight inputs use placeholders, must be typed. Testing-only code stripped (TEST_MODE flag, orange banner, date-override control, seedDemo remains removed). Code-only promotion — production Firestore data untouched (verified by before/after ID snapshot). New entry medIds: `chemo_date`, `cycle_start`, `cycle_end`, `inpatient_start`, `inpatient_end` (legacy `inpatient` still honored); `painLevel` field on Tylenol/Morphine entries. KNOWN MISMATCH: the 8:00 PM push reminder still lists Iron/Buspirone/Paroxetine which open in-app at 10 PM (pre-existing since v22 — pending decision) |

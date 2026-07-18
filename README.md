@@ -78,7 +78,7 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 | Buspirone | BuSpar | Once daily, 10 PM |
 | Paroxetine | Paxil | Once daily, 10 PM |
 | Iron | Ferrous sulfate | Once daily, 10 PM |
-| Senokot | Senna | 2 pills, 8 AM & 10 PM windows, as needed |
+| Senokot | Senna | As needed — 1 or 2 pills, no schedule |
 | Dexamethasone | Steroid (chemo premed) | 2 tablets, 8 AM & 2 PM — auto-appears day before chemo through day after only |
 
 ## Missed Dose Alerts
@@ -121,6 +121,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v33 | Jul 18, 2026 | Senokot converted to plain as-needed: schedule windows (8 AM & 10 PM) removed, quick-log now offers 1 pill or 2 pills |
 | v32 | Jul 18, 2026 | Fix false MISSED alert when a dose was logged the same day: dose-to-window assignment is now two-pass — in-window/early doses first, then late doses (after a window closed, before the next opened) credit the window they follow. Two logged doses on a two-window day can no longer produce a MISSED row (was: an at/after-window-edge dose like 6:00 PM credited nothing). A genuinely skipped window still alerts. Early tag now only applies to doses logged before the day's first window — after-window doses are late, not Early |
 | v31 | Jul 18, 2026 | Evening push reminders split to match app windows: Protonix nudge stays at 8:00 PM (its window closes 10 PM), Iron/Buspirone/Paroxetine/Compazine reminder moved to 10:00 PM. Quiet hours now start 10:05 PM so the 10 PM send goes through; workflow cron extended (0–4 UTC) so the 10 PM run is covered in winter (CST) too. Resolves the v30 known mismatch. App code unchanged; SW cache bumped per standard workflow |
 | v30 | Jul 17, 2026 | Promote tested features from care-tracker-testing (t-v28–v33): chemo cycle system (chemo date scheduling, auto-appearing Dexamethasone 2 tablets 8 AM & 2 PM day −1..+1, Zofran restricted on chemo days 1–2 with override, phased banners + Zofran-Restricted / Dexamethasone-Due badges); menstrual Cycle tab (Period Start/End, day counter, active banner, history); In-Patient tracking (Start/End/Undo, active banner, meds shown as Restricted, missed-dose alerts suppressed on in-patient days, In-Patient tab with stay ranges); 1–10 pain scale required on Tylenol & Morphine logs (shown in Journal/History); Zofran converted to plain as-needed (no 8h gap timer; gap-based push reminder removed from send-reminders.js); Temperature/Weight inputs use placeholders, must be typed. Testing-only code stripped (TEST_MODE flag, orange banner, date-override control, seedDemo remains removed). Code-only promotion — production Firestore data untouched (verified by before/after ID snapshot) |
