@@ -61,8 +61,9 @@ async function sendReminders() {
 
   console.log('Central Time: ' + centralTime.toLocaleString() + ', hour=' + hour + ', min=' + minute);
 
-  // Quiet hours: no notifications between 10 PM and 8 AM
-  if (hour >= 22 || hour < 8) {
+  // Quiet hours: no notifications from 10:05 PM to 8 AM
+  // (the 10:00 PM evening-meds reminder is explicitly allowed through)
+  if (hour >= 23 || hour < 8 || (hour === 22 && minute > 5)) {
     console.log('Quiet hours, skipping all.');
     return;
   }
@@ -78,11 +79,20 @@ async function sendReminders() {
     );
   }
 
-  // 8:00 PM evening meds (fire between 7:55-8:05 PM)
+  // 8:00 PM Protonix (its evening window in the app is 8-10 PM; fire between 7:55-8:05 PM)
   if ((hour === 19 && minute >= 55) || (hour === 20 && minute <= 5)) {
     await sendToAll(
+      'Protonix Due',
+      'Protonix - evening dose (window closes 10 PM)',
+      'evening-protonix'
+    );
+  }
+
+  // 10:00 PM evening meds (Iron/Buspirone/Paroxetine/Compazine open at 10 PM in the app; fire 9:55-10:05 PM)
+  if ((hour === 21 && minute >= 55) || (hour === 22 && minute <= 5)) {
+    await sendToAll(
       'Evening Meds Due',
-      'Protonix, Iron, Buspirone, Paroxetine, Compazine - time for evening doses',
+      'Iron, Buspirone, Paroxetine, Compazine - time for evening doses',
       'evening-meds'
     );
   }

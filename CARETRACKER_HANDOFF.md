@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 17, 2026
-> **Current version:** v30
+> **Current version:** v31
 
 ---
 
@@ -163,9 +163,10 @@ Also has its own notification click handler (identical logic to sw.js).
 | Time | Type | Notification |
 |---|---|---|
 | 8:25–8:35 AM | Scheduled | "Morning Meds Due" — Protonix (morning) & Zofran |
-| 7:55–8:05 PM | Scheduled | "Evening Meds Due" — Protonix, Iron, Buspirone, Paroxetine, Compazine |
+| 7:55–8:05 PM | Scheduled | "Protonix Due" — evening dose (app window closes 10 PM) |
+| 9:55–10:05 PM | Scheduled | "Evening Meds Due" — Iron, Buspirone, Paroxetine, Compazine (open at 10 PM in-app) |
 | Every 30 min | Gap-based | "Zofran Available" — only if 8h gap since last dose has elapsed |
-| 10 PM–8 AM | Quiet hours | No notifications sent |
+| 10:05 PM–8 AM | Quiet hours | No notifications sent (10:00 PM send explicitly allowed) |
 
 ### GitHub Actions Workflow (reminders.yml)
 - **Triggers:** Cron schedule + manual `workflow_dispatch`
@@ -217,6 +218,7 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
+| v31 | Jul 18, 2026 | — | Evening push reminders split to match app windows: Protonix nudge stays at 8:00 PM (its window closes 10 PM), Iron/Buspirone/Paroxetine/Compazine reminder moved to 10:00 PM. Quiet hours now start 10:05 PM so the 10 PM send goes through; workflow cron extended (0–4 UTC) so the 10 PM run is covered in winter (CST) too. Resolves the v30 known mismatch. App code unchanged; SW cache bumped per standard workflow |
 | v30 | Jul 17, 2026 | — | Promote tested features from care-tracker-testing (t-v28–v33): chemo cycle system (chemo date scheduling, auto-appearing Dexamethasone 2 tablets 8 AM & 2 PM day −1..+1, Zofran restricted on chemo days 1–2 with override, phased banners + Zofran-Restricted / Dexamethasone-Due badges); menstrual Cycle tab (Period Start/End, day counter, active banner, history); In-Patient tracking (Start/End/Undo, active banner, meds shown as Restricted, missed-dose alerts suppressed on in-patient days, In-Patient tab with stay ranges); 1–10 pain scale required on Tylenol & Morphine logs (shown in Journal/History); Zofran converted to plain as-needed (no 8h gap timer; gap-based push reminder removed from send-reminders.js); Temperature/Weight inputs use placeholders, must be typed. Testing-only code stripped (TEST_MODE flag, orange banner, date-override control, seedDemo remains removed). Code-only promotion — production Firestore data untouched (verified by before/after ID snapshot). New entry medIds: `chemo_date`, `cycle_start`, `cycle_end`, `inpatient_start`, `inpatient_end` (legacy `inpatient` still honored); `painLevel` field on Tylenol/Morphine entries. KNOWN MISMATCH: the 8:00 PM push reminder still lists Iron/Buspirone/Paroxetine which open in-app at 10 PM (pre-existing since v22 — pending decision) |
 | v29 | Jul 17, 2026 | — | Re-enabled the 48-hour edit-lock check in removeBtn(), reverting a Jul 16 temporary unlock that had allowed manual deletion of fake seedDemo() entries dated 7/6-7/7 (see v28 and Known Issues item 9) |
 | v28 | Jul 17, 2026 | — | Data-integrity fix. Removed the dormant seedDemo() function entirely, along with the demo state flag, its banner UI, and the wasEmpty-triggered auto-seed call in the Firestore subscription callback. This function had silently written hardcoded fake medication entries into caretracker_entries (Brandi's real medical data) whenever the app's first Firestore snapshot came back empty. All fake entries identified and deleted from Firestore. See Known Issues item 9 for full incident details |
