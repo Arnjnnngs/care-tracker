@@ -182,7 +182,8 @@ function chemoOffsetFor(dayTs) {
   return Math.round((dayStart(dayTs) - dayStart(c)) / 86400000);
 }
 function dexActiveOn(dayTs) { const o = chemoOffsetFor(dayTs); return o !== null && o >= -1 && o <= 1; }
-function zofranBlockedOn(dayTs) { const o = chemoOffsetFor(dayTs); return o === 0 || o === 1; }
+function zofranBlockedOn(dayTs) { const o = chemoOffsetFor(dayTs); return o !== null && o >= 0 && o <= 2; }
+function dexWindowsForOffset(offset) { return offset === 1 ? [{ start: 8, end: 12, name: 'Morning' }] : [{ start: 8, end: 12, name: 'Morning' }, { start: 14, end: 18, name: 'Afternoon' }]; }
 
 const MISSED_TRACK_SINCE = new Date(2026, 6, 12).getTime(); // Jul 12, 2026 — no retroactive flags before this
 function missedDosesFor(dayTs, now) {
@@ -192,11 +193,12 @@ function missedDosesFor(dayTs, now) {
   const out = [];
   MEDS.filter(m => m.alerts && m.windows).forEach(med => {
     if (med.chemoOnly && !dexActiveOn(d0)) return;
+    const windows = med.id === 'dexamethasone' ? dexWindowsForOffset(chemoOffsetFor(d0)) : med.windows;
     const dayEntries = entriesFor(med.id).filter(e => e.ts >= d0 && e.ts < d0 + 86400000).sort((a, b) => a.ts - b.ts);
     const used = new Set();
-    const wins = med.windows.map((w, i) => ({ w,
+    const wins = windows.map((w, i) => ({ w,
       ws: d0 + w.start * 3600000, we: d0 + w.end * 3600000,
-      nextStart: i + 1 < med.windows.length ? d0 + med.windows[i + 1].start * 3600000 : d0 + 86400000,
+      nextStart: i + 1 < windows.length ? d0 + windows[i + 1].start * 3600000 : d0 + 86400000,
       covered: false }));
     // Pass 1: in-window or early doses cover their window
     wins.forEach(win => {
@@ -246,7 +248,7 @@ function fmtDateLabel(ts) {
 function status(med) {
   const now = state.now;
   if (med.id === 'zofran' && zofranBlockedOn(now)) {
-    return { locked: true, chemoBlock: true, availableAt: dayStart(nextChemoTs()) + 2 * 86400000 };
+    return { locked: true, chemoBlock: true, availableAt: dayStart(nextChemoTs()) + 3 * 86400000 + 8 * 3600000 };
   }
   const es = entriesFor(med.id).slice().sort((a, b) => a.ts - b.ts);
   if (med.type === 'gap') {
@@ -263,14 +265,23 @@ function status(med) {
     return { locked: now < at, availableAt: at };
   }
   const d0 = dayStart(now), atH = (h) => d0 + h * 3600000;
-  for (const w of med.windows) {
+  const windows = med.id === 'dexamethasone' ? dexWindowsForOffset(chemoOffsetFor(d0)) : med.windows;
+  let allUsedToday = true;
+  for (const w of windows) {
     const ws = atH(w.start), we = atH(w.end);
     const used = es.some(e => e.ts >= ws && e.ts < we);
     if (used) continue;
+    allUsedToday = false;
     if (now < ws) return { locked: true, availableAt: ws, windowName: w.name };
     if (now >= ws && now < we) return { locked: false, windowName: w.name };
   }
-  const first = med.windows[0];
+  const chemoOver = med.chemoOnly && !dexActiveOn(d0 + 86400000);
+  if (chemoOver) {
+    if (allUsedToday) return { locked: true, courseComplete: true };
+    return { locked: false, lateLog: true };
+  }
+  const tomorrowWindows = med.id === 'dexamethasone' ? dexWindowsForOffset(chemoOffsetFor(d0 + 86400000)) : windows;
+  const first = tomorrowWindows[0];
   return { locked: true, availableAt: d0 + 86400000 + first.start * 3600000, windowName: first.name };
 }
 
@@ -704,7 +715,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     if (chemoOffNow === -2) { cTitle = 'Chemo ' + cLabel; cBody = 'Steroids start TOMORROW — Dexamethasone 2 tablets at 8 AM & 2 PM, for 3 days. Zofran will be restricted on chemo days.'; }
     else if (chemoOffNow === -1) { cTitle = 'Chemo tomorrow — ' + cLabel; cBody = 'Steroids start TODAY (day 1 of 3): Dexamethasone 2 tablets at 8 AM & 2 PM. Zofran will be restricted tomorrow and the day after.'; }
     else if (chemoOffNow === 0) { cTitle = 'Chemo TODAY'; cBody = 'Dexamethasone day 2 of 3 — 2 tablets at 8 AM & 2 PM.'; }
-    else { cTitle = 'Day after chemo'; cBody = 'Dexamethasone day 3 of 3 (final day) — 2 tablets at 8 AM & 2 PM.'; }
+    else { cTitle = 'Day after chemo'; cBody = 'Dexamethasone day 3 of 3 (final day) — 2 tablets at 8 AM only. Zofran remains restricted through tomorrow.'; }
     const dexDueToday = dexActiveOn(now);
     const zofranRestrictedToday = zofranBlockedOn(now);
     parts.push(h('div', { style: { background: 'rgba(192,69,59,0.14)', border: '2px solid #C0453B', borderRadius: '16px', padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 24px rgba(192,69,59,0.2)' } },
@@ -718,7 +729,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       (dexDueToday || zofranRestrictedToday) ? h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
         dexDueToday ? h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'rgba(15,157,87,0.16)', border: '1.5px solid #0F9D6B', borderRadius: '11px', padding: '8px 13px' } },
           h('span', { style: { flexShrink: '0', width: '18px', height: '18px', borderRadius: '50%', background: '#0F9D6B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '12px' } }, '\u2713'),
-          h('span', { style: { fontSize: '13px', fontWeight: '800', color: '#0C7F57', letterSpacing: '0.01em' } }, 'Dexamethasone Due — 8 AM & 2 PM')
+          h('span', { style: { fontSize: '13px', fontWeight: '800', color: '#0C7F57', letterSpacing: '0.01em' } }, 'Dexamethasone Due — ' + (chemoOffNow === 1 ? '8 AM only' : '8 AM & 2 PM'))
         ) : null,
         zofranRestrictedToday ? h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'rgba(192,69,59,0.18)', border: '1.5px solid #C0453B', borderRadius: '11px', padding: '8px 13px' } },
           h('span', { style: { flexShrink: '0', width: '18px', height: '18px', borderRadius: '50%', background: '#C0453B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '12px' } }, '\u2715'),
@@ -878,7 +889,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   ));
 
   // Quick Log section
-  const medCards = MEDS.filter(m => ((m.type === 'gap' && m.id !== 'compazine') || m.id === 'protonix' || m.id === 'senokot' || m.id === 'dexamethasone') && (!m.chemoOnly || dexActiveOn(now))).map(med => {
+  const medCards = MEDS.filter(m => ((m.type === 'gap' && m.id !== 'compazine') || m.id === 'protonix' || m.id === 'senokot' || m.id === 'dexamethasone') && (!m.chemoOnly || (dexActiveOn(now) && !status(m).courseComplete))).map(med => {
     if (inpatientActiveNow) {
       return h('div', { style: { background: 'rgba(154,100,25,0.08)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1.5px dashed rgba(154,100,25,0.35)', borderRadius: '18px', padding: '15px', display: 'flex', flexDirection: 'column', gap: '6px' } },
         h('div', { style: { fontSize: '17px', fontWeight: '800', letterSpacing: '-0.01em', color: '#9A6419' } }, med.name + ' - In-Patient (Restricted)'),
@@ -897,7 +908,9 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       const tmrw = dayStart(now) + 86400000;
       nextDoseLabel = 'Next dose tomorrow after midnight';
     } else if (st.chemoBlock) {
-      nextDoseLabel = 'No Zofran on chemo days — per care team';
+      nextDoseLabel = 'Restricted — next dose ' + new Date(st.availableAt).toLocaleDateString([], { weekday: 'long' }) + ' ' + fmtTime(st.availableAt);
+    } else if (st.courseComplete) {
+      nextDoseLabel = 'Course complete';
     } else if (locked && st.availableAt) {
       nextDoseLabel = 'Next dose at ' + fmtTime(st.availableAt);
     } else {
@@ -944,7 +957,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       );
     }
 
-    return h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    return h('div', { style: { background: st.chemoBlock ? 'rgba(192,69,59,0.09)' : 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid ' + (st.chemoBlock ? 'rgba(192,69,59,0.3)' : 'rgba(212,104,138,0.12)'), borderRadius: '18px', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       // Header row
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
         h('div', null,
@@ -952,7 +965,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           h('div', { style: { fontSize: '12.5px', color: '#8A6479' } }, med.sub)
         ),
         locked ?
-          h('div', { className: 'mono', innerHTML: lockSVG + ' ' + (st.ceilingHit ? 'Limit' : st.chemoBlock ? 'Chemo' : countdownLabel), style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: st.ceilingHit ? 'rgba(192,69,59,0.15)' : 'rgba(255,255,255,0.4)', color: st.ceilingHit ? '#A15B56' : '#5C6662', border: '1px solid ' + (st.ceilingHit ? 'rgba(192,69,59,0.25)' : 'rgba(212,104,138,0.15)'), borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '600', flexShrink: '0' } }) :
+          h('div', { className: 'mono', innerHTML: lockSVG + ' ' + (st.ceilingHit ? 'Limit' : st.chemoBlock ? 'Restricted' : countdownLabel), style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: (st.ceilingHit || st.chemoBlock) ? 'rgba(192,69,59,0.15)' : 'rgba(255,255,255,0.4)', color: (st.ceilingHit || st.chemoBlock) ? '#A15B56' : '#5C6662', border: '1px solid ' + ((st.ceilingHit || st.chemoBlock) ? 'rgba(192,69,59,0.25)' : 'rgba(212,104,138,0.15)'), borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '600', flexShrink: '0' } }) :
           h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(212,104,138,0.12)', color: '#AA5375', border: '1px solid rgba(212,104,138,0.25)', borderRadius: '99px', padding: '5px 11px', fontSize: '12.5px', fontWeight: '700', flexShrink: '0' } },
             h('span', { style: { width: '7px', height: '7px', borderRadius: '50%', background: '#AA5375', display: 'inline-block' } }),
             'Open'
@@ -961,7 +974,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       // Meta lines
       h('div', { style: { fontSize: '12.5px', color: '#8A6479', display: 'flex', flexDirection: 'column', gap: '2px' } },
         h('span', null, lastLabel),
-        h('span', { style: { color: st.ceilingHit ? '#A15B56' : locked ? '#9A6419' : '#AA5375', fontWeight: '600', fontSize: '12px' } }, nextDoseLabel),
+        h('span', { style: { color: (st.ceilingHit || st.chemoBlock) ? '#A15B56' : locked ? '#9A6419' : '#AA5375', fontWeight: '600', fontSize: '12px' } }, nextDoseLabel),
         subStatus ? h('span', { style: { color: '#7D6974' } }, subStatus) : null,
         h('span', { style: { color: '#7D6A74', fontSize: '11.5px' } }, med.note)
       ),
