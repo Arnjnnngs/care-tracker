@@ -2,8 +2,8 @@
 
 Real-time family medication & vitals tracker — a progressive web app (PWA) for logging medications, temperature, and weight with live Firebase sync and push notification reminders.
 
-**Live App:** https://arnjnnngs.github.io/care-tracker/  
-**Cache Reset:** https://arnjnnngs.github.io/care-tracker/reset.html  
+**Live App:** https://arnjnnngs.github.io/care-tracker/
+**Cache Reset:** https://arnjnnngs.github.io/care-tracker/reset.html
 **Repository:** https://github.com/arnjnnngs/care-tracker
 
 ## Overview
@@ -25,15 +25,15 @@ CareTracker is a single-page PWA built with vanilla JavaScript and Firebase Fire
 ```
 care-tracker/
 ├── .github/workflows/
-│   └── reminders.yml            # Cron job: med reminder notifications
-├── firebase-messaging-sw.js     # FCM service worker for background push
-├── icon-192.png                 # PWA icon (192x192)
-├── icon-512.png                 # PWA icon (512x512)
-├── index.html                   # Main app (all HTML/CSS/JS in one file)
-├── manifest.webmanifest         # PWA manifest
-├── reset.html                   # Cache reset utility for stuck service workers
-├── send-reminders.js            # Node.js script for sending FCM notifications
-└── sw.js                        # Service worker (caching + notification clicks)
+│ └── reminders.yml # Cron job: med reminder notifications
+├── firebase-messaging-sw.js # FCM service worker for background push
+├── icon-192.png # PWA icon (192x192)
+├── icon-512.png # PWA icon (512x512)
+├── index.html # Main app (all HTML/CSS/JS in one file)
+├── manifest.webmanifest # PWA manifest
+├── reset.html # Cache reset utility for stuck service workers
+├── send-reminders.js # Node.js script for sending FCM notifications
+└── sw.js # Service worker (caching + notification clicks)
 ```
 
 ## Firebase Collections
@@ -41,12 +41,13 @@ care-tracker/
 | Collection | Purpose |
 |---|---|
 | `caretracker_entries` | All logged data — meds, temperature, weight |
+| `caretracker_prefs` | Small app-preference docs (e.g. `settings.missedClearedAt` — when the caregiver last cleared the missed-dose banner) |
 | `fcm_tokens` | Registered device tokens for push notifications |
 | `fcm_tracking` | Tracks last-notified timestamps to prevent duplicate alerts |
 
 ## Service Worker Strategy
 
-- **Cache name:** `caretracker-v19` (bump this to force updates on all devices)
+- **Cache name:** `caretracker-v37` (bump this to force updates on all devices)
 - **Static assets (cache-first):** `./`, `index.html`, `manifest.webmanifest`, icons
 - **Firebase/API calls (network-first):** `firestore.googleapis.com`, `gstatic.com`, `googleapis.com` — falls back to cache if offline
 
@@ -85,6 +86,8 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 
 Protonix, Buspirone, Paroxetine, and Iron are tracked for missed doses. When one of their schedule windows closes with no dose logged, the app shows a red alert banner at the top of Today (covering today's and yesterday's misses, so an overnight miss is still visible the next morning), a red MISSED row in Today's Journal under the matching time category, and red MISSED rows plus a "N MISSED" day summary in History. Each logged dose covers one window: doses in or before a window count for it, and a late dose (after the window closed, before the next opened) still counts for the window it followed — so a MISSED alert only appears when a window truly got no dose that day. As-needed meds (Senokot, Compazine, Tylenol, Zofran, Morphine, Lidocaine, Imodium) are never flagged. Tracking starts July 12, 2026 — no retroactive flags before that date.
 
+**Clear button (v37+):** The banner has a Clear button. Tapping it writes the current time to `caretracker_prefs/settings.missedClearedAt` in Firestore — every miss with a window-start time at or before that moment is hidden from the banner, permanently (synced live across devices, survives reloads/cache clears). Any window that closes *after* the clear timestamp still alerts normally, so a new miss the next day isn't silently suppressed. This does not affect the Today Journal or History tab, which keep showing MISSED rows as a permanent record — only the top banner is dismissible.
+
 ## Chemo Cycle, Menstrual Cycle & In-Patient (v30+)
 
 Set the next chemo date on the Today tab: Dexamethasone appears automatically for its 3-day premed window, Zofran is restricted on chemo days 1–2 (override available), and phased red banners with Zofran-Restricted / Dexamethasone-Due badges run from 2 days before chemo through the day after. The Cycle tab tracks periods (Start/End, day counter, non-dismissible active banner, history). The In-Patient tab tracks hospital stays (Start/End/Undo) — while a stay is open all meds show as Restricted and missed-dose alerts are suppressed. Tylenol and Morphine require a 1–10 pain level before logging.
@@ -109,7 +112,7 @@ If the app shows a blank screen on a device:
 2. Or manually: Chrome DevTools → Application → Service Workers → Unregister, then hard refresh
 3. On mobile: Settings → Site settings → arnjnnngs.github.io → Clear & reset
 
-When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `caretracker-v19`).
+When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `caretracker-v37`).
 
 ## GitHub Secrets Required
 
@@ -121,6 +124,8 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v37 | Jul 19, 2026 | Missed-dose banner gets a persistent **Clear** button. Tapping it writes `caretracker_prefs/settings.missedClearedAt` (a synced Firestore doc, read via `onSnapshot` at startup like everything else) — every existing miss with a window-start time at or before that moment is hidden from the banner. Unlike a plain in-memory dismiss, this survives page reloads and syncs across every device instantly. A new miss occurring after the clear timestamp still alerts normally. Only the Today banner is affected — the Journal and History tabs keep every MISSED row as a permanent record |
+| v34–v36 | Jul 18–19, 2026 | *(documentation gap — these versions shipped without a Version History entry; see CLAUDE.md backlog item to backfill exact contents)*. v36 is confirmed to include the "Available"/"Available now" redundant-text fix, a fix for visible scroll-to-top on the Meds tab switch, and a fix for the Meds page re-render interrupting typing/selecting |
 | v33 | Jul 18, 2026 | Senokot converted to plain as-needed: schedule windows (8 AM & 10 PM) removed, quick-log now offers 1 pill or 2 pills |
 | v32 | Jul 18, 2026 | Fix false MISSED alert when a dose was logged the same day: dose-to-window assignment is now two-pass — in-window/early doses first, then late doses (after a window closed, before the next opened) credit the window they follow. Two logged doses on a two-window day can no longer produce a MISSED row (was: an at/after-window-edge dose like 6:00 PM credited nothing). A genuinely skipped window still alerts. Early tag now only applies to doses logged before the day's first window — after-window doses are late, not Early |
 | v31 | Jul 18, 2026 | Evening push reminders split to match app windows: Protonix nudge stays at 8:00 PM (its window closes 10 PM), Iron/Buspirone/Paroxetine/Compazine reminder moved to 10:00 PM. Quiet hours now start 10:05 PM so the 10 PM send goes through; workflow cron extended (0–4 UTC) so the 10 PM run is covered in winter (CST) too. Resolves the v30 known mismatch. App code unchanged; SW cache bumped per standard workflow |

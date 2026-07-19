@@ -93,6 +93,22 @@ async function addEntryDB(entry) { await addDoc(col, entry); }
 async function removeEntryDB(id) { await deleteDoc(doc(db, COL_NAME, id)); }
 // clearAllDB removed - history must be preserved
 
+// Persisted app preferences (small single doc, synced like everything else via onSnapshot so a
+// "Clear" action survives reloads and syncs across devices — unlike a plain in-memory field).
+const PREFS_DOC = doc(db, 'caretracker_prefs', 'settings');
+function subscribePrefs(callback) {
+  return onSnapshot(PREFS_DOC, (snap) => { callback(snap.exists() ? snap.data() : {}); });
+}
+async function clearMissedDoses() {
+  const ts = state.now;
+  try {
+    await setDoc(PREFS_DOC, { missedClearedAt: ts }, { merge: true });
+    setToast('Missed doses cleared');
+  } catch (e) {
+    setToast('Could not save — check connection and try again');
+  }
+}
+
 // ---------- React via htm + preact-like approach using vanilla ----------
 // Using a minimal reactive approach with vanilla JS for zero build step
 
@@ -222,9 +238,10 @@ const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' 
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, demo: false, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, confirmClearChemo: false };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, demo: false, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, confirmClearChemo: false, missedClearedAt: 0 };
 let toastTimer = null;
 let unsub = null;
+let unsubPrefs = null;
 let pendingEntries = null;
 
 function setState(patch) {
@@ -897,18 +914,24 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // Persistent missed-dose tracking: walk every day since MISSED_TRACK_SINCE so an unresolved
   // miss keeps showing in the banner no matter how many days pass, until an entry actually
   // resolves it (missedDosesFor already treats a late-logged entry as covering its window).
-  const bannerItems = [];
+  // Cleared misses are filtered out via a Firestore-backed timestamp (missedClearedAt) so a
+  // Clear tap survives reloads and syncs across devices, instead of resetting every visit.
+  const bannerItemsAll = [];
   for (let d = dayStart(MISSED_TRACK_SINCE); d <= dayStart(now); d += 86400000) {
     const label = d === dayStart(now) ? 'Today' : (d === dayStart(now) - 86400000 ? 'Yesterday' : new Date(d).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }));
-    missedDosesFor(d, now).forEach(m => bannerItems.push({ ...m, when: label }));
+    missedDosesFor(d, now).forEach(m => bannerItemsAll.push({ ...m, when: label }));
   }
+  const bannerItems = bannerItemsAll.filter(m => m.ts > (state.missedClearedAt || 0));
 
-  // MISSED DOSE ALERT — always on top, cannot be dismissed
+  // MISSED DOSE ALERT — always on top, cannot be dismissed except via Clear
   if (bannerItems.length) {
     parts.push(h('div', { style: { background: 'rgba(192,69,59,0.16)', border: '2px solid #C0453B', borderRadius: '16px', padding: '15px 16px', display: 'flex', gap: '12px', alignItems: 'flex-start', boxShadow: '0 4px 24px rgba(192,69,59,0.25)' } },
       h('span', { style: { flexShrink: '0', width: '28px', height: '28px', borderRadius: '50%', background: '#C0453B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '17px' } }, '!'),
       h('div', { style: { flex: '1' } },
-        h('div', { style: { fontWeight: '800', color: '#C0453B', fontSize: '15.5px', letterSpacing: '0.02em', marginBottom: '4px', textTransform: 'uppercase' } }, 'Missed dose' + (bannerItems.length > 1 ? 's' : '')),
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' } },
+          h('div', { style: { fontWeight: '800', color: '#C0453B', fontSize: '15.5px', letterSpacing: '0.02em', textTransform: 'uppercase' } }, 'Missed dose' + (bannerItems.length > 1 ? 's' : '')),
+          h('button', { onClick: clearMissedDoses, style: { flexShrink: '0', minHeight: '28px', padding: '0 11px', borderRadius: '99px', background: 'rgba(192,69,59,0.14)', border: '1px solid rgba(192,69,59,0.4)', color: '#A13830', fontSize: '11.5px', fontWeight: '800' } }, 'Clear')
+        ),
         h('div', { style: { color: '#A13830', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' } },
           bannerItems.map(m => m.when + ': ' + nameOf(m.medId) + ' — ' + m.windowName + ' window (' + fmtTime(m.ts) + ') closed with no dose logged').join(' · '))
       )
@@ -2052,6 +2075,10 @@ unsub = subscribeEntries((entries) => {
     return;
   }
   setState({ entries, loaded: true });
+});
+
+unsubPrefs = subscribePrefs((prefs) => {
+  setState({ missedClearedAt: prefs.missedClearedAt || 0 });
 });
 
 setInterval(() => {
