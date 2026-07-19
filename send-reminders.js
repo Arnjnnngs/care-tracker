@@ -52,20 +52,32 @@ function centralMidnightTodayMs(now) {
 
 // Mirrors the client's protonixEveningLogTs(d0): finds today's Protonix PM
 // dose (logged at/after noon, i.e. not the 8 AM morning dose) and returns its
-// real timestamp, or null if not logged yet today.
+// real timestamp, or null if not logged yet today (or if the lookup fails,
+// so a Firestore hiccup falls back to the static 10 PM window instead of
+// silently dropping the evening-meds reminder entirely).
+//
+// Filters only on medId ('==') so this relies solely on Cloud Firestore's
+// automatic single-field index - no manual composite index needed. (A
+// compound "medId == && ts >=" query would require one, and this project
+// has none defined, which would throw at query time.) The date-range check
+// runs in JS instead.
 async function protonixEveningLogTs(d0) {
-  const snap = await db.collection('caretracker_entries')
-    .where('medId', '==', 'protonix')
-    .where('ts', '>=', d0)
-    .get();
-  let earliest = null;
-  snap.forEach(doc => {
-    const ts = doc.data().ts;
-    if (ts >= d0 + 12 * 3600000 && ts < d0 + 86400000) {
-      if (earliest === null || ts < earliest) earliest = ts;
-    }
-  });
-  return earliest;
+  try {
+    const snap = await db.collection('caretracker_entries')
+      .where('medId', '==', 'protonix')
+      .get();
+    let earliest = null;
+    snap.forEach(doc => {
+      const ts = doc.data().ts;
+      if (ts >= d0 + 12 * 3600000 && ts < d0 + 86400000) {
+        if (earliest === null || ts < earliest) earliest = ts;
+      }
+    });
+    return earliest;
+  } catch (err) {
+    console.log('protonixEveningLogTs lookup failed, falling back to static window: ' + err.message);
+    return null;
+  }
 }
 
 async function sendReminders() {
