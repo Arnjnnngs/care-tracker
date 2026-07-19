@@ -714,12 +714,12 @@ function appIcon(name, size, style) {
 function navigateTo(view) {
   const next = { view, reportsView: view === 'reports' ? null : state.reportsView, medEditor: view === 'meds' ? state.medEditor : null, confirmDeleteMed: null };
   setState(next);
-  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (error) { window.scrollTo(0, 0); }
+  window.scrollTo(0, 0);
 }
 
 function openReport(report) {
   setState({ view: 'reports', reportsView: report });
-  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (error) { window.scrollTo(0, 0); }
+  window.scrollTo(0, 0);
 }
 
 function renderHeader(now) {
@@ -1213,7 +1213,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       // Meta lines
       h('div', { style: { fontSize: '11px', color: '#584350', display: 'flex', alignItems: 'center', gap: '4px', minWidth: '0', lineHeight: '1.3' } },
         h('span', { style: { flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, lastLabel),
-        h('span', { style: { flexShrink: '0', color: (st.ceilingHit || st.chemoBlock) ? '#A15B56' : locked ? '#96631C' : '#8E3D61', fontWeight: '700', fontSize: '11px', whiteSpace: 'nowrap' } }, nextDoseLabel),
+        locked ? h('span', { style: { flexShrink: '0', color: (st.ceilingHit || st.chemoBlock) ? '#A15B56' : '#96631C', fontWeight: '700', fontSize: '11px', whiteSpace: 'nowrap' } }, nextDoseLabel) : null,
         subStatus ? h('span', { style: { display: 'none', color: '#7D6974' } }, subStatus) : null,
         h('span', { style: { display: 'none', color: '#7D6A74', fontSize: '11.5px' } }, med.note)
       ),
@@ -1394,7 +1394,7 @@ function nextMedicationId(name, existingId) {
 
 function openMedicationEditor(med) {
   setState({ medEditor: { mode: med ? 'edit' : 'add', sourceId: med ? med.id : null, form: medicationFormFrom(med) }, confirmDeleteMed: null });
-  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (error) { window.scrollTo(0, 0); }
+  window.scrollTo(0, 0);
 }
 
 function saveMedicationEditor() {
@@ -2056,7 +2056,9 @@ unsub = subscribeEntries((entries) => {
 
 setInterval(() => {
   state.now = simNow();
-  if (!state.timeModal && !(document.activeElement && document.activeElement.tagName === 'INPUT')) render();
+  const activeTag = document.activeElement && document.activeElement.tagName;
+  const isEditing = activeTag === 'INPUT' || activeTag === 'SELECT' || activeTag === 'TEXTAREA';
+  if (!state.timeModal && !isEditing) render();
   checkNotifications();
 }, 1000);
 render();
