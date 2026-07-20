@@ -3,7 +3,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** July 19, 2026
-> **Current version:** v37
+> **Current version:** v38
 
 ---
 
@@ -91,7 +91,7 @@ The main data collection. Each document is a single logged event.
 Small collection of app-preference documents — not dose history, just UI/session state that needs to persist and sync live.
 
 **Known document:** `settings`
-- `missedClearedAt` — timestamp (ms). Any missed-dose window with a start time at or before this value is hidden from the Today banner. Written via `setDoc(..., {merge:true})` when the caregiver taps **Clear** on the missed-dose banner; read via a live `onSnapshot` listener at app startup so it's already applied before first paint and stays in sync across devices without a refresh.
+- `missedClearedAt` — timestamp (ms). Any missed-dose window with a start time at or before this value is hidden from the Today banner. Written via `addDoc(prefsCol, {...})` when the caregiver taps **Clear** on the missed-dose banner; read via a live `onSnapshot` listener at app startup so it's already applied before first paint and stays in sync across devices without a refresh.
 
 ### `fcm_tokens`
 Stores device push notification tokens.
@@ -135,7 +135,7 @@ Prevents duplicate notifications.
 ## 7. Service Worker Architecture
 
 ### sw.js (App Service Worker)
-**Cache name:** `caretracker-v37` — **bump this string when deploying changes** to force all devices to get the new version.
+**Cache name:** `caretracker-v38` — **bump this string when deploying changes** to force all devices to get the new version.
 
 **Cached shell files:** `'./'`, `'index.html'`, `'manifest.webmanifest'`, `'icon-192.png'`, `'icon-512.png'`
 
@@ -229,7 +229,8 @@ If a device shows a blank screen or stale content:
 
 | Version | Date | Commit | Changes |
 |---|---|---|---|
-| v37 | Jul 19, 2026 | 247f22e | Missed-dose banner gets a persistent **Clear** button. New `caretracker_prefs/settings` doc (field `missedClearedAt`) written via `setDoc(...,{merge:true})` on tap, read via a live `onSnapshot` listener set up alongside `subscribeEntries()` at startup. Banner filtering changed from a single `bannerItems` list to `bannerItemsAll` (unchanged `missedDosesFor()` walk) filtered down to `bannerItems = bannerItemsAll.filter(m => m.ts > (state.missedClearedAt || 0))`. Unlike an in-memory-only dismiss, this persists across reloads and syncs across every device instantly (verified with a mocked-Firestore harness simulating a full app reload with a fresh `state` object). A window that closes after the clear timestamp still alerts normally. Journal and History tabs are unaffected — they keep every MISSED row permanently; only the Today banner is dismissible |
+| v38 | Jul 19, 2026 | — | Fix Clear button: use `addDoc` (append) instead of `setDoc` (edit) to comply with append-only Firebase rules. Rename "Night" to "Evening" in missed-dose banner window labels. Bump SW cache. |
+| v37 | Jul 19, 2026 | 247f22e | Missed-dose banner gets a persistent **Clear** button. New `caretracker_prefs` collection (field `missedClearedAt`) written via `setDoc` (fixed to `addDoc` in v38) on tap, read via a live `onSnapshot` listener set up alongside `subscribeEntries()` at startup. Banner filtering changed from a single `bannerItems` list to `bannerItemsAll` (unchanged `missedDosesFor()` walk) filtered down to `bannerItems = bannerItemsAll.filter(m => m.ts > (state.missedClearedAt || 0))`. Unlike an in-memory-only dismiss, this persists across reloads and syncs across every device instantly (verified with a mocked-Firestore harness simulating a full app reload with a fresh `state` object). A window that closes after the clear timestamp still alerts normally. Journal and History tabs are unaffected — they keep every MISSED row permanently; only the Today banner is dismissible |
 | — | Jul 19, 2026 | 56becfc | `send-reminders.js`: `protonixEveningLogTs()`'s Firestore query dropped the compound `.where('medId','==','protonix').where('ts','>=',d0)` (which needs a manual composite index — none was configured, so it would throw) for a single-field `.where('medId','==','protonix')` query with the `d0` date-range check done client-side in JS afterward. Also wrapped the whole lookup in try/catch so a Firestore error falls back to the static 10 PM window and logs the failure, instead of throwing and silently killing the evening-meds reminder for the day |
 | v36 | Jul 19, 2026 | c1bbc74 | Fixed redundant "Available"/"Available now" text: the next-dose meta line on a Quick Log card (`nextDoseLabel`) is now only rendered while the med is actually `locked`, matching the green "Available" badge already shown when it isn't. Replaced `window.scrollTo({top:0,behavior:'smooth'})` with a plain instant `window.scrollTo(0,0)` in `navigateTo()`, `openReport()`, and `openMedicationEditor()` — the smooth-scroll animation was visibly janky, especially on lower-end mobile devices. The 1-second `setInterval` render-pause guard (`isEditing`) previously checked only `document.activeElement.tagName === 'INPUT'`; extended to `INPUT`, `SELECT`, and `TEXTAREA` so choosing a dropdown option or typing a note in the medication editor's textarea can no longer get wiped mid-interaction by the periodic re-render tick |
 | — | Jul 19, 2026 | 38059ef | `send-reminders.js`: added `centralMidnightTodayMs()` and `protonixEveningLogTs()` so the evening-meds (Iron/Buspirone/Paroxetine) push reminder mirrors the client's dynamic Protonix+2h window instead of a fixed 9:55–10:05 PM slot — it now fires ~2 hours after Protonix's actual logged evening dose that day (found via a live Firestore lookup), falling back to the static 10 PM window if Protonix hasn't been logged yet. Client-side equivalent (`eveningWindowsFor()`) had already shipped to testing; this is the server-side cron catching up to match |
