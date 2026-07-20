@@ -399,6 +399,24 @@ function status(med) {
   }
   const es = entriesFor(med.id).slice().sort((a, b) => a.ts - b.ts);
   if (med.type === 'gap') {
+    // Morphine half-dose window: track cumulative mg in trailing 4h window
+    if (med.id === 'morphine' && med.gapH > 0) {
+      const gapMs = med.gapH * 3600000;
+      const last = es[es.length - 1];
+      if (!last) return { locked: false, morphineWindow: { remaining: 15, taken: 0, lastTs: null } };
+      const windowStart = now - gapMs;
+      if (last.ts <= windowStart) {
+        return { locked: false, morphineWindow: { remaining: 15, taken: 0, lastTs: last.ts, expired: true } };
+      }
+      const recentDoses = es.filter(e => e.ts > windowStart);
+      const takenMg = recentDoses.reduce((sum, e) => sum + (e.mg || 0), 0);
+      const remaining = Math.max(0, 15 - takenMg);
+      const availableAt = last.ts + gapMs;
+      if (takenMg >= 15) {
+        return { locked: true, availableAt, morphineWindow: { remaining: 0, taken: takenMg, lastTs: last.ts } };
+      }
+      return { locked: false, availableAt, morphineWindow: { remaining, taken: takenMg, lastTs: last.ts } };
+    }
     // Check daily ceiling first (Tylenol mg or Imodium pills)
     if (med.ceiling) {
       const dc = dailyCeiling(med);
@@ -1179,6 +1197,10 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     } else {
       nextDoseLabel = 'Available now';
     }
+    // Morphine half-dose window override
+    if (st.morphineWindow && st.morphineWindow.taken > 0 && st.morphineWindow.remaining > 0 && !locked) {
+      nextDoseLabel = st.morphineWindow.remaining + ' mg remaining';
+    }
     // Sub-status
     let subStatus = '';
     const dc = med.ceiling ? dailyCeiling(med) : null;
@@ -1196,16 +1218,22 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       return amt > 0 && amt > (dc.max - dc.used);
     };
     const blockedBtn = (d) => h('button', { onClick: () => setToast('Exceeds today’s ' + dc.label + ' limit — ' + (med.ceilingUnit ? (dc.max - dc.used) + ' ' + dc.unit : (dc.max - dc.used).toLocaleString() + ' mg') + ' left'), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 12px', borderRadius: '999px', background: 'rgba(255,255,255,0.35)', border: '1px dashed rgba(138,100,121,0.35)', color: '#765B69', fontSize: '12px', fontWeight: '600', cursor: 'not-allowed' } }, (d.single ? ('Log ' + med.name) : d.label) + ' · over limit');
+    // Morphine half-dose: block buttons that would exceed remaining mg in 4h window
+    const morphineDoseExceeds = (d) => {
+      if (!st.morphineWindow || st.morphineWindow.remaining >= 15) return false;
+      return (d.mg || 0) > st.morphineWindow.remaining;
+    };
+    const morphineBlockedBtn = (d) => h('button', { onClick: () => setToast('Exceeds ' + st.morphineWindow.remaining + ' mg remaining in 4h window'), style: { flex: '0 0 auto', minWidth: '0', minHeight: '34px', padding: '0 14px', borderRadius: '10px', fontSize: '13px', fontWeight: '700', background: 'rgba(125,105,116,0.12)', color: '#A09098', cursor: 'not-allowed' } }, d.label);
 
     // Buttons
     let buttonArea;
     if (!locked) {
       buttonArea = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 13px', borderRadius: '999px', background: '#AA5375', color: '#fff', fontSize: '12.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, d.single ? ('Log ' + med.name) : d.label))
+        ...doseList.map(d => morphineDoseExceeds(d) ? morphineBlockedBtn(d) : doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 13px', borderRadius: '999px', background: '#AA5375', color: '#fff', fontSize: '12.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, d.single ? ('Log ' + med.name) : d.label))
       );
     } else if (!isOverriding) {
       buttonArea = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => setState({ override: { medId: med.id } }), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 13px', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '999px', background: 'rgba(255,255,255,0.42)', color: '#624A59', fontSize: '12.5px', fontWeight: '600' } }, d.single ? ('Log ' + med.name) : d.label))
+        ...doseList.map(d => morphineDoseExceeds(d) ? morphineBlockedBtn(d) : doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => setState({ override: { medId: med.id } }), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 13px', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '999px', background: 'rgba(255,255,255,0.42)', color: '#624A59', fontSize: '12.5px', fontWeight: '600' } }, d.single ? ('Log ' + med.name) : d.label))
       );
     } else {
       buttonArea = h('div', { style: { background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.25)', borderRadius: '13px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '7px' } },
@@ -1214,7 +1242,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           st.ceilingHit ? ('Daily ' + (dc ? dc.label : CONFIG.ceilingMg.toLocaleString() + ' mg') + ' ceiling reached. Log more anyway?') : st.chemoBlock ? 'Care team said no Zofran on chemo days. Log it anyway?' : ('Closed — opens in ' + countdownLabel + '. Log it early anyway?')
         ),
         h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-          ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d, { force: true }), style: { flex: '0 0 auto', minWidth: '0', minHeight: '34px', padding: '0 13px', borderRadius: '999px', background: '#C0453B', color: '#fff', fontSize: '12.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(120,40,34,0.4)' } }, d.single ? 'Override — log now' : ('Log ' + d.label + ' now'))),
+          ...doseList.map(d => morphineDoseExceeds(d) ? morphineBlockedBtn(d) : doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d, { force: true }), style: { flex: '0 0 auto', minWidth: '0', minHeight: '34px', padding: '0 13px', borderRadius: '999px', background: '#C0453B', color: '#fff', fontSize: '12.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(120,40,34,0.4)' } }, d.single ? 'Override — log now' : ('Log ' + d.label + ' now'))),
           h('button', { onClick: () => setState({ override: null }), style: { flexShrink: '0', minHeight: '34px', padding: '0 12px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '999px', background: 'rgba(255,255,255,0.5)', color: '#A15B56', fontSize: '12.5px', fontWeight: '600' } }, 'Cancel')
         )
       );
@@ -1232,6 +1260,10 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
             h('div', { className: 'mono', innerHTML: lockSVG + ' ' + (st.ceilingHit ? 'Limit' : 'Restricted'), style: { display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(192,69,59,0.15)', color: '#A15B56', border: '1px solid rgba(192,69,59,0.25)', borderRadius: '99px', padding: '4px 8px', fontSize: '11.5px', fontWeight: '600', flexShrink: '0', whiteSpace: 'nowrap' } }) :
             h('div', { className: 'mono', innerHTML: clockSVG + ' Waiting', style: { display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(199,120,0,0.15)', color: '#8C5900', border: '1px solid rgba(199,120,0,0.32)', borderRadius: '99px', padding: '4px 8px', fontSize: '11.5px', fontWeight: '700', flexShrink: '0', whiteSpace: 'nowrap' } })
           ) :
+          (st.morphineWindow && st.morphineWindow.taken > 0 && st.morphineWindow.remaining > 0) ?
+          h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(255,152,0,0.14)', color: '#8C5900', border: '1px solid rgba(255,152,0,0.32)', borderRadius: '99px', padding: '4px 8px', fontSize: '11.5px', fontWeight: '700', flexShrink: '0', whiteSpace: 'nowrap' } },
+            st.morphineWindow.remaining + ' mg left'
+          ) :
           h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(15,157,87,0.14)', color: '#0C7F57', border: '1px solid rgba(15,157,87,0.32)', borderRadius: '99px', padding: '4px 8px', fontSize: '11.5px', fontWeight: '700', flexShrink: '0', whiteSpace: 'nowrap' } },
             h('span', { style: { flexShrink: '0', width: '13px', height: '13px', borderRadius: '50%', background: '#0F9D6B', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '9px', lineHeight: '1' } }, '\u2713'),
             'Available'
@@ -1241,6 +1273,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       h('div', { style: { fontSize: '11px', color: '#584350', display: 'flex', alignItems: 'center', gap: '4px', minWidth: '0', lineHeight: '1.3' } },
         h('span', { style: { flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, lastLabel),
         locked ? h('span', { style: { flexShrink: '0', color: (st.ceilingHit || st.chemoBlock) ? '#A15B56' : '#96631C', fontWeight: '700', fontSize: '11px', whiteSpace: 'nowrap' } }, nextDoseLabel) : null,
+        (!locked && st.morphineWindow && st.morphineWindow.taken > 0 && st.morphineWindow.remaining > 0) ? h('span', { style: { flexShrink: '0', color: '#8C5900', fontWeight: '700', fontSize: '11px', whiteSpace: 'nowrap' } }, st.morphineWindow.taken + ' / 15 mg taken') : null,
         subStatus ? h('span', { style: { display: 'none', color: '#7D6974' } }, subStatus) : null,
         h('span', { style: { display: 'none', color: '#7D6A74', fontSize: '11.5px' } }, med.note)
       ),
