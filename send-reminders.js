@@ -83,7 +83,7 @@ async function protonixEveningLogTs(d0) {
 // Mirrors the client's protonixMorningLogTs(d0): finds today's Protonix AM
 // dose (logged before noon) and returns its earliest real timestamp, or null
 // if not logged yet today (or if the lookup fails, falling back to the
-// static 8:25-8:35 AM window instead of silently dropping the reminder).
+// static 10 AM window instead of silently dropping the reminder).
 async function protonixMorningLogTs(d0) {
   try {
     const snap = await db.collection('caretracker_entries')
@@ -114,24 +114,28 @@ async function sendReminders() {
     console.log('Quiet hours, skipping all.');
     return;
   }
-  // 8:30 AM Protonix + default-window Buspirone/Paroxetine (fire between 8:25-8:35 AM).
-  // Buspirone/Paroxetine now open in Protonix's own Morning window (8 AM-noon) by default
-  // (moved off the old 10 PM evening slot), so this single reminder covers all three unless
-  // Protonix's actual morning dose shifts their window later (handled by the dynamic check below).
-  if (hour === 8 && minute >= 25 && minute <= 35) {
-    await sendToAll('Morning Meds Due', 'Protonix, Buspirone, Paroxetine - time for morning doses', 'morning-meds');
+  // 8:00 AM Protonix (fire between 7:55-8:05 AM) - fixed, independent of Buspirone/Paroxetine.
+  if ((hour === 7 && minute >= 55) || (hour === 8 && minute <= 5)) {
+    await sendToAll('Morning Meds Due', 'Protonix - time for morning doses', 'morning-meds');
   }
   const d0 = centralMidnightTodayMs(now);
-  // If Protonix's actual morning dose was logged, Buspirone/Paroxetine may open later than the
-  // 8:25-8:35 AM default (2h after the actual log time) - send a follow-up once that later window
-  // opens, mirroring the client's dynamic morningWindowsFor() logic. Skipped when the shift would
-  // land at/before 8:45 AM, since the fixed reminder above already covers that case.
+  // Buspirone/Paroxetine open 2h after Protonix's actual logged morning dose, per the app's
+  // dynamic-window logic - default to the static 10 AM window if Protonix hasn't been logged yet
+  // today. Exactly mirrors the evening Iron/Compazine reminder below (Protonix fixed reminder +
+  // separate dynamic-or-static reminder for the linked med).
   const morningProtonixTs = await protonixMorningLogTs(d0);
   if (morningProtonixTs) {
     const morningTargetTs = morningProtonixTs + 2 * 3600000;
     const nowTsM = now.getTime();
-    if (morningTargetTs > d0 + 8.75 * 3600000 && morningTargetTs < d0 + 86400000 && Math.abs(nowTsM - morningTargetTs) <= 12 * 60000) {
-      await sendToAll('Morning Meds Due', 'Buspirone, Paroxetine - time for morning doses', 'morning-meds-shift');
+    if (Math.abs(nowTsM - morningTargetTs) <= 12 * 60000 && morningTargetTs < d0 + 86400000) {
+      const targetCentral = new Date(morningTargetTs).toLocaleString('en-US', { timeZone: 'America/Chicago' });
+      console.log('Protonix logged morning dose - dynamic morning-meds window target: ' + targetCentral);
+      await sendToAll('Morning Meds Due', 'Buspirone, Paroxetine - time for morning doses', 'morning-meds-buspar');
+    }
+  } else {
+    // Protonix not logged yet today - fall back to the static 10 AM window (9:55-10:05 AM)
+    if ((hour === 9 && minute >= 55) || (hour === 10 && minute <= 5)) {
+      await sendToAll('Morning Meds Due', 'Buspirone, Paroxetine - time for morning doses', 'morning-meds-buspar');
     }
   }
   // 8:00 PM Protonix (its evening window in the app is 8-10 PM; fire between 7:55-8:05 PM)

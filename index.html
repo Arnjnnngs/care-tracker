@@ -131,9 +131,9 @@ const DEFAULT_MEDS = [
   { id:'protonix', name:'Protonix', sub:'Pantoprazole', type:'win', alerts:true, note:'Twice daily · 8 AM & 8 PM',
     windows:[{start:8,end:12,name:'Morning'},{start:20,end:22,name:'Evening'}] },
   { id:'buspirone', name:'Buspirone', sub:'BuSpar', type:'win', alerts:true, morningLinkedToProtonix:true, note:'Once daily · with Protonix',
-    windows:[{start:8,end:12,name:'Morning'}] },
+    windows:[{start:10,end:24,name:'Morning'}] },
   { id:'paroxetine', name:'Paroxetine', sub:'Paxil', type:'win', alerts:true, morningLinkedToProtonix:true, note:'Once daily · with Protonix',
-    windows:[{start:8,end:12,name:'Morning'}] },
+    windows:[{start:10,end:24,name:'Morning'}] },
   { id:'iron', name:'Iron', sub:'Ferrous sulfate', type:'win', alerts:true, eveningLinkedToProtonix:true, note:'Once daily · with Protonix',
     windows:[{start:22,end:24,name:'Evening'}] },
   { id:'senokot', name:'Senokot', sub:'Senna', type:'gap', gapH:0, note:'As needed · 1–2 pills',
@@ -402,16 +402,17 @@ function protonixMorningLogTs(d0) {
   return entry ? entry.ts : null;
 }
 
-// Buspirone/Paroxetine open in Protonix's own Morning window (8 AM–noon) by default, but if
-// Protonix's morning dose was logged, they instead open 2 hours after that actual log time and
-// stay open through end of day (mirrors eveningWindowsFor's pattern for the evening-linked meds).
+// Buspirone/Paroxetine open at 10 AM by default (2h after Protonix's own default 8 AM dose time),
+// but if Protonix's actual morning dose was logged, they instead open 2 hours after that real log
+// time and stay open through end of day (mirrors eveningWindowsFor's pattern for Iron exactly:
+// Iron defaults to 10 PM, 2h after Protonix's default 8 PM evening time, then shifts the same way).
 function morningWindowsFor(med, d0) {
   const pTs = protonixMorningLogTs(d0);
   if (pTs) {
     const startH = (pTs + 2 * 3600000 - d0) / 3600000;
     if (startH < 24) return [{ start: Math.max(0, startH), end: 24, name: 'Morning' }];
   }
-  return med.windows; // default: 8 AM–noon (matches Protonix's own Morning window)
+  return med.windows; // default: 10 AM–midnight
 }
 
 function status(med) {
@@ -2098,16 +2099,30 @@ function checkNotifications() {
         if (!taken) morningMeds.push('Protonix');
       }
     }
-    ['buspirone', 'paroxetine'].forEach(medId => {
-      const med = state.meds.find(x => x.id === medId);
-      if (!med) return;
-      const st = status(med);
-      if (!st.locked) morningMeds.push(med.name);
-    });
     if (morningMeds.length > 0) {
       sendNotif('Morning Meds Due', morningMeds.join(', ') + ' — time for morning doses', 'morning-830am');
     }
     notifSentToday['sched-830am'] = true;
+  }
+
+  // 10:00 AM reminder (9:55-10:05) - Buspirone/Paroxetine (default window; if Protonix's actual
+  // morning dose logs later, morningWindowsFor() shifts these to 2h after that instead, and
+  // status().locked reflects that shift automatically — no separate dynamic check needed here
+  // since this fixed slot already lines up with the 10 AM default).
+  if ((h === 9 && m >= 55) || (h === 10 && m <= 5)) {
+    if (!notifSentToday['sched-10am']) {
+      const due = [];
+      ['buspirone', 'paroxetine'].forEach(medId => {
+        const med = state.meds.find(x => x.id === medId);
+        if (!med) return;
+        const st = status(med);
+        if (!st.locked) due.push(med.name);
+      });
+      if (due.length > 0) {
+        sendNotif('Morning Meds Due', due.join(', ') + ' — time for morning doses', 'morning-10am');
+      }
+      notifSentToday['sched-10am'] = true;
+    }
   }
 
   // --- GAP-BASED REMINDERS (fire when med becomes available) ---

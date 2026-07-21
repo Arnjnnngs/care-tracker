@@ -47,7 +47,7 @@ care-tracker/
 
 ## Service Worker Strategy
 
-- **Cache name:** `caretracker-v40` (bump this to force updates on all devices)
+- **Cache name:** `caretracker-v41` (bump this to force updates on all devices)
 - **Static assets (cache-first):** `./`, `index.html`, `manifest.webmanifest`, icons
 - **Firebase/API calls (network-first):** `firestore.googleapis.com`, `gstatic.com`, `googleapis.com` — falls back to cache if offline
 
@@ -56,7 +56,8 @@ care-tracker/
 The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 minutes from 8 AM–10 PM CDT. It sends two types of reminders:
 
 **Scheduled (time-based):**
-- **8:30 AM** — Morning Meds: Protonix, Buspirone, Paroxetine (default 8 AM–noon window; if Protonix's actual morning dose logs later, a follow-up fires 2h after that instead)
+- **8:00 AM** — Protonix morning dose, fixed, independent of Buspirone/Paroxetine
+- **Dynamic, or 10:00 AM fallback** — Buspirone, Paroxetine (fires 2h after Protonix's actual logged morning dose — e.g. logged 8:43 AM → fires 10:43 AM — else the static 10 AM window if Protonix hasn't been logged yet)
 - **8:00 PM** — Protonix evening dose (window closes 10 PM)
 - **10:00 PM** — Evening Meds: Iron, Compazine (dynamic — fires 2h after Protonix's actual evening dose if logged, else the static 10 PM window)
 
@@ -76,7 +77,7 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 | Lidocaine | Topical cream | 4h min gap, max 4 applications per day |
 | Imodium | Loperamide | Daily pill count limit (4 pills) |
 | Protonix | Pantoprazole | Twice daily windows (8 AM–noon, 8–10 PM) + reminders |
-| Buspirone | BuSpar | Once daily, with Protonix in the morning (8 AM–noon default; shifts to 2h after Protonix's actual morning log if later, open through end of day) |
+| Buspirone | BuSpar | Once daily, with Protonix in the morning (10 AM default — Protonix's typical 8 AM dose time + 2h; shifts to 2h after Protonix's actual morning log if later, open through end of day) |
 | Paroxetine | Paxil | Once daily, with Protonix in the morning (same dynamic window as Buspirone) |
 | Iron | Ferrous sulfate | Once daily, 10 PM (shifts to 2h after Protonix's actual evening log if later) |
 | Senokot | Senna | As needed — 1 or 2 pills, no schedule |
@@ -124,6 +125,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v41 | Jul 20, 2026 | **Correction to v40's Buspirone/Paroxetine default window**, per Aaron's direct feedback: the "no Protonix log yet" default is now a fixed 10 AM (Protonix's typical 8 AM dose time + 2h, mirroring Iron's 10 PM default exactly) instead of the 8 AM–noon range v40 used. `send-reminders.js` also fully decoupled — Protonix's own fixed 8 AM push (tag `morning-meds`) is now independent of Buspirone/Paroxetine's push (tag `morning-meds-buspar`, dynamic-or-10am-fallback), matching Aaron's exact example (Protonix logged 8:43 AM → Buspirone/Paroxetine available 10:43 AM). Cache bumped to `caretracker-v41` |
 | v40 | Jul 20, 2026 | **Buspirone/Paroxetine moved from the 10 PM evening window to a new Morning window with Protonix** (default 8 AM–noon, matching Protonix's own morning window; shifts to 2h after Protonix's actual logged morning dose if that's later, staying open through end of day — mirrors the existing evening dynamic-window pattern). New "Morning meds" grouped Home card (Buspirone, Paroxetine) alongside the existing "Evening meds" card, now just Iron/Compazine. Medication editor gets a "Group with morning meds" toggle. `send-reminders.js` updated to match: the 8:30 AM push now covers Protonix + Buspirone + Paroxetine (with a dynamic follow-up if Protonix's actual log shifts the window later), and the evening push text dropped Buspirone/Paroxetine (now just "Iron, Compazine"). Also restores `sw.js` and `CARETRACKER_HANDOFF.md`, both of which were accidentally overwritten to the literal text "undefined" in v39 — see CARETRACKER_HANDOFF.md Known Issues section |
 | v39 | Jul 20, 2026 | ~~Intended: SW cache bump + handoff doc update.~~ **This commit corrupted `sw.js` and `CARETRACKER_HANDOFF.md` to the literal 9-byte string "undefined"** — a paste-gone-wrong via GitHub's inline web editor (the same failure mode previously seen once in care-tracker-testing). `index.html` was unaffected. Fixed in v40 by restoring both files from the last-known-good commit (v38) and re-adding the content that v39 intended to add. See CARETRACKER_HANDOFF.md Known Issues section for the full incident and the standing rule this reinforces (never edit `index.html`/`sw.js` via GitHub's web editor — always push a real file diff) |
 | v38 | Jul 19, 2026 | SW cache bump only (`caretracker-v37` → `caretracker-v38`), no functional change |
