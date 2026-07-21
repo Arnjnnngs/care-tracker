@@ -47,7 +47,7 @@ care-tracker/
 
 ## Service Worker Strategy
 
-- **Cache name:** `caretracker-v37` (bump this to force updates on all devices)
+- **Cache name:** `caretracker-v40` (bump this to force updates on all devices)
 - **Static assets (cache-first):** `./`, `index.html`, `manifest.webmanifest`, icons
 - **Firebase/API calls (network-first):** `firestore.googleapis.com`, `gstatic.com`, `googleapis.com` — falls back to cache if offline
 
@@ -56,9 +56,9 @@ care-tracker/
 The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 minutes from 8 AM–10 PM CDT. It sends two types of reminders:
 
 **Scheduled (time-based):**
-- **8:30 AM** — Morning Meds: Protonix (morning) & Zofran
+- **8:30 AM** — Morning Meds: Protonix, Buspirone, Paroxetine (default 8 AM–noon window; if Protonix's actual morning dose logs later, a follow-up fires 2h after that instead)
 - **8:00 PM** — Protonix evening dose (window closes 10 PM)
-- **10:00 PM** — Evening Meds: Iron, Buspirone, Paroxetine, Compazine
+- **10:00 PM** — Evening Meds: Iron, Compazine (dynamic — fires 2h after Protonix's actual evening dose if logged, else the static 10 PM window)
 
 **Gap-based:**
 - **Zofran** — checks if 8-hour gap since last dose has elapsed; sends "Zofran Available" notification. Uses `fcm_tracking/zofran_gap` doc to avoid duplicate alerts.
@@ -76,9 +76,9 @@ The GitHub Actions workflow (`reminders.yml`) runs `send-reminders.js` every 30 
 | Lidocaine | Topical cream | 4h min gap, max 4 applications per day |
 | Imodium | Loperamide | Daily pill count limit (4 pills) |
 | Protonix | Pantoprazole | Twice daily windows (8 AM–noon, 8–10 PM) + reminders |
-| Buspirone | BuSpar | Once daily, 10 PM |
-| Paroxetine | Paxil | Once daily, 10 PM |
-| Iron | Ferrous sulfate | Once daily, 10 PM |
+| Buspirone | BuSpar | Once daily, with Protonix in the morning (8 AM–noon default; shifts to 2h after Protonix's actual morning log if later, open through end of day) |
+| Paroxetine | Paxil | Once daily, with Protonix in the morning (same dynamic window as Buspirone) |
+| Iron | Ferrous sulfate | Once daily, 10 PM (shifts to 2h after Protonix's actual evening log if later) |
 | Senokot | Senna | As needed — 1 or 2 pills, no schedule |
 | Dexamethasone | Steroid (chemo premed) | 2 tablets, 8 AM & 2 PM — auto-appears day before chemo through day after only |
 
@@ -100,7 +100,7 @@ Set the next chemo date on the Today tab: Dexamethasone appears automatically fo
 
 ## App Views
 
-- **Today** — dose counters (shown only for meds used in the last 7 days), vitals inputs, individual quick-log cards (incl. Protonix and Senokot), and a grouped "Evening meds" card for Buspirone/Paroxetine/Iron/Compazine with a one-tap "Take all" button
+- **Today** — dose counters (shown only for meds used in the last 7 days), vitals inputs, individual quick-log cards (incl. Protonix and Senokot), a grouped "Morning meds" card for Buspirone/Paroxetine, and a grouped "Evening meds" card for Iron/Compazine — both with a one-tap "Take all" button
 - **History** — historical view of logged entries, grouped per day into Overnight (12–6 AM), Morning (6–noon), Afternoon (noon–5 PM), Evening (5 PM–midnight)
 - **Weight** — weight tracking over time
 
@@ -112,7 +112,7 @@ If the app shows a blank screen on a device:
 2. Or manually: Chrome DevTools → Application → Service Workers → Unregister, then hard refresh
 3. On mobile: Settings → Site settings → arnjnnngs.github.io → Clear & reset
 
-When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `caretracker-v37`).
+When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `caretracker-v40`).
 
 ## GitHub Secrets Required
 
@@ -124,6 +124,9 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 | Version | Date | Changes |
 |---|---|---|
+| v40 | Jul 20, 2026 | **Buspirone/Paroxetine moved from the 10 PM evening window to a new Morning window with Protonix** (default 8 AM–noon, matching Protonix's own morning window; shifts to 2h after Protonix's actual logged morning dose if that's later, staying open through end of day — mirrors the existing evening dynamic-window pattern). New "Morning meds" grouped Home card (Buspirone, Paroxetine) alongside the existing "Evening meds" card, now just Iron/Compazine. Medication editor gets a "Group with morning meds" toggle. `send-reminders.js` updated to match: the 8:30 AM push now covers Protonix + Buspirone + Paroxetine (with a dynamic follow-up if Protonix's actual log shifts the window later), and the evening push text dropped Buspirone/Paroxetine (now just "Iron, Compazine"). Also restores `sw.js` and `CARETRACKER_HANDOFF.md`, both of which were accidentally overwritten to the literal text "undefined" in v39 — see CARETRACKER_HANDOFF.md Known Issues section |
+| v39 | Jul 20, 2026 | ~~Intended: SW cache bump + handoff doc update.~~ **This commit corrupted `sw.js` and `CARETRACKER_HANDOFF.md` to the literal 9-byte string "undefined"** — a paste-gone-wrong via GitHub's inline web editor (the same failure mode previously seen once in care-tracker-testing). `index.html` was unaffected. Fixed in v40 by restoring both files from the last-known-good commit (v38) and re-adding the content that v39 intended to add. See CARETRACKER_HANDOFF.md Known Issues section for the full incident and the standing rule this reinforces (never edit `index.html`/`sw.js` via GitHub's web editor — always push a real file diff) |
+| v38 | Jul 19, 2026 | SW cache bump only (`caretracker-v37` → `caretracker-v38`), no functional change |
 | v37 | Jul 19, 2026 | Missed-dose banner gets a persistent **Clear** button. Tapping it writes `caretracker_prefs/settings.missedClearedAt` (a synced Firestore doc, read via `onSnapshot` at startup like everything else) — every existing miss with a window-start time at or before that moment is hidden from the banner. Unlike a plain in-memory dismiss, this survives page reloads and syncs across every device instantly. A new miss occurring after the clear timestamp still alerts normally. Only the Today banner is affected — the Journal and History tabs keep every MISSED row as a permanent record |
 | — | Jul 19, 2026 | `send-reminders.js`: dropped the compound `medId + ts` Firestore query in the Protonix evening-dose lookup (no composite index was configured for it, which would throw) in favor of a single-field `medId` query with the date-range check done in JS; wrapped in try/catch so a Firestore hiccup falls back to the static 10 PM reminder window instead of silently dropping the evening-meds notification |
 | v36 | Jul 19, 2026 | Fixed the redundant "Available"/"Available now" text on Quick Log cards (the next-dose line is now only shown while a med is locked). Replaced `window.scrollTo({behavior:'smooth'})` with an instant scroll on tab/editor navigation — the smooth-scroll animation was visibly janky on some devices. Extended the 1-second re-render pause guard from just `INPUT` to also cover `SELECT` and `TEXTAREA` elements, so picking a dropdown option or typing in a textarea (e.g. the medication editor's note field) can no longer get wiped mid-interaction by the periodic tick |
