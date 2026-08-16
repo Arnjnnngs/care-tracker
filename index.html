@@ -18,6 +18,12 @@ html,body{height:100%;}
 body{-webkit-font-smoothing:antialiased;background:#FFF0F3;font-family:'Hanken Grotesk',system-ui,sans-serif;color:#342530;}
 button{-webkit-tap-highlight-color:transparent;font-family:inherit;cursor:pointer;border:none;background:none;}
 button:active{transform:translateY(1px);}
+button:disabled{cursor:default;}
+button:disabled:active{transform:none;}
+button:focus-visible{outline:2px solid #AA5375;outline-offset:2px;}
+@keyframes cw-spin{to{transform:rotate(360deg);}}
+.spin{animation:cw-spin 0.7s linear infinite;}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s;}}
 input{-webkit-tap-highlight-color:transparent;font-family:inherit;}
 input:focus{outline:2px solid #AA5375;outline-offset:0;border-color:#AA5375;}
 ::placeholder{color:#7D6974 !important;opacity:1;}
@@ -255,10 +261,13 @@ function persistMedicationConfig(meds, archivedMeds) {
 }
 
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
+// v43: index.html carried no version constant. The printable record states which build
+// produced it, and a release check needs one place to compare against sw.js's cache key.
+const APP_VERSION = 'v43.1';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, demo: false, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, confirmClearChemo: false };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, demo: false, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, confirmClearChemo: false, exporting: false };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -418,7 +427,7 @@ function fmtCountdown(ms) {
   if (m >= 1) { if (m < 5) { const s = Math.floor((ms % 60000) / 1000); return m + 'm ' + s + 's'; } return m + 'm'; }
   return Math.max(1, Math.floor(ms / 1000)) + 's';
 }
-function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); const archived = state.archivedMeds && state.archivedMeds[id]; return m ? m.name : (archived ? archived.name : id); }
+function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'chemo_date') return 'Chemo treatment'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); const archived = state.archivedMeds && state.archivedMeds[id]; return m ? m.name : (archived ? archived.name : id); }
 function nowLocalISO() { return toLocalISO(simNow()); }
 function toLocalISO(ts) {
   const d = new Date(ts);
@@ -1057,7 +1066,10 @@ function svgIcon(name, size) {
     chevron: '<path d="m9 18 6-6-6-6"/>',
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
-    notes: '<path d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M14 4v3h4"/><path d="M8 12h8"/><path d="M8 16h5"/>'
+    notes: '<path d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M14 4v3h4"/><path d="M8 12h8"/><path d="M8 16h5"/>',
+    // v43.1: the save-a-copy card used `notes`, which is the same glyph as the Appetite report card
+    // directly above it and the Symptoms nav tab below it. A tray-with-down-arrow is unique here.
+    download: '<path d="M12 3v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M4 16v3.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V16"/>'
   };
   return '<svg ' + common + '>' + (paths[name] || paths.home) + '</svg>';
 }
@@ -1198,7 +1210,7 @@ function render() {
     h('div', { style: { position: 'fixed', top: '40%', left: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,150,180,0.10) 0%, transparent 70%)', pointerEvents: 'none', zIndex: '0', transform: 'translateX(-50%)' } }),
     renderHeader(now),
     h('main', { style: { position: 'relative', zIndex: '1', maxWidth: '720px', margin: '0 auto', padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: '18px' } }, ...renderContent(now, mg, pct, tyColor, ceiling)),
-    state.toast ? h('div', { style: { position: 'fixed', bottom: 'calc(96px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '99px', fontSize: '14px', fontWeight: '600', boxShadow: '0 10px 28px rgba(120,60,90,0.2), 0 0 0 1px rgba(255,255,255,0.3)', zIndex: '50', maxWidth: '90vw', textAlign: 'center', whiteSpace: 'nowrap' } }, state.toast) : null,
+    state.toast ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'fixed', bottom: 'calc(96px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '18px', fontSize: '14px', fontWeight: '600', lineHeight: '1.35', boxShadow: '0 10px 28px rgba(120,60,90,0.2), 0 0 0 1px rgba(255,255,255,0.3)', zIndex: '50', maxWidth: 'calc(100vw - 32px)', width: 'max-content', textAlign: 'center', whiteSpace: 'normal', overflowWrap: 'anywhere' } }, state.toast) : null,
     renderTimeModal(),
     (state.view === 'reports' && state.reportsView) ? h('div', { style: { position: 'fixed', zIndex: '34', left: '0', right: '0', bottom: 'calc(78px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', pointerEvents: 'none' } },
       h('button', { onClick: () => setState({ reportsView: null }), style: { pointerEvents: 'auto', minHeight: '42px', padding: '0 18px', borderRadius: '99px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '800', boxShadow: '0 10px 28px rgba(120,60,90,0.22)' } }, '↩ Back')
@@ -1326,8 +1338,14 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // miss keeps showing in the banner no matter how many days pass, until an entry actually
   // resolves it (missedDosesFor already treats a late-logged entry as covering its window).
   const bannerItemsAll = [];
-  for (let d = dayStart(MISSED_TRACK_SINCE); d <= dayStart(now); d += 86400000) {
-    const label = d === dayStart(now) ? 'Today' : (d === dayStart(now) - 86400000 ? 'Yesterday' : new Date(d).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }));
+  // DST-SAFE STEP. dayStart() returns LOCAL midnight, but a local day is 23h across spring-forward
+  // and 25h across fall-back. Advancing by a flat 86400000 drifts the cursor off midnight, which
+  // duplicated 1 Nov and silently dropped the CURRENT day from 2 Nov onward, every year. Adding
+  // 36h and re-normalising through dayStart() always lands on the next local midnight, across both
+  // transitions. derivedMissedEntries() uses the identical idiom so the banner and the export agree.
+  // The 'Yesterday' test is normalised the same way, for the same reason.
+  for (let d = dayStart(MISSED_TRACK_SINCE); d <= dayStart(now); d = dayStart(d + 129600000)) {
+    const label = d === dayStart(now) ? 'Today' : (d === dayStart(dayStart(now) - 43200000) ? 'Yesterday' : new Date(d).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }));
     missedDosesFor(d, now).forEach(m => bannerItemsAll.push({ ...m, when: label }));
   }
   const bannerItems = bannerItemsAll.filter(m => m.ts > (state.missedClearedAt || 0));
@@ -2159,8 +2177,9 @@ function renderReportsMenu(now) {
     h('section', null,
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', color: '#AA5375' } }, appIcon('chart', 19), h('span', { style: { fontSize: '12px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase' } }, 'Care reports')),
       h('h1', { style: { fontSize: '24px', lineHeight: '1.05', color: '#342530', letterSpacing: '-0.035em', marginTop: '5px' } }, 'Reports'),
-      h('div', { style: { fontSize: '12.5px', color: '#6E5261', marginTop: '5px' } }, 'Choose a report to review details without leaving the app.')
+      h('div', { style: { fontSize: '12.5px', color: '#6E5261', marginTop: '5px' } }, 'Save or print your records, or open a report below.')
     ),
+    renderSaveRecordsCard(now),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
       ...reportTypes.map(type => {
         const report = reportDescriptor(type, now);
@@ -2174,8 +2193,87 @@ function renderReportsMenu(now) {
           h('span', { style: { color: '#AA5375', display: 'inline-flex' } }, appIcon('chevron', 19))
         );
       })
-    )
+    ),
   ];
+}
+
+// v43: save + print, as a card in Reports rather than a sixth bottom-nav tab -- renderBottomNav
+// hardcodes a 5-column grid, so a sixth item silently overflows it. Deliberately NOT added to
+// the reportTypes array either: that array feeds openReport() -> renderReportDetail(), whose
+// dispatch ends in a bare `else renderAppetite(now)`, so an unrecognised type would quietly
+// render the Appetite report instead of erroring.
+//
+// It sits ABOVE the five browse buttons because it is the only ACTION on this screen and actions
+// lead. Below them it was 3-22% visible above the fixed nav on every phone size -- the flagship
+// feature of the release, effectively hidden.
+function renderSaveRecordsCard(now) {
+  const nLogged = allExportEntries().length;
+  // "Last logged" must mean the last thing she LOGGED. Two ways this went wrong when it read every
+  // entry's raw timestamp: allExportEntries() includes state.chemoDates, whose ts for a SCHEDULED
+  // appointment is in the future, so Math.max picked the appointment and the card read "last logged
+  // 8/18/2026" on a device whose clock said 8/14; and a document carrying a non-finite ts rendered
+  // the literal string "Invalid Date" on the flagship card. The export path guards this value 40
+  // lines away and this line did not. Finite, in the past, and nothing else.
+  const lastTs = allExportEntries().reduce((mx, e) => {
+    const v = exportSortTs(e);
+    return (typeof v === 'number' && isFinite(v) && v > mx && v <= state.now) ? v : mx;
+  }, 0);
+  const empty = nLogged === 0;
+  const busy = !!state.exporting;
+  // Disabled treatment. The fill this replaced measured 1.95:1 against white text, and an earlier
+  // attempt at a fix claimed 3.6:1 for a colour that produces 3.23:1 and then stacked opacity on
+  // top, taking the empty state to 1.81:1 -- worse than what was rejected. Flat fills, measured:
+  // busy #9C6079 on white is 4.81:1 (it is the one control she is actively watching, so it clears
+  // AA outright); disabled #C9A7B6 with #3A2B33 text is 6.16:1. No opacity stacking.
+  // dim() returns {} rather than a cursor for the running button, because an inline style would
+  // beat the `button:disabled{cursor:default}` rule and leave the ONE working button as the only
+  // one showing a pointer -- precisely inverted from intent.
+  const dim = (on) => on ? { cursor: 'default', pointerEvents: 'none' } : {};
+  const btn = (kind, label, onClick, primary) => {
+    const running = state.exporting === kind;
+    const off = busy || empty;
+    return h('button', {
+      onClick,
+      ...(off ? { disabled: 'disabled' } : {}),
+      'aria-busy': running ? 'true' : 'false',
+      style: {
+        // maxWidth was a flat 220px, which is right on a wide screen and wrong on a phone: the pair
+        // stacked at every phone size and left up to 148px of dead card beside each button. `none`
+        // lets them share the row on a phone; the row's own maxWidth keeps them from stretching to
+        // 321px on desktop.
+        flex: '1 1 132px', minWidth: '132px', maxWidth: 'none', minHeight: '46px', padding: '0 12px',
+        borderRadius: '13px', fontSize: '14px', fontWeight: '800',
+        background: primary ? (running ? '#9C6079' : off ? '#C9A7B6' : '#AA5375') : 'rgba(255,255,255,0.72)',
+        color: primary ? (off && !running ? '#3A2B33' : '#FFFFFF') : '#8E3D61',
+        border: primary ? 'none' : '1px solid rgba(212,104,138,0.32)',
+        boxShadow: primary ? 'inset 0 -2px 0 rgba(150,60,90,0.35)' : 'none',
+        ...dim(off && !running)
+      }
+    }, running ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '7px', justifyContent: 'center' } },
+        h('span', { className: 'spin', style: { width: '13px', height: '13px', borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', display: 'inline-block' } }),
+        'Saving…'
+      ) : label);
+  };
+  return h('section', { style: { marginTop: '2px' } },
+    h('div', { style: { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
+      h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '13px' } },
+        h('span', { style: { width: '44px', height: '44px', borderRadius: '14px', marginTop: '1px', background: 'rgba(170,83,117,0.12)', color: '#AA5375', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } }, appIcon('download', 22)),
+        h('span', { style: { display: 'block', flex: '1', minWidth: '0' } },
+          h('h2', { style: { fontSize: '16px', fontWeight: '800', letterSpacing: '-0.015em', color: '#342530', margin: '0' } }, 'Save a copy of your records'),
+          h('span', { style: { display: 'block', fontSize: '12px', color: '#6E5261', lineHeight: '1.35', marginTop: '2px', maxWidth: '52ch' } }, "Everything you've logged — doses, temperatures, weights, symptoms and treatment dates. The file saves to this phone. Nothing is sent anywhere."),
+          h('span', { className: 'mono', style: { display: 'block', fontSize: '10.5px', color: '#8E3D61', fontWeight: '700', marginTop: '5px' } },
+            empty ? 'Nothing logged yet' : (nLogged + ' entr' + (nLogged === 1 ? 'y' : 'ies') + (lastTs ? ' · last logged ' + new Date(lastTs).toLocaleDateString() : '')))
+        )
+      ),
+      h('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', marginTop: '13px', justifyContent: 'flex-start', maxWidth: '470px' } },
+        btn('csv', 'Save spreadsheet', downloadEntriesCSV, true),
+        btn('report', 'Save printable report', openPrintReport, false)
+      ),
+      h('div', { style: { fontSize: '11.5px', color: '#6E5261', marginTop: '10px', lineHeight: '1.45', maxWidth: '52ch' } },
+        empty ? "Once you start logging, you'll be able to save or print your records here."
+              : 'Keep the spreadsheet as your backup. Print the report to take to an appointment.')
+    )
+  );
 }
 
 function renderReportDetail(type, now) {
@@ -2191,6 +2289,435 @@ function renderReportDetail(type, now) {
     ),
     ...content
   ];
+}
+
+// =================================================================================================
+// EXPORT — CSV + printable report (v43)
+//
+// WHY THIS EXISTS. Everything Brandi has ever logged lives in one Firestore project with no copy
+// anywhere. This is her first backup. That is the primary purpose; handing a printed record to an
+// oncologist is the secondary one.
+//
+// THE ONE INVARIANT: this block is STRICTLY READ-ONLY. WEB-MAIN has exactly four mutation
+// mechanisms -- addEntryDB, removeEntryDB, setDoc (prefs / fcm_tokens) and persistMedicationConfig
+// -- all named functions with no dynamic dispatch anywhere in the file. Nothing below references
+// any of them, and nothing below writes to localStorage. That is mechanically checkable with a
+// grep, which is the whole safety argument for shipping this before anything else touches her app.
+// If you add to this block, keep that property or the argument dies.
+// =================================================================================================
+
+// RFC-4180 quoting, plus the leading apostrophe that stops Excel and Sheets executing a cell that
+// begins =, +, - or @ as a formula. A medication note starting with "-" is not a spreadsheet macro.
+function csvField(v) {
+  let s = (v === null || v === undefined) ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function escHtml(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+// For a value going inside a CSS string literal (the @page margin-box `content:` running header).
+// escHtml is wrong there: `&quot;` would print literally. A stray `"` or `</style>` would break out
+// of the block, so both the quote characters and the tag delimiters are neutralised.
+function cssStr(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, "\\'")
+    .replace(/</g, '\\00003c').replace(/>/g, '\\00003e')
+    .replace(/[\r\n]+/g, ' ');
+}
+
+// state.entries deliberately EXCLUDES chemo_date -- subscribeEntries splits those into
+// state.chemoDates so every other view can ignore them. For a backup they must come back in: they
+// are real documents in caretracker_entries and they are the treatment calendar the whole app
+// pivots on. If the export is the only copy, leaving them out means her chemo schedule is the one
+// thing that cannot be restored.
+function allExportEntries() {
+  return (state.entries || []).concat(state.chemoDates || []);
+}
+
+// A cleared chemo date is written with ts:0 as an audit tombstone. Chronologically that is 1 Jan
+// 1970, which would otherwise sort to the top of the CSV and print a 1970 heading in the report.
+function exportSortTs(e) {
+  return (e.medId === 'chemo_date' && !e.ts) ? (e.loggedAt || 0) : (e.ts || 0);
+}
+
+function reportNameOf(id) {
+  if (!id) return '';
+  const known = (state.meds || []).some(m => m.id === id) || !!(state.archivedMeds && state.archivedMeds[id]);
+  const n = nameOf(id);
+  return (!known && n === id) ? 'Medication (removed)' : n;
+}
+
+function exportDetailFor(e) {
+  if (!e) return '';
+  if (e.medId === 'temp') return e.dose || (e.temp !== undefined ? e.temp + tempSuffix() : '');
+  if (e.medId === 'weight') return e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '');
+  if (e.medId === 'bowel_movement') return BOWEL_MOVEMENT_LABELS[e.value] || e.dose || e.value || '';
+  if (e.medId === 'appetite') return APPETITE_LABELS[e.value] || e.dose || e.value || '';
+  if (e.medId === 'chemo_date') return e.dose || 'Chemo date';
+  let d = e.dose || '';
+  // Tylenol Liquid records volume separately from the dose label on some entries.
+  if (e.volumeMl && d.indexOf('mL') < 0) d += (d ? ', ' : '') + e.volumeMl + ' mL';
+  if (e.pills && !/pill/i.test(d)) d += (d ? ', ' : '') + e.pills + (e.pills === 1 ? ' pill' : ' pills');
+  if (e.freq) d += (d ? ', ' : '') + e.freq + (e.freq === 1 ? ' episode' : ' episodes');
+  if (e.painLevel) d += (d ? ', ' : '') + 'pain ' + e.painLevel + '/10';
+  // WEB-MAIN records an override as the boolean `override: true` -- it has no `overrideReason`
+  // field at all. Reading overrideReason here (as the phone app's exporter does) would silently
+  // drop every early dose from her backup.
+  if (e.override) d += (d ? ', ' : '') + 'taken early (override)';
+  if (e.missed) d += (d ? ', ' : '') + 'not logged' + (e.windowName ? ' (' + e.windowName + ' window)' : '');
+  return d;
+}
+
+// Missed doses are NOT documents. missedDosesFor() computes them at render time from the medication
+// schedule configured ON THIS DEVICE, so two devices can produce different missed sets from
+// byte-identical Firestore. Including them unmarked would make the backup lie; omitting them loses
+// real clinical signal. They are included and marked `derived`, which keeps the file honest and
+// lets any future restore filter to `logged` only.
+function derivedMissedEntries(now) {
+  const out = [];
+  const end = dayStart(now);
+  // DST-SAFE STEP -- the same idiom renderToday uses, so the export's missed set and the on-screen
+  // banner stay in agreement. A flat += 86400000 drifts off local midnight across both DST
+  // transitions: it emitted 1 Nov twice and dropped the current day entirely from 2 Nov onward.
+  // 36h re-normalised through dayStart() always lands on the next local midnight.
+  //
+  // The stated justification for the old idiom did not hold anyway: renderToday filters by
+  // state.missedClearedAt and the export does not, so with Clear pressed the banner showed 22
+  // misses while the CSV carried 165. That divergence is deliberate and is stated in the report
+  // caveat; the DST drift was not.
+  for (let d = dayStart(MISSED_TRACK_SINCE); d <= end; d = dayStart(d + 129600000)) {
+    missedDosesFor(d, now).forEach(m => out.push({ ...m, __derived: true }));
+  }
+  return out;
+}
+
+function buildExportRows(now) {
+  // Logged documents first (chronologically), then derived rows (chronologically). Strict
+  // chronology put ~40 consecutive "not logged" rows at the top of the file, so the artifact the
+  // card calls "your backup" opened looking like a file about failures. The Source column and the
+  // Timestamp column both survive, so nothing is lost for a restore or for re-sorting in Excel.
+  // .concat() allocates, so this .sort() never touches a live state array.
+  const rows = allExportEntries().concat(derivedMissedEntries(now))
+    .sort((a, b) => ((a.__derived ? 1 : 0) - (b.__derived ? 1 : 0)) || (exportSortTs(a) - exportSortTs(b)));
+  return rows.map(e => {
+    const cleared = e.medId === 'chemo_date' && !e.ts;
+    const rawTs = exportSortTs(e);
+    const ts = (typeof rawTs === 'number' && isFinite(rawTs)) ? rawTs : 0;
+    // Two separate reasons a row has no event time, and BOTH must blank the date columns.
+    //  - `cleared`: a ts:0 chemo tombstone. exportSortTs substitutes loggedAt so it sorts sensibly,
+    //    but loggedAt is when the clear was recorded, not when anything happened -- printing it as
+    //    the event time is a lie, and it is what let the tombstone through the report's `!r[2]`
+    //    guard and into the clinical hand-off as a blank-time row labelled "chemo_date".
+    //  - `!ts`: a corrupt document carrying 0, NaN or Infinity. Only the first case was handled, so
+    //    the others printed the epoch as "12/31/1969", or the literal string "Invalid Date".
+    //    isFinite is load-bearing for Infinity specifically: !NaN is already true, but Infinity is
+    //    truthy and reaches new Date(Infinity).toISOString(), which throws and kills the export.
+    const undated = cleared || !ts;
+    const dt = new Date(ts);
+    return [
+      undated ? '' : dt.toLocaleDateString(),
+      undated ? '' : fmtTime(ts),
+      undated ? '' : dt.toISOString(),
+      // A derived row belongs to the medication window it was inferred from, not to whatever
+      // bucket its clock time lands in -- those disagreed on 32 rows of a single export
+      // ("Evening" beside "not logged (Night window)" on the same row).
+      undated ? '' : (e.__derived && e.windowName ? e.windowName : timeBucket(ts)),
+      nameOf(e.medId),
+      e.medId || '',
+      exportDetailFor(e),
+      (e.mg === 0 || e.mg) ? e.mg : '',
+      e.note || '',
+      e.__derived ? 'derived' : 'logged',
+      e.id || '',
+      // The audit trail. An undated row blanks its four event-time columns because it has no event
+      // time -- but the backup must still be able to say WHEN the chemo date was cleared, or the
+      // trail is no longer reconstructable from the file.
+      (typeof e.loggedAt === 'number' && isFinite(e.loggedAt) && e.loggedAt) ? new Date(e.loggedAt).toISOString() : ''
+    ];
+  });
+}
+
+const EXPORT_COLUMNS = ['Date', 'Time', 'Timestamp', 'Time of day', 'Type', 'Med ID', 'Detail', 'Amount (mg)', 'Note', 'Source', 'Entry ID', 'Logged at'];
+
+function exportFilename(kind, ext) {
+  const d = new Date(simNow());
+  const stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const who = String(CONFIG.patientName || 'record').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'record';
+  return who + '-' + kind + '-' + stamp + '.' + ext;
+}
+
+// Plain browser download. No native bridge here -- WEB-MAIN is a web app, so this is the whole path.
+async function deliverFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+  } finally {
+    // Revoke on a timer, not immediately: Safari cancels an in-flight download if the object URL
+    // is revoked in the same tick as the click.
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (err) {} }, 4000);
+  }
+}
+
+// The busy state is set, then a frame is yielded, THEN the work runs. Without the yield the whole
+// export completed inside one synchronous task -- measured at 0 painted frames out of 70 -- so the
+// spinner existed in the DOM and was never once shown to the user. The cost is not free and grows
+// with the calendar, because derivedMissedEntries walks every day since MISSED_TRACK_SINCE.
+function yieldFrame() {
+  // Raced against a timer. requestAnimationFrame does not fire in a backgrounded tab, and iOS
+  // Safari starves it aggressively -- without the race, backgrounding the app mid-export left
+  // state.exporting stuck and BOTH buttons dead until the tab was focused again. Whichever
+  // settles first wins; the work runs either way.
+  return new Promise(r => {
+    if (typeof requestAnimationFrame !== 'function') return setTimeout(r, 0);
+    let done = false;
+    const go = () => { if (!done) { done = true; r(); } };
+    setTimeout(go, 250);
+    requestAnimationFrame(() => requestAnimationFrame(go));
+  });
+}
+
+async function downloadEntriesCSV() {
+  if (state.exporting) return;
+  setState({ exporting: 'csv' });
+  try {
+    await yieldFrame();
+    const rows = buildExportRows(state.now);
+    // Count only what she actually logged. rows includes derived missed-dose rows, so the old
+    // count read "182 entries saved" against 21 real documents -- and "166 entries saved" on an
+    // account with nothing in it at all, four cards below a card reading "0 recorded entries".
+    const nLogged = rows.filter(r => r[9] === 'logged').length;
+    if (!nLogged) {
+      setToast('Nothing logged yet — there is nothing to save.');
+      return;
+    }
+    const csv = [EXPORT_COLUMNS].concat(rows).map(r => r.map(csvField).join(',')).join('\r\n');
+    // UTF-8 BOM so Excel opens °F, é and em-dashes correctly instead of as mojibake.
+    await deliverFile(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), exportFilename('records', 'csv'));
+    setToast(nLogged + ' entr' + (nLogged === 1 ? 'y' : 'ies') + ' saved to your downloads.');
+  } catch (err) {
+    // err.message here is a raw browser string -- "The operation is insecure.",
+    // "QuotaExceededError". None of it is actionable, and all of it reads like the app broke in a
+    // way that might have damaged her records. The technical detail goes to the console.
+    console.error('[export:csv]', err);
+    setToast("Couldn't save the file. Your records are safe — please try again.");
+  } finally {
+    setState({ exporting: false });
+  }
+}
+
+// The printable report. Delivered as a downloadable .html file AND opened for printing where the
+// browser allows it -- WEB-MAIN runs as an installed standalone PWA, where window.open is
+// unreliable, and a toast telling her to reconfigure her browser is not an acceptable outcome for
+// the one document she means to hand a doctor.
+function buildReportDoc(now) {
+  const rows = buildExportRows(now);
+  const logged = rows.filter(r => r[9] === 'logged');
+  const derived = rows.filter(r => r[9] === 'derived');
+  // The period is what has been RECORDED, so a chemo date scheduled for next week must not stretch
+  // it into the future -- "Jul 12 - Aug 18" on a record generated on Aug 14 reads as though there
+  // is data that does not exist. Future-dated rows are surfaced in the header instead.
+  //
+  // ...and it must be computed from LOGGED rows only. Derived rows always start at
+  // MISSED_TRACK_SINCE, so filtering `rows` pinned the period start to 12 Jul regardless of what
+  // was recorded. Both ends of the range are guarded now, not one. .filter() allocates, so this
+  // .sort() never touches a live state array.
+  const dated = rows.filter(r => r[9] === 'logged' && r[2] && new Date(r[2]).getTime() <= now)
+    .sort((a, b) => new Date(a[2]) - new Date(b[2]));
+  const first = dated.length ? new Date(dated[0][2]) : null;
+  const last = dated.length ? new Date(dated[dated.length - 1][2]) : null;
+  const fmtD = (d) => d ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+
+  const temps = allExportEntries().filter(e => e.medId === 'temp' && e.temp !== undefined).map(e => Number(e.temp)).filter(n => !isNaN(n));
+  const weights = allExportEntries().filter(e => e.medId === 'weight' && e.weight !== undefined).map(e => Number(e.weight)).filter(n => !isNaN(n));
+  const peakTemp = temps.length ? Math.max.apply(null, temps).toFixed(1) + tempSuffix() : '—';
+  const netWeight = weights.length > 1 ? ((weights[weights.length - 1] - weights[0] >= 0 ? '+' : '') + (weights[weights.length - 1] - weights[0]).toFixed(1) + ' lbs') : '—';
+
+  // Doses per medication -- the first thing an oncologist actually scans.
+  const totals = {};
+  allExportEntries().forEach(e => {
+    if (!e.medId || e.medId === 'chemo_date') return;
+    if (['temp', 'weight', 'appetite', 'bowel_movement', 'cycle_start', 'cycle_end', 'inpatient', 'inpatient_start', 'inpatient_end'].indexOf(e.medId) >= 0) return;
+    if (e.medId.indexOf('symptom_') === 0) return;
+    totals[e.medId] = (totals[e.medId] || 0) + 1;
+  });
+  const totalRows = Object.keys(totals).sort((a, b) => totals[b] - totals[a])
+    .map(id => '<tr><td>' + escHtml(reportNameOf(id)) + '</td><td class="num">' + totals[id] + '</td></tr>').join('');
+
+  // A usable event time, or nothing. The blanking rule that buildExportRows applies to every row
+  // has to hold here too: this table is inside the document handed to an oncologist, and without
+  // the guard a corrupt document printed "Invalid Date", and a ts:0 printed "Dec 31, 1969".
+  const usableTs = (v) => (typeof v === 'number' && isFinite(v) && v > 0) ? v : 0;
+  const symptoms = allExportEntries().filter(e => e.medId && e.medId.indexOf('symptom_') === 0)
+    .sort((a, b) => usableTs(a.ts) - usableTs(b.ts))
+    .map(e => { const ts = usableTs(e.ts); return '<tr><td>' + escHtml(ts ? fmtD(new Date(ts)) : '') + '</td><td>' + escHtml(ts ? fmtTime(ts) : '') + '</td><td>' + escHtml(nameOf(e.medId)) + '</td><td>' + escHtml(e.note || exportDetailFor(e)) + '</td></tr>'; }).join('');
+
+  // SUMMARISED, not enumerated. Rendered against a realistic span this section produced ~165 rows
+  // of "not logged" and pushed the daily log -- what she actually took and how she felt -- off the
+  // first several pages. A clinician needs the shape of the adherence problem, not every instance.
+  // The CSV keeps every individual row; that is the backup. This is the communication.
+  // ...and it is suppressed entirely when nothing was logged. With zero documents the whole body of
+  // the document was a bold red table reading "166 scheduled doses with nothing logged", beside an
+  // ENTRIES tile reading 0 -- a page of accusations derived purely from non-events. That is what
+  // the document looked like after a reinstall, after a device change, or during any stretch she
+  // was too sick to log. A derived-only document is never emitted.
+  const missedBy = {};
+  (logged.length ? derived : []).forEach(r => {
+    const k = r[5] || r[4];
+    const t = r[2] ? new Date(r[2]).getTime() : 0;
+    const g = missedBy[k] || (missedBy[k] = { n: 0, first: Infinity, last: 0 });
+    g.n++; if (t && t < g.first) g.first = t; if (t > g.last) g.last = t;
+  });
+  const missedRows = Object.keys(missedBy).sort((a, b) => missedBy[b].n - missedBy[a].n).map(k => {
+    const g = missedBy[k];
+    const span = (g.first === Infinity) ? '—' : (fmtD(new Date(g.first)) + ' – ' + fmtD(new Date(g.last)));
+    return '<tr class="missed"><td>' + escHtml(reportNameOf(k)) + '</td><td class="num">' + g.n + '</td><td>' + escHtml(span) + '</td></tr>';
+  }).join('');
+  const missedTotal = logged.length ? derived.length : 0;
+
+  // Daily log. Cleared-chemo tombstones and future-dated chemo dates are kept out of the day
+  // grouping -- the first is audit trail, the second would render a future day at the top of a
+  // record of what has happened.
+  const byDay = {}, dayTs = {};
+  logged.forEach(r => {
+    if (!r[2]) return;
+    // This `!r[2]` guard is what keeps the cleared-chemo tombstone out of the clinical hand-off.
+    // In v43 it did not, because exportSortTs substitutes loggedAt for the zero ts and
+    // buildExportRows populated the Timestamp column from it, so the row sailed through and printed
+    // as a blank-time row labelled "chemo_date". buildExportRows now blanks all four date columns
+    // for an undated row, which closes it at the source. A second explicit skip here was tried and
+    // removed -- nothing could make it fire, so it was dead code, not defence in depth.
+    const t = new Date(r[2]).getTime();
+    if (r[5] === 'chemo_date' && t > now) return;
+    const key = new Date(r[2]).toLocaleDateString();
+    if (!byDay[key]) { byDay[key] = []; dayTs[key] = dayStart(t); }
+    byDay[key].push(r);
+  });
+  // Sorted and labelled from the real timestamp, NEVER by re-parsing the locale-formatted grouping
+  // key. new Date("13/08/2026") is 8 December under en-GB and Invalid Date under ar-EG, so
+  // round-tripping the key mislabelled every heading and scrambled the day order outside en-US.
+  // The key has to stay a string to group on; the timestamp is carried alongside it.
+  const dayKeys = Object.keys(byDay).sort((a, b) => dayTs[b] - dayTs[a]);
+  // Day headings carry the weekday -- it is what a clinician anchors on when scanning a log --
+  // while every other date in the document goes through fmtD. Two formats, each with a reason,
+  // rather than the four this document carried by accident.
+  const dayLabel = (k) => new Date(dayTs[k]).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  // The date lives INSIDE each day table's thead rather than in a preceding <h3>. thead is
+  // display:table-header-group, so it repeats on every page the day spans. Previously the column
+  // header repeated but the date did not, so page 2 opened with five rows and no way for a
+  // clinician to tell what day they belonged to -- and it looked complete while being wrong.
+  const dayTables = dayKeys.map(k =>
+    '<table class="log"><thead><tr><th colspan="4" class="dayhdr">' + escHtml(dayLabel(k)) + '</th></tr>' +
+    '<tr><th>Time</th><th>Type</th><th>Detail</th><th>Note</th></tr></thead><tbody>' +
+    byDay[k].map(r => '<tr><td>' + escHtml(r[1]) + '</td><td>' + escHtml(reportNameOf(r[5]) || r[4]) + '</td><td>' + escHtml(r[6]) + '</td><td>' + escHtml(r[8]) + '</td></tr>').join('') +
+    '</tbody></table>').join('');
+
+  const nextTs = (typeof nextChemoTs === 'function') ? nextChemoTs() : null;
+
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Treatment record — ' + escHtml(CONFIG.patientName) + '</title><style>' +
+    // Running header/footer via @page margin boxes. Without them a page separated from the set
+    // carried no date, no patient name and no page number, and the "not a clinical document"
+    // disclaimer rendered once at the very end, so a clinician handed only page 1 never saw it.
+    //
+    // UNVERIFIED ON iOS. Chromium honours @page margin boxes -- measured, the footer appears on all
+    // pages of a page-spanning report. WebKit historically does NOT, and Brandi prints from an
+    // iPhone. If Safari ignores this block it degrades SILENTLY back to the original defect. The
+    // downside is bounded, deliberately: each day's DATE lives in its table's thead
+    // (display:table-header-group, which WebKit does honour), so every page keeps the date of the
+    // rows on it either way. Only the patient name and the page numbers are at risk. Do not record
+    // this as "fixed on iOS" until someone has looked at page 2 in iOS Safari's print preview.
+    '@page{size:letter;margin:16mm 13mm 18mm;' +
+      '@bottom-right{content:"' + cssStr(CONFIG.patientName) + ' · treatment record · page " counter(page) " of " counter(pages);font-size:8.5pt;color:#6E5261}' +
+      '@bottom-left{content:"Patient-logged record — verify against medical records";font-size:8.5pt;color:#6E5261}}' +
+    'body{font:11.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#2A2127;margin:0;padding:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    'h1{font-size:19px;margin:0 0 2px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#8E3D61;margin:22px 0 6px;border-bottom:1px solid #E9D8D1;padding-bottom:4px}' +
+    'h3{font-size:12px;margin:14px 0 4px;background:#F6E9EE;padding:4px 7px;border-radius:4px;break-after:avoid}' +
+    'table.log{margin:14px 0 0}th.dayhdr{background:#F6E9EE;text-align:left;font-size:12px;color:#2A2127;letter-spacing:0;text-transform:none;padding:5px 7px;border-bottom:none}' +
+    '.sub{color:#6E5261;font-size:11px}' +
+    '.tiles{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}' +
+    '.card{flex:1;min-width:110px;border:1px solid #E9D8D1;border-radius:7px;padding:7px 9px;break-inside:avoid}' +
+    '.card b{display:block;font-size:15px}.card span{font-size:10px;color:#6E5261;text-transform:uppercase;letter-spacing:.05em}' +
+    '.card.period{flex:1.6}.card.period b{font-size:15px;line-height:1.15}' +
+    'table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}' +
+    'th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#8E3D61;border-bottom:1px solid #E9D8D1;padding:3px 5px}' +
+    'td{padding:3px 5px;border-bottom:1px solid #F3EAEA;vertical-align:top;word-wrap:break-word}' +
+    'thead{display:table-header-group}tr{break-inside:avoid}' +
+    'table.log td:nth-child(1),table.log th:nth-child(1){width:62px}table.log td:nth-child(2),table.log th:nth-child(2){width:120px}table.log td:nth-child(4),table.log th:nth-child(4){width:30%}' +
+    // Demoted from #A5443C/700. Red bold made a table of CALCULATED non-events the loudest thing
+    // on page 1, outranking the daily log -- what she actually took and how she felt. The section
+    // says of itself that these are "not necessarily a dose that was actually skipped"; it must
+    // not be styled like a finding. 400, not 600: at 600 it was still the heaviest body text on
+    // the page while every other table cell was 400.
+    '.missed td{color:#5B4A53;font-weight:400}' +
+    'td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}' +
+    '.chip{display:inline-block;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:#F6E9EE;color:#8E3D61;border-radius:4px;padding:1px 5px;vertical-align:middle}' +
+    '.lead{font-size:11.5px;color:#2A2127;margin:6px 0 6px;max-width:78ch}' +
+    '.nextdate{font-size:12px;color:#2A2127;margin-top:3px}.nextdate b{color:#8E3D61}' +
+    '.caveat{font-size:10.5px;color:#6E5261;margin:4px 0 8px}' +
+    'footer{margin-top:26px;padding-top:8px;border-top:1px solid #E9D8D1;font-size:10px;color:#6E5261}' +
+    '</style></head><body>' +
+    '<h1>Treatment record — ' + escHtml(CONFIG.patientName) + '</h1>' +
+    '<div class="sub">Patient-logged record · CareTracker ' + escHtml(APP_VERSION) + ' · generated ' + escHtml(fmtD(new Date(simNow())) + ', ' + fmtTime(simNow())) + '</div>' +
+    (nextTs ? '<div class="nextdate">Next treatment date: <b>' + escHtml(fmtD(new Date(nextTs))) + '</b></div>' : '') +
+    '<h2>Summary</h2><div class="tiles">' +
+    '<div class="card period"><span>Period</span><b>' + escHtml(fmtD(first)) + ' – ' + escHtml(fmtD(last)) + '</b></div>' +
+    '<div class="card"><span>Entries</span><b>' + logged.length + '</b></div>' +
+    '<div class="card"><span>Peak temperature</span><b>' + escHtml(peakTemp) + '</b></div>' +
+    '<div class="card"><span>Net weight change</span><b>' + escHtml(netWeight) + '</b></div>' +
+    '</div>' +
+    (totalRows ? '<h2>Doses recorded, by medication</h2><table><thead><tr><th>Medication</th><th class="num" style="width:90px">Doses</th></tr></thead><tbody>' + totalRows + '</tbody></table>' : '') +
+    (symptoms ? '<h2>Symptoms reported</h2><table><thead><tr><th style="width:80px">Date</th><th style="width:62px">Time</th><th style="width:130px">Symptom</th><th>Description</th></tr></thead><tbody>' + symptoms + '</tbody></table>' : '') +
+    // Order matters: the daily log is a record of what happened and leads the document. The
+    // calculated section follows it. Demoting the colour and weight was not enough while a table
+    // of inferred non-events still occupied page 1 above the entries she actually made.
+    '<h2>Daily log</h2>' + (dayTables || '<div class="lead">No entries were recorded in this period.</div>') +
+    // N-1: the daily log runs newest-first (a clinician opens on the most recent day) while the CSV
+    // runs oldest-first (a backup reads as a timeline). Two artifacts, two jobs, deliberate.
+    //
+    // The heading was renamed from "Missed scheduled doses", which asserted exactly what the caveat
+    // underneath it then retracted. The lead sentence is body size and sits directly under the
+    // heading, where the old 10.5px grey caveat read as fine print beneath a headline.
+    (missedRows ? '<h2>Scheduled doses with nothing logged <span class="chip">calculated</span></h2>' +
+      '<div class="lead">These are calculated from the medication schedule saved on this device, not entries ' + escHtml(CONFIG.patientName) + ' made. They are not confirmed missed doses.</div>' +
+      '<div class="caveat">' + missedTotal + ' scheduled dose' + (missedTotal === 1 ? '' : 's') + ' had nothing logged against ' + (missedTotal === 1 ? 'it' : 'them') + ', summarised by medication. Tracking begins ' + escHtml(fmtD(new Date(MISSED_TRACK_SINCE))) + '; an absence of flags before that date does not mean no doses were missed. Every individual occurrence is listed in the spreadsheet export.</div>' +
+      '<table><thead><tr><th>Medication</th><th class="num" style="width:110px">Not logged</th><th style="width:190px">Date range</th></tr></thead><tbody>' + missedRows + '</tbody></table>' : '') +
+    '<footer>This is a patient-logged record, not a clinical document — please verify against medical records before relying on it. Times shown are the local time of the device at the moment each entry was logged.</footer>' +
+    '</body></html>';
+}
+
+async function openPrintReport() {
+  if (state.exporting) return;
+  setState({ exporting: 'report' });
+  try {
+    await yieldFrame();
+    if (!buildExportRows(state.now).some(r => r[9] === 'logged')) {
+      setToast('Nothing logged yet — there is nothing to report.');
+      return;
+    }
+    const doc = buildReportDoc(state.now);
+    // Always give her the file: an installed PWA can block window.open, and a downloaded .html can
+    // be opened and printed from anywhere.
+    await deliverFile(new Blob([doc], { type: 'text/html;charset=utf-8' }), exportFilename('report', 'html'));
+    let opened = null;
+    try { opened = window.open('', '_blank'); } catch (err) { opened = null; }
+    if (opened && opened.document) {
+      opened.document.write(doc);
+      opened.document.close();
+      setTimeout(() => { try { opened.focus(); opened.print(); } catch (err) {} }, 350);
+      setToast('Report saved and opened for printing.');
+    } else {
+      setToast('Report saved. Open it from Downloads to print.');
+    }
+  } catch (err) {
+    console.error('[export:report]', err);
+    setToast("Couldn't build the report. Your records are safe — please try again.");
+  } finally {
+    setState({ exporting: false });
+  }
 }
 
 
