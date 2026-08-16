@@ -263,7 +263,7 @@ function persistMedicationConfig(meds, archivedMeds) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v43.1';
+const APP_VERSION = 'v43.2';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -397,19 +397,47 @@ function missedDosesFor(dayTs, now) {
     const windows = med.id === 'dexamethasone' ? dexWindowsForOffset(chemoOffsetFor(d0)) : med.windows;
     const dayEntries = entriesFor(med.id).filter(e => e.ts >= d0 && e.ts < d0 + 86400000).sort((a, b) => a.ts - b.ts);
     const used = new Set();
-    const wins = windows.map((w, i) => ({ w,
-      ws: d0 + w.start * 3600000, we: d0 + w.end * 3600000,
-      nextStart: i + 1 < windows.length ? d0 + windows[i + 1].start * 3600000 : d0 + 86400000,
-      covered: false }));
-    // Pass 1: in-window or early doses cover their window
-    wins.forEach(win => {
-      const hit = dayEntries.find(e => !used.has(e) && e.ts < win.we);
-      if (hit) { used.add(hit); win.covered = true; }
+    // Sorted defensively: the medication editor validates only that end > start, never that
+    // windows are in order or non-overlapping, and the single-pass claim below is only correct for
+    // ascending windows. Out-of-order windows previously made an ON-TIME dose flag its own window
+    // as missed.
+    const ordered = windows.slice().sort((a, b) => a.start - b.start || a.end - b.end);
+    const wins = ordered.map((w, i) => {
+      const we = d0 + w.end * 3600000;
+      const rawNext = i + 1 < ordered.length ? d0 + ordered[i + 1].start * 3600000 : d0 + 86400000;
+      // An overlapping next window must never cut this one short: without the clamp, a dose logged
+      // INSIDE a window failed to cover it whenever the next window started before this one closed.
+      const next = Math.max(we, rawNext);
+      return { w, ws: d0 + w.start * 3600000, we, nextStart: next,
+        // THE DEAD GAP IS SPLIT AT ITS MIDPOINT. A dose logged between one window closing and the
+        // next opening is credited to whichever window it is NEARER. Without this, the first
+        // window claimed the entire gap -- which fixed the 1 PM case and broke the 7 PM case in
+        // exactly the same way, just mirrored: a dose taken an hour before the evening dose was due
+        // would be credited to Morning, raising a false Evening alert and silently suppressing a
+        // genuinely skipped Morning dose. On Protonix (12:00-19:59 gap) the midpoint is 4 PM: 1 PM
+        // is a late Morning dose, 7 PM is an early Evening one.
+        cutoff: i + 1 < ordered.length ? we + Math.floor((next - we) / 2) : next, covered: false };
     });
-    // Pass 2: late doses (after close, before the next window opens) still count
+    // Pass 1: in-window or early doses cover their window
+    // SINGLE PASS, IN WINDOW ORDER. Each window gets first claim over any unused same-day dose
+    // logged before its own cutoff (i.e. any time up to just before the next window opens), which
+    // covers doses taken early, on time, or late.
+    //
+    // This replaced a two-pass version that split "in-window or early" from "late", and the split
+    // was the bug: pass 1 offered EVERY window a dose logged before that window's CLOSE, so a later
+    // window could claim a dose that was really a late catch-up for an earlier one. On Protonix
+    // (Morning 8-12, Evening 20-22), a dose logged at 1 PM failed the Morning test (1 PM is not
+    // before noon) but passed the Evening test (1 PM is before 10 PM) -- so Evening took it. Two
+    // things then went wrong at once: Morning showed a red MISSED alert for a dose that WAS taken,
+    // and Evening was marked covered, so a genuinely skipped 8 PM dose raised no alert at all. The
+    // silent half is the dangerous one -- an adherence tracker that goes quiet is worse than none.
+    // Dexamethasone's 8 AM / 2 PM chemo-day pair fails identically.
+    //
+    // Processing strictly in window order fixes it: Morning is offered the 1 PM dose first (1 PM is
+    // before Evening's 8 PM opening) and claims it, leaving Evening genuinely uncovered.
+    // Same logic as chemowell-beta, where this was fixed in v68 after Aaron reported it.
     wins.forEach(win => {
-      if (win.covered) return;
-      const hit = dayEntries.find(e => !used.has(e) && e.ts >= win.we && e.ts < win.nextStart);
+      const hit = dayEntries.find(e => !used.has(e) && e.ts < win.cutoff);
       if (hit) { used.add(hit); win.covered = true; }
     });
     wins.forEach(win => {

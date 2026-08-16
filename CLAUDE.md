@@ -18,6 +18,38 @@ Firebase Firestore (fuelforge-7c132) for data, GitHub Pages for hosting.
 **Live:** https://arnjnnngs.github.io/care-tracker/
 **Repo:** https://github.com/arnjnnngs/care-tracker
 
+## Progress updates — MANDATORY, not a courtesy
+
+Aaron has had to ask for this repeatedly. It is now a rule, and it applies to every session, every
+agent, and every task in this project.
+
+**Never go more than ~10 minutes of wall-clock work without telling Aaron something.** Long silences
+are the single most common complaint on this project. He is a non-technical founder who cannot see
+the terminal — silence reads as "nothing is happening" or "it broke."
+
+**Checkpoint at every one of these, without being asked:**
+
+- Before starting anything that will take more than a few minutes — say what it is and roughly how long
+- When a long-running job starts (an audit, a mutation sweep, a browser suite): say what launched, what it is checking, and the expected duration
+- When it finishes: the result, in one or two plain sentences
+- The moment a defect is found — do NOT save it for a summary at the end
+- When the plan changes, or something turns out harder than stated
+- Before asking him to do anything manual
+- When blocked, immediately, with what is needed to unblock
+
+**Write for a non-technical reader.** "Running the audit, about 20 minutes, it's checking whether the
+fix breaks anything else" — not a wall of file paths and function names.
+
+**Use the task list** (TaskCreate / TaskUpdate) so he can see state at a glance, and **deliver files as
+they are produced** (SendUserFile), not batched at the end. The sandbox has wiped hours of work
+repeatedly; anything not delivered or pushed can vanish.
+
+**When delegating to a subagent, put this rule in the agent's brief.** An agent that works silently
+for 20 minutes and returns a report is the same failure, one level down. Agents should be told to
+report the headline finding first, not bury it.
+
+**A silence longer than 10 minutes is a defect in the work, exactly like a failing test.**
+
 ## Quality standards
 
 - Own every task end-to-end. Don't hand back anything you haven't verified.
