@@ -263,7 +263,7 @@ function persistMedicationConfig(meds, archivedMeds) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v43.2';
+const APP_VERSION = 'v43.3';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -1056,6 +1056,7 @@ function fmtInpatientPeriod(p) {
 // --------- Render ---------
 function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
+  let deferredValue;
   if (attrs) {
     for (const [k, v] of Object.entries(attrs)) {
       if (k === 'style' && typeof v === 'object') {
@@ -1066,6 +1067,23 @@ function h(tag, attrs, ...children) {
         el.innerHTML = v;
       } else if (k === 'className') {
         el.className = v;
+      } else if (k === 'ref' && typeof v === 'function') {
+        v(el);
+      } else if (k === 'value' && (tag === 'select' || tag === 'textarea' || tag === 'input')) {
+        // THE TRAP THIS APP KEPT FALLING INTO, fixed at the source rather than site by site.
+        // setAttribute('value', ...) sets the DEFAULT value, not the current one:
+        //   - on <textarea> it is ignored entirely (a textarea is filled by its text child), so a
+        //     saved note rendered EMPTY and the first keystroke replaced it;
+        //   - on <select> it does nothing at all -- selection is carried by <option selected> --
+        //     so the medication editor showed "As needed" for a SCHEDULED medication, and anyone
+        //     who "corrected" that would have silently switched off its missed-dose alerts;
+        //   - on <input> it survives only until the value is edited, after which a re-render shows
+        //     stale text.
+        // The attribute is still set, so anything relying on the HTML default is unaffected; the
+        // property is set as well, deferred until after children exist because a <select> has no
+        // options to choose from at attribute time.
+        el.setAttribute(k, v === null || v === undefined ? '' : v);
+        deferredValue = v;
       } else {
         el.setAttribute(k, v);
       }
@@ -1074,6 +1092,12 @@ function h(tag, attrs, ...children) {
   for (const child of children.flat(Infinity)) {
     if (child == null || child === false) continue;
     el.appendChild(typeof child === 'string' || typeof child === 'number' ? document.createTextNode(String(child)) : child);
+  }
+  // Applied AFTER children, because a <select> has no options to choose from until they exist.
+  // Setting the property is what makes this the CURRENT value, so it survives a re-render instead
+  // of snapping back to a stale default.
+  if (deferredValue !== undefined) {
+    try { el.value = deferredValue === null ? '' : deferredValue; } catch (err) {}
   }
   return el;
 }
