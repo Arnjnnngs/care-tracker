@@ -26,6 +26,7 @@ Usage:
 """
 
 import argparse
+import re
 import hashlib
 import os
 import sys
@@ -718,8 +719,17 @@ def main():
         print("  ok  edit %s" % label)
 
     # --- post-conditions ----------------------------------------------------------------------
-    if "const APP_VERSION = 'v43.3';" not in out:
-        fail("APP_VERSION is no longer intact. This patch must never touch it.")
+    # Version-agnostic. This used to be pinned to the literal 'v43.3' and started failing the
+    # moment the version was legitimately bumped at ship time (v43.4). The invariant this guard
+    # is actually protecting is "this patch does not change APP_VERSION" -- so compare the input
+    # to the output rather than to a literal that goes stale on every release.
+    _v_in  = re.search(r"const APP_VERSION = '([^']*)';", src)
+    _v_out = re.search(r"const APP_VERSION = '([^']*)';", out)
+    if not _v_in or not _v_out:
+        fail("APP_VERSION declaration not found. The base file has moved.")
+    if _v_in.group(1) != _v_out.group(1):
+        fail("APP_VERSION changed from %s to %s. This patch must never touch it."
+             % (_v_in.group(1), _v_out.group(1)))
     if out.count("function allExportEntries()") != 1 or \
        "return (state.entries || []).concat(state.chemoDates || []);" not in out:
         fail("allExportEntries() was modified. Appointments must stay out of the CSV and report.")
