@@ -21,6 +21,39 @@ produced rather than batching them — the sandbox has destroyed hours of unsave
 When delegating to a subagent, put this rule in the agent's brief too, and tell it to lead with the
 headline finding rather than burying it in a report.
 
+### Deploying from a Claude session — the path that works
+
+`git push` is **blocked** in the Claude sandbox. The git proxy refuses any repo not in the session's
+authorized source list: *"Arnjnnngs/care-tracker is not in this session's authorized repository set."*
+That is a session setting and cannot be changed from inside the session.
+
+**Do not stop there and hand Aaron a zip to upload manually.** That happened twice and wasted his
+time. The browser can do the whole thing:
+
+1. Copy the files to ship into `/mnt/user-data/outputs/`. The upload tool only accepts paths the
+   session has shared — a path under `/home/claude` is rejected.
+2. Open `https://github.com/Arnjnnngs/care-tracker/upload/main` in Chrome.
+3. `find` the file input ("choose your files"), then call **`mcp__claude-in-chrome__file_upload`**
+   with its ref and the absolute paths. **Never click a file input** — that opens a native picker
+   that cannot be driven. 10 MB limit per call.
+4. Fill the commit summary and description, then click **Commit changes**.
+5. **Verify twice.** Re-clone the repo and md5-compare every file against what was built; then wait
+   60-90 seconds and fetch the live URL with a cache-buster to confirm the deployed `APP_VERSION`
+   and the `sw.js` CACHE string actually changed. GitHub Pages lags the commit — checking too early
+   shows the previous version and looks like a failed deploy.
+
+`mcp__claude-in-chrome__file_upload` is a **deferred tool**: it must be loaded via ToolSearch before
+it can be called. Not knowing that is why two releases were handed over for manual upload. Load it
+up front with the rest of the browser tools.
+
+**The sandbox rolls back without warning** — it has destroyed hours of unpushed work repeatedly on
+this project. Anything not committed to GitHub or delivered to Aaron as a file can vanish. Push
+early, push often, and treat the repo as the only durable storage.
+
+Committing to `care-tracker` means committing to a live patient's app, so Aaron's explicit go-ahead
+is required before the first push of a change. It does not need re-asking for a verification re-run
+or a follow-up commit inside work he has already authorized.
+
 ## 1. What This Project Is
 
 CareTracker is a **progressive web app (PWA)** that tracks medications, temperature, and weight for a family caregiver (caring for Brandi). It is a **single-file vanilla JavaScript app** — no build step, no framework, no node_modules for the frontend. The entire app lives in `index.html`. Firebase Firestore provides the database with real-time sync, and Firebase Cloud Messaging (FCM) handles push notification reminders.
