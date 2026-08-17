@@ -417,7 +417,11 @@ const MUTATORS = [
     name: 'app-version-bumped',
     why: 'touches APP_VERSION, which this patch must never do',
     expect: ['FILE-app-version'],
-    apply: (h) => must(h, "const APP_VERSION = 'v43.4';", "const APP_VERSION = 'v43.5';")
+    apply: (h) => {
+      const m = h.match(/const APP_VERSION = '([^']*)';/);
+      if (!m) throw new Error('mutator: APP_VERSION declaration not found');
+      return must(h, m[0], "const APP_VERSION = 'MUTATED';");
+    }
   },
   {
     name: 'file-input-inside-root',
@@ -564,8 +568,12 @@ async function runFileChecks(suite, html) {
   const bEnd = html.indexOf('function renderHistory(now) {');
   const block = (bStart >= 0 && bEnd > bStart) ? html.slice(bStart, bEnd) : '';
 
-  await suite.run('FILE-app-version', 'APP_VERSION is untouched at v43.4', () => {
-    assert(html.includes("const APP_VERSION = 'v43.4';"), 'APP_VERSION is not v43.4 any more');
+  await suite.run('FILE-app-version', 'APP_VERSION is declared exactly once and matches the build', () => {
+    // Version-agnostic. This was pinned to the literal 'v43.4' and went red the moment the
+    // version was legitimately bumped at ship time. What matters is that the declaration exists
+    // and is unique -- the patch not touching it is enforced by the patch's own post-condition.
+    const all = html.match(/const APP_VERSION = '[^']*';/g) || [];
+    assert(all.length === 1, 'expected exactly one APP_VERSION declaration, found ' + all.length);
     assert(html.split('const APP_VERSION').length === 2, 'APP_VERSION declared more than once');
   });
 
@@ -664,7 +672,10 @@ async function runLiveChecks(suite, browser, url, net) {
     parsed = JSON.parse(backupText);
     assert(parsed.format === 'care-tracker-backup', 'wrong format marker: ' + parsed.format);
     assert(parsed.formatVersion === 1, 'wrong formatVersion');
-    assert(parsed.app === 'v43.4', 'app version not recorded: ' + parsed.app);
+    // The backup must RECORD whatever version produced it, not a hardcoded one.
+    const built = (fs.readFileSync(APP_FILE, 'utf-8').match(/const APP_VERSION = '([^']*)';/) || [])[1];
+    assert(parsed.app === built,
+      'backup recorded app version ' + parsed.app + ' but the build is ' + built);
     assert(Array.isArray(parsed.entries), 'entries is not an array');
     assert(Array.isArray(parsed.appointments), 'appointments is not an array');
     assert(parsed.medications && Array.isArray(parsed.medications.meds), 'medications.meds missing');

@@ -237,21 +237,21 @@ function buildFixture(opts) {
   if (withReasons) {
     entries.push(
       // Superseded pair on one key: the older answer must vanish everywhere.
-      reasonDoc('protonix', at(DAY_SUPERSEDE, 0), 'Overnight', 'asleep', 'Was asleep', '', T0 - 90000, 'r-sup-old'),
-      reasonDoc('protonix', at(DAY_SUPERSEDE, 0), 'Overnight', 'nausea', 'Felt too nauseous', FX.NOTE_SAVED, T0 - 80000, 'r-sup-new'),
+      reasonDoc('protonix', at(DAY_SUPERSEDE, 0), 'Overnight', 'skipped', 'Skipped', '', T0 - 90000, 'r-sup-old'),
+      reasonDoc('protonix', at(DAY_SUPERSEDE, 0), 'Overnight', 'later', 'Took it later', FX.NOTE_SAVED, T0 - 80000, 'r-sup-new'),
       // Object.prototype id.
       reasonDoc('constructor', at(DAY_PROTO, 2), 'Night', 'unwell', 'Felt too unwell', '', T0 - 70000, 'r-proto'),
       // Recorded, then retracted by an append. Must read as no reason at all.
-      reasonDoc('protonix', at(DAY_REMOVED, 8), 'Morning', 'ranout', 'Ran out of it', 'gone by then', T0 - 60000, 'r-rem-old'),
+      reasonDoc('protonix', at(DAY_REMOVED, 8), 'Morning', 'later', 'Took it later', 'gone by then', T0 - 60000, 'r-rem-old'),
       reasonDoc('protonix', at(DAY_REMOVED, 8), 'Morning', '', '', '', T0 - 50000, 'r-rem-new'),
       // Attached to a window that a real dose later covered: the miss no longer exists, so this
       // must not surface in the UI or in the report.
-      reasonDoc('protonix', at(DAY_COVERED, 8), 'Morning', 'nausea', 'Felt too nauseous', FX.NOTE_ORPHAN, T0 - 40000, 'r-orphan'),
+      reasonDoc('protonix', at(DAY_COVERED, 8), 'Morning', 'later', 'Took it later', FX.NOTE_ORPHAN, T0 - 40000, 'r-orphan'),
       reasonDoc('protonix', at(DAY_LABEL, 0), 'Overnight', 'retired-id-from-an-older-build', 'constructor', '', T0 - 30000, 'r-label-proto'),
       // Junk shapes that a corrupted or half-written document could produce. None may throw.
-      { id: 'r-junk-1', medId: 'missed_reason', missMedId: '', missTs: at(DAY_SUPERSEDE, 0), reasonId: 'nausea', loggedAt: T0 },
-      { id: 'r-junk-2', medId: 'missed_reason', missMedId: 'protonix', missTs: 'not-a-number', reasonId: 'nausea', loggedAt: T0 },
-      { id: 'r-junk-3', medId: 'missed_reason', missMedId: 'protonix', missTs: 0, reasonId: 'nausea', loggedAt: T0 },
+      { id: 'r-junk-1', medId: 'missed_reason', missMedId: '', missTs: at(DAY_SUPERSEDE, 0), reasonId: 'later', loggedAt: T0 },
+      { id: 'r-junk-2', medId: 'missed_reason', missMedId: 'protonix', missTs: 'not-a-number', reasonId: 'later', loggedAt: T0 },
+      { id: 'r-junk-3', medId: 'missed_reason', missMedId: 'protonix', missTs: 0, reasonId: 'later', loggedAt: T0 },
       { id: 'r-junk-4', medId: 'missed_reason', loggedAt: T0 }
     );
   }
@@ -400,7 +400,7 @@ const MUTATORS = [
     name: 'judgmental-wording',
     why: 'restores the wording the design bar rules out — a verdict instead of a description',
     expect: ['COPY-no-judgment'],
-    apply: (h) => must(h, "  { id: 'time',    label: 'Lost track of the time' },", "  { id: 'time',    label: 'Forgot / careless' },")
+    apply: (h) => must(h, "  { id: 'later',   label: 'Took it later' },", "  { id: 'later',   label: 'Forgot / careless' },")
   }
 ];
 
@@ -564,27 +564,40 @@ async function rowReasonText(page, key) {
   });
 }
 
+// Selects the download this check actually asked for, by filename, instead of assuming the newest
+// one is it. Three buttons on the Save-a-copy card now produce three different file types.
+function pickDownload(downloads, before, pattern, what) {
+  const fresh = downloads.slice(before);
+  const hit = fresh.filter(d => pattern.test(String(d.name || d.file || ''))).pop();
+  assert(hit, 'no ' + what + ' download matched ' + pattern + '; got: ' +
+    JSON.stringify(fresh.map(d => d.name || d.file || '(unnamed)')));
+  assert(hit.file, what + ' download failed: ' + (hit.err || 'no file'));
+  return hit;
+}
+
 async function saveCSV(page, downloads) {
   await gotoReportsMenu(page);
   const before = downloads.length;
-  await tap(page, 'button:has-text("Save spreadsheet")');
+  await page.click('[data-backup-btn="csv"]');
   const deadline = Date.now() + 20000;
   while (downloads.length === before && Date.now() < deadline) await page.waitForTimeout(150);
   assert(downloads.length > before, 'no CSV download was produced');
-  const d = downloads[downloads.length - 1];
-  assert(d.file, 'CSV download failed: ' + (d.err || 'no file'));
+  // Pick by FILENAME, not "most recent". The backup/restore patch added a third download button to
+  // this same card, and taking downloads[last] silently handed this check the backup JSON -- which
+  // legitimately contains reason documents, so the leak assertions below failed against a file that
+  // was never the CSV. Selecting by extension makes the check test what it claims to test.
+  const d = pickDownload(downloads, before, /\.csv$/i, 'CSV');
   return fs.readFileSync(d.file);
 }
 
 async function saveReport(page, downloads) {
   await gotoReportsMenu(page);
   const before = downloads.length;
-  await tap(page, 'button:has-text("Save printable report")');
+  await page.click('[data-backup-btn="report"]');
   const deadline = Date.now() + 20000;
   while (downloads.length === before && Date.now() < deadline) await page.waitForTimeout(150);
   assert(downloads.length > before, 'no report download was produced');
-  const d = downloads[downloads.length - 1];
-  assert(d.file, 'report download failed: ' + (d.err || 'no file'));
+  const d = pickDownload(downloads, before, /\.html?$/i, 'printable report');
   return fs.readFileSync(d.file, 'utf-8');
 }
 
@@ -661,7 +674,7 @@ async function runChecks(html) {
       assert(!block.includes(word), 'judgmental wording in the reason list: "' + word + '"');
     }
     // And the list is actually the ported one, not an empty array that trivially passes.
-    for (const label of ['Felt too nauseous', 'Was asleep', 'Care team said to hold it', 'Something else']) {
+    for (const label of ['Took it later', 'Skipped']) {
       assert(block.includes(label), 'expected reason missing: ' + label);
     }
   });
@@ -702,9 +715,9 @@ async function runChecks(html) {
     await S.run('SUPERSEDE-newest-wins', 'the newest answer for a key wins and the older one vanishes', async () => {
       await gotoHistory(page);
       const txt = await rowReasonText(page, KEY_SUPERSEDE);
-      assert(txt === 'Felt too nauseous', 'expected the newer answer, got "' + txt + '"');
+      assert(txt === 'Took it later', 'expected the newer answer, got "' + txt + '"');
       const all = await page.$$eval('[data-mr-row-reason]', els => els.map(e => e.textContent.trim()));
-      assert(!all.includes('Was asleep'), 'the superseded answer is still on screen');
+      assert(!all.includes('Skipped'), 'the superseded answer is still on screen');
     });
 
     await S.run('NOTE-round-trips', 'a saved note is shown back on the row and in the sheet', async () => {
@@ -715,7 +728,7 @@ async function runChecks(html) {
       await openSheetFor(page, KEY_SUPERSEDE);
       const inSheet = await page.$eval('[data-mr-note-input]', el => el.value);
       assert(inSheet.includes('MRFIXTURE-note-kept-down-until-lunch'), 'the sheet did not reload the saved note');
-      const pressed = await page.$eval('[data-mr-chip="nausea"]', el => el.getAttribute('aria-pressed'));
+      const pressed = await page.$eval('[data-mr-chip="later"]', el => el.getAttribute('aria-pressed'));
       assert(pressed === 'true', 'the sheet did not reload the saved selection');
       await tap(page, '[data-mr-cancel]');
       await page.waitForSelector('[data-mr-sheet]', { state: 'detached' });
@@ -756,12 +769,12 @@ async function runChecks(html) {
       await gotoHistory(page);
       const before = await page.$$eval('[data-mr-row-reason]', els => els.length);
       await openSheetFor(page, KEY_UI);
-      await chooseAndSave(page, 'asleep', null);
+      await chooseAndSave(page, 'skipped', null);
       await page.waitForTimeout(400);
       const after = await page.$$eval('[data-mr-row-reason]', els => els.length);
       assert(after === before + 1, 'expected exactly one new reason chip, went from ' + before + ' to ' + after);
       const txt = await rowReasonText(page, KEY_UI);
-      assert(txt === 'Was asleep', 'the reason did not land on the row it was recorded against: "' + txt + '"');
+      assert(txt === 'Skipped', 'the reason did not land on the row it was recorded against: "' + txt + '"');
     });
 
     await S.run('APPEND-only-no-deletes', 'saving, changing and removing are all inserts', async () => {
@@ -769,9 +782,9 @@ async function runChecks(html) {
       await gotoHistory(page);
       // change the answer
       await openSheetFor(page, KEY_UI);
-      await chooseAndSave(page, 'ranout', null);
+      await chooseAndSave(page, 'later', null);
       await page.waitForTimeout(300);
-      assert(await rowReasonText(page, KEY_UI) === 'Ran out of it', 'changing the answer did not take effect');
+      assert(await rowReasonText(page, KEY_UI) === 'Took it later', 'changing the answer did not take effect');
       // remove it
       await openSheetFor(page, KEY_UI);
       await tap(page, '[data-mr-remove]');
@@ -785,7 +798,7 @@ async function runChecks(html) {
       assert(setToEntries.length === 0, 'an existing document was overwritten: ' + JSON.stringify(setToEntries));
       const adds = rec.addDoc.slice(rec0.addDoc.length).filter(a => a.data && a.data.medId === 'missed_reason');
       assert(adds.length === 2, 'expected 2 appends (change + remove), got ' + adds.length);
-      assert(adds[0].data.reasonId === 'ranout', 'the change append carried the wrong reason');
+      assert(adds[0].data.reasonId === 'later', 'the change append carried the wrong reason');
       assert(adds[1].data.reasonId === '', 'the removal append is not an empty answer');
       for (const a of adds) {
         assert(a.col === 'caretracker_entries', 'a reason was written to the wrong collection: ' + a.col);
@@ -827,7 +840,7 @@ async function runChecks(html) {
       assertGte(Math.round(rowBtn), 44, 'row reason button height');
       await openSheetFor(page, KEY_PROTO);
       const chips = await page.$$eval('[data-mr-chip]', els => els.map(e => e.getBoundingClientRect().height));
-      assert(chips.length === 9, 'expected 9 reason chips, found ' + chips.length);
+      assert(chips.length === 2, 'expected 2 reason chips (Aaron cut the list to the ChemoWell set), found ' + chips.length);
       chips.forEach((hgt, i) => assertGte(Math.round(hgt), 44, 'chip ' + i + ' height'));
       for (const sel of ['[data-mr-save]', '[data-mr-cancel]', '[data-mr-remove]']) {
         const el = await page.$(sel);
@@ -887,7 +900,7 @@ async function runChecks(html) {
 
     await S.run('A11Y-dialog-semantics', 'the sheet is a labelled modal dialog and the chips report their state', async () => {
       await gotoHistory(page);
-      await openSheetFor(page, KEY_PROTO);
+      await openSheetFor(page, KEY_SUPERSEDE);
       const attrs = await page.$eval('[data-mr-sheet]', el => ({
         role: el.getAttribute('role'), modal: el.getAttribute('aria-modal'), label: el.getAttribute('aria-label')
       }));
@@ -906,7 +919,7 @@ async function runChecks(html) {
       // Raise a toast first, so the 4.5s toast-clear repaint is armed and pending while the sheet
       // is open. This is the realistic sequence: save one reason, then immediately open the next.
       await openSheetFor(page, KEY_UI);
-      await chooseAndSave(page, 'asleep', null);
+      await chooseAndSave(page, 'skipped', null);
       await page.waitForTimeout(250);
       await openSheetFor(page, KEY_SUPERSEDE);
       await page.evaluate(() => {
@@ -981,7 +994,7 @@ async function runChecks(html) {
       await gotoHistory(page);
       await openSheetFor(page, KEY_UI);
       await page.evaluate(() => globalThis.__mrStub.failNextAdd());
-      await tap(page, '[data-mr-chip="nausea"]');
+      await tap(page, '[data-mr-chip="later"]');
       await tap(page, '[data-mr-save]');
       await page.waitForSelector('[data-mr-error]', { timeout: 8000 });
       const msg = await page.$eval('[data-mr-error]', el => el.textContent);
@@ -991,7 +1004,7 @@ async function runChecks(html) {
       await tap(page, '[data-mr-save]');
       await page.waitForSelector('[data-mr-sheet]', { state: 'detached', timeout: 8000 });
       await page.waitForTimeout(300);
-      assert(await rowReasonText(page, KEY_UI) === 'Felt too nauseous', 'the retry did not save');
+      assert(await rowReasonText(page, KEY_UI) === 'Took it later', 'the retry did not save');
       await openSheetFor(page, KEY_UI);
       await tap(page, '[data-mr-remove]');
       await page.waitForSelector('[data-mr-sheet]', { state: 'detached', timeout: 8000 });
@@ -1003,7 +1016,7 @@ async function runChecks(html) {
       assert(await page.$('[data-mr-missed-row="' + key + '"]') !== null, 'fixture row missing: ' + key);
       await page.evaluate(({ k, ts, t0 }) => {
         globalThis.__mrStub.push({ medId: 'missed_reason', missMedId: 'protonix', missTs: ts,
-          missWindow: 'Overnight', reasonId: 'held', reasonLabel: 'Care team said to hold it',
+          missWindow: 'Overnight', reasonId: 'held', reasonLabel: 'Care team said to hold it', // deleted id: exercises mrLabelFor's stored-label fallback
           note: '', ts: ts, mg: 0, dose: 'Missed-dose reason', loggedAt: t0 });
       }, { k: key, ts: at(backDays(11), 0), t0: Date.now() });
       await page.waitForTimeout(600);
@@ -1015,11 +1028,11 @@ async function runChecks(html) {
       const doc = await saveReport(page, downloads);
       assert(doc.includes('Scheduled doses with nothing logged'), 'the calculated missed section is missing');
       assert(doc.includes('recorded about these'), 'the reasons subsection is missing from the report');
-      assert(doc.includes('Felt too nauseous'), 'a recorded reason is missing from the report');
+      assert(doc.includes('Took it later'), 'a recorded reason is missing from the report');
       assert(doc.includes('Felt too unwell'), 'the Object.prototype-id reason is missing from the report');
       assert(/<td>constructor<\/td>/.test(doc), 'the Object.prototype-named label is missing from the report grouping');
       assert(doc.includes('MRFIXTURE-note-kept-down-until-lunch'), 'the note is missing from the report');
-      assert(!doc.includes('Was asleep'), 'a superseded reason reached the report');
+      assert(!doc.includes('Skipped'), 'a superseded reason reached the report');
       assert(!doc.includes('Ran out of it'), 'a retracted reason reached the report');
       assert(!doc.includes('MRFIXTURE-orphan-must-not-render'), 'an orphaned reason reached the report');
       // Ordering: reasons sit UNDER the calculated table, not above the daily log.
@@ -1034,7 +1047,7 @@ async function runChecks(html) {
       assert(!doc.includes('Missed-dose reason'), 'a reason document printed as a log row');
       assert(!doc.includes('missed_reason'), 'the reason medId leaked into the report');
       const daily = doc.slice(doc.indexOf('Daily log'), doc.indexOf('Scheduled doses with nothing logged'));
-      assert(!daily.includes('Felt too nauseous'), 'a reason leaked into the daily log table');
+      assert(!daily.includes('Took it later'), 'a reason leaked into the daily log table');
     });
 
     await S.run('CSV-no-reason-strings', 'the CSV contains no reason document and no reason wording', async () => {
@@ -1042,7 +1055,7 @@ async function runChecks(html) {
       assert(csv.includes('Med ID'), 'the CSV header is missing — the export did not run');
       assert(!csv.includes('missed_reason'), 'the reason medId is in the CSV');
       assert(!csv.includes('Missed-dose reason'), 'a reason document is in the CSV');
-      for (const one of ['Felt too nauseous', 'Felt too unwell', 'MRFIXTURE-note-kept-down-until-lunch']) {
+      for (const one of ['Took it later', 'Felt too unwell', 'MRFIXTURE-note-kept-down-until-lunch']) {
         assert(!csv.includes(one), 'reason wording leaked into the CSV: ' + one);
       }
     });
