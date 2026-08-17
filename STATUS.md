@@ -1,7 +1,34 @@
 # care-tracker — STATUS
 
+DISPATCH: IDLE
+
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
+
+---
+
+## THE DISPATCH FLAG — read this before changing the line above
+
+The `DISPATCH:` line on line 3 controls whether Aaron gets status pings. He does not want
+to be notified when nothing is being worked on.
+
+- **`DISPATCH: IDLE`** — no active build. Dispatch must report NOTHING and send no
+  notification. Silence is the correct outcome.
+- **`DISPATCH: ACTIVE`** — a build is genuinely in progress. Dispatch reports every 30 min
+  and raises a stall warning if the newest commit is more than 90 minutes old.
+
+There are two independent layers, and BOTH must be switched on for Aaron to hear anything:
+
+1. **The scheduled tasks themselves.** Two of them, offset 30 minutes apart
+   (`trig_01A4vopDhe7gpm9xGXwz1v9f` at :22 and `trig_014Wx8yagUcAtxTqKCPVQH2w` at :52).
+   They are DISABLED by default and must be explicitly enabled when work starts.
+2. **This flag.** Even if the tasks are enabled, `IDLE` makes them stay silent.
+
+**Whoever starts a build owns both switches.** Set the flag to `ACTIVE` and enable the two
+tasks when work begins; set it back to `IDLE` and disable them the moment work stops or
+finishes. Leaving it `ACTIVE` after a build ends means Aaron gets pinged about nothing every
+30 minutes, which is exactly the failure this design exists to prevent. If you are unsure
+whether work counts as "active," the answer is `IDLE`.
 
 ---
 
