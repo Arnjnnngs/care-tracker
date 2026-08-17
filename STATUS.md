@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: IDLE
+DISPATCH: ACTIVE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -96,7 +96,27 @@ Shipped in the v43.x line, all live and verified:
 | Backup / restore + appointments | **Not yet rebuilt** | — |
 | Concurrent-edit notice | **Not yet rebuilt** | — |
 | Guided tour | **Not yet rebuilt** | — |
+| Deactivated meds still showing (LIVE BUG) | **In progress** | Reported by Aaron |
+| Missed-dose reason picker (port) | **In progress** | Requested by Aaron |
 | Merge + full audit + push | **Not started** | — |
+
+---
+
+## LIVE BUG — REPORTED BY AARON, NOT YET FIXED
+
+**Deactivated medications still show a card on the Home screen.**
+Aaron deactivated Imodium in the medications section and its card is still on Home.
+This is live on the phones right now.
+
+Why it matters beyond the clutter: if the Home card is still rendering for a deactivated
+medication, the deactivation is not being honoured everywhere. The things to check are
+whether that medication is still counted in missed-dose calculations, still generating
+reminders via `send-reminders.js`, and still appearing in the CSV export and the printable
+oncologist report. A deactivated drug appearing in a report handed to an oncologist is a
+clinical-communication problem, not a cosmetic one.
+
+Must be checked for EVERY medication, not just Imodium — Aaron flagged it on one and asked
+for the rest to be verified.
 
 ---
 
