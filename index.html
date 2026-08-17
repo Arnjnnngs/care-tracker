@@ -263,7 +263,7 @@ function persistMedicationConfig(meds, archivedMeds) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v43.3';
+const APP_VERSION = 'v43.4';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -307,6 +307,21 @@ function isEarlyAt(med, ts) {
   return ts < d0 + med.windows[0].start * 3600000;
 }
 function usedRecently(id) { return entriesFor(id).some(e => e.ts >= state.now - 7 * 86400000); }
+// Is this medication still on the ACTIVE list? state.meds IS the active list: removing a
+// medication in the Meds section takes it out of state.meds and records it in
+// state.archivedMeds, so membership here is exactly the deactivation flag.
+//
+// Deliberately NOT `quickLog`. quickLog is false for every medication folded into the grouped
+// Morning/Evening cards -- Iron, Compazine, Buspirone and Paroxetine all ship that way and are
+// fully active drugs. Gating a daily-ceiling meter on quickLog would remove the acetaminophen
+// overdose guard from anyone who grouped Tylenol. Active-list membership is the only flag that
+// means "stop tracking this going forward".
+//
+// An array .some() and not a prebuilt {} of ids on purpose: a plain object inherits
+// Object.prototype, so obj['constructor'] is truthy on an EMPTY map and a medication whose id
+// normalises to 'constructor' would read as active forever. There is no lookup object to
+// poison here.
+function medIsOnActiveList(id) { return !!id && (state.meds || []).some(m => m && m.id === id); }
 function dailyDoseMg(medId) { const c = dayStart(state.now); return entriesFor(medId).filter(e => e.ts >= c).reduce((sum, entry) => sum + (entry.mg || 0), 0); }
 // Rolling-window mg sum (e.g. Morphine's 15 mg per any trailing 4 hours) — unlike dailyDoseMg this
 // does NOT reset at midnight; it only counts doses within windowH hours of `now`, so a dose "ages
@@ -455,7 +470,7 @@ function fmtCountdown(ms) {
   if (m >= 1) { if (m < 5) { const s = Math.floor((ms % 60000) / 1000); return m + 'm ' + s + 's'; } return m + 'm'; }
   return Math.max(1, Math.floor(ms / 1000)) + 's';
 }
-function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'chemo_date') return 'Chemo treatment'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); const archived = state.archivedMeds && state.archivedMeds[id]; return m ? m.name : (archived ? archived.name : id); }
+function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'chemo_date') return 'Chemo treatment'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); /* hasOwnProperty, not a bare index: state.archivedMeds is a plain object, so archivedMeds['constructor'] resolves to Object.prototype.constructor even when the map is EMPTY and this returned the literal string "Object" as a medication name. */ const archived = (state.archivedMeds && Object.prototype.hasOwnProperty.call(state.archivedMeds, id)) ? state.archivedMeds[id] : null; return m ? m.name : (archived ? archived.name : id); }
 function nowLocalISO() { return toLocalISO(simNow()); }
 function toLocalISO(ts) {
   const d = new Date(ts);
@@ -1625,8 +1640,12 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   const lastWeight = latest('weight');
   const weightSubLabel = lastWeight ? ('Last reading ' + fmtTime(lastWeight.ts)) : 'No readings yet';
 
-  // Acetaminophen meter (full width) — shown only when Tylenol used in last 7 days
-  if (usedRecently('tylenol')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  // Acetaminophen meter (full width) — shown only when Tylenol is still on the active
+  // medication list AND was used in the last 7 days. The active-list check is what makes a
+  // removal in the Meds section actually take effect here: usedRecently() reads logged
+  // entries only and never consulted the medication config, so before this the card outlived
+  // the medication by 7 days no matter what the Meds section said.
+  if (medIsOnActiveList('tylenol') && usedRecently('tylenol')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Acetaminophen · today'),
@@ -1642,12 +1661,13 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     )
   ));
 
-  // Imodium pill counter
+  // Imodium pill counter — active list first, then recent use. See the Acetaminophen meter
+  // above: this is the card Aaron reported as surviving a deactivation.
   const imoPills = dailyPills('imodium');
   const imoMax = 4;
   const imoPct = Math.min(100, imoPills / imoMax * 100);
   const imoColor = imoPills >= imoMax ? '#C0453B' : imoPills >= 3 ? '#9A6419' : '#AA5375';
-  if (usedRecently('imodium')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  if (medIsOnActiveList('imodium') && usedRecently('imodium')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Imodium · today'),
@@ -1663,12 +1683,13 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     )
   ));
 
-  // Lidocaine application counter — shown only when used in last 7 days
+  // Lidocaine application counter — shown only while Lidocaine is still on the active
+  // medication list AND was used in the last 7 days.
   const lidoApps = dailyPills('lidocaine');
   const lidoMax = 4;
   const lidoPct = Math.min(100, lidoApps / lidoMax * 100);
   const lidoColor = lidoApps >= lidoMax ? '#C0453B' : lidoApps >= 3 ? '#9A6419' : '#AA5375';
-  if (usedRecently('lidocaine')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  if (medIsOnActiveList('lidocaine') && usedRecently('lidocaine')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Lidocaine · today'),
@@ -2397,7 +2418,10 @@ function exportSortTs(e) {
 
 function reportNameOf(id) {
   if (!id) return '';
-  const known = (state.meds || []).some(m => m.id === id) || !!(state.archivedMeds && state.archivedMeds[id]);
+  // hasOwnProperty, not a bare index -- see nameOf(). A bare index made every id that is also
+  // an Object.prototype key read as "known", which suppressed the "Medication (removed)"
+  // label in the document handed to an oncologist.
+  const known = (state.meds || []).some(m => m.id === id) || !!(state.archivedMeds && Object.prototype.hasOwnProperty.call(state.archivedMeds, id));
   const n = nameOf(id);
   return (!known && n === id) ? 'Medication (removed)' : n;
 }

@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v43.3 |
-| **Commit** | `87e89bb` |
+| **Version** | v43.4 |
+| **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `8136b7764f07865171c180212a4d5b09` |
-| **sw.js md5** | `99793ea11f22c6a3129cbc113337373a` |
+| **index.html md5** | `520a150aa4ef7d6a0bda5b3843355e62` |
+| **sw.js md5** | `504181487e25c557b7f3b29769844d8d` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -79,13 +79,20 @@ Shipped in the v43.x line, all live and verified:
   symptom logger, and medication editor. The medication editor was the serious one:
   correcting a wrongly-displayed schedule type silently disabled that medication's
   missed-dose alerts while the app reported success.
+- v43.4 — deactivated medications no longer leave a card on Home. Reported by Aaron
+  (Imodium). Root cause: three hardcoded Home counter cards (Acetaminophen, Imodium,
+  Lidocaine) were gated on `usedRecently(id)`, which reads logged entries and never
+  consulted the medication config at all. Also fixed a latent `Object.prototype`
+  fall-through that could print the literal string "Object" as a medication name in the
+  printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
 
 ---
 
 ## IN FLIGHT — v44
 
-**Not live. Not on `main`'s `index.html`.** Only patches, tests and reports are pushed.
-`index.html` on `main` is still v43.3 and will stay there until the audit signs off.
+**Not live.** For the v44 feature set, only patches, tests and reports are on `main` —
+`index.html` does not carry them and will not until the full audit signs off.
+(`index.html` on `main` IS at v43.4, which is the shipped live bug fix, not v44.)
 
 | Feature | State | Evidence |
 |---|---|---|
@@ -96,27 +103,67 @@ Shipped in the v43.x line, all live and verified:
 | Backup / restore + appointments | **Not yet rebuilt** | — |
 | Concurrent-edit notice | **Not yet rebuilt** | — |
 | Guided tour | **Not yet rebuilt** | — |
-| Deactivated meds still showing (LIVE BUG) | **In progress** | Reported by Aaron |
-| Missed-dose reason picker (port) | **In progress** | Requested by Aaron |
+| Deactivated meds still showing (LIVE BUG) | **SHIPPED v43.4** | 34/34 checks, 13/13 falsified |
+| Missed-dose reason picker | **Built, needs Aaron's call** | 41/41 checks, 18 falsified — see note below |
 | Merge + full audit + push | **Not started** | — |
 
 ---
 
-## LIVE BUG — REPORTED BY AARON, NOT YET FIXED
+## THE DEACTIVATED-MEDICATION BUG — FIXED IN v43.4
 
-**Deactivated medications still show a card on the Home screen.**
-Aaron deactivated Imodium in the medications section and its card is still on Home.
-This is live on the phones right now.
+**Root cause:** three hardcoded Home "daily limit" counter cards — Acetaminophen, Imodium,
+Lidocaine — were gated on `usedRecently(id)` and nothing else. `usedRecently()` reads
+*logged entries*; it never touched `state.meds`. So the card appeared because a dose was
+logged in the last 7 days and kept appearing for 7 days after the last dose, regardless of
+what the Meds section said. The Quick Log grid 95 lines below was always correct, which is
+why it looked half-broken.
 
-Why it matters beyond the clutter: if the Home card is still rendering for a deactivated
-medication, the deactivation is not being honoured everywhere. The things to check are
-whether that medication is still counted in missed-dose calculations, still generating
-reminders via `send-reminders.js`, and still appearing in the CSV export and the printable
-oncologist report. A deactivated drug appearing in a report handed to an oncologist is a
-clinical-communication problem, not a cosmetic one.
+**Exactly 3 medications were affected:** Tylenol, Imodium, Lidocaine. Trigger is being one
+of those three AND having a dose logged within the rolling 7 days. The 7-day window is why
+it looked intermittent — deactivate after a quiet fortnight and nothing looks wrong at all.
 
-Must be checked for EVERY medication, not just Imodium — Aaron flagged it on one and asked
-for the rest to be verified.
+**Aaron does NOT need to re-do the deactivation.** Both removal paths were driven through the
+real UI; both wrote to localStorage correctly and survived a reload. It was purely a
+read-side bug. Two things he does need to know: the **trash icon**, not the "Show as its own
+Home card" toggle, is what takes a medication off the active list; and medication config is
+still per-device, so it must be done on each phone.
+
+**18 consumers were audited.** Missed-dose calc, missed-dose banner, CSV, all three sections
+of the printable report, Quick Log, grouped cards, the in-app scheduler, History and the
+day-summary aggregates were all already correct and verified not regressed. Past logged
+doses of a removed medication are deliberately PRESERVED everywhere — deactivating means
+"stop tracking it going forward", never "erase that she took it."
+
+---
+
+## KNOWN LEAK — `send-reminders.js` ignores deactivation
+
+Confirmed and deliberately NOT fixed in v43.4. `send-reminders.js` runs in GitHub Actions and
+cannot read a device-local localStorage config; every reminder is a hardcoded literal.
+Deactivating Iron, Compazine, Protonix, Buspirone or Paroxetine still sends a push.
+
+The only real fix is syncing medication config to Firestore. That is a design change, not a
+hotfix, and it carries a worse failure mode than the bug: with two phones already able to
+disagree about her medication list, a sync bug could **silence a reminder for a drug she is
+still taking**. An extra notification is strictly safer than a missing one. The test
+`KNOWN-LEAK-send-reminders` pins this state so nobody can later assume it is covered.
+
+---
+
+## NEEDS AARON'S CALL — the missed-dose reason picker
+
+**ChemoWell does not have a missed-dose reason picker.** All 733 KB of its `index.html`, its
+docs, and its full git history were searched. ChemoWell's missed doses offer three buttons —
+Took later / Skipped / Clear — and none records a reason.
+
+What ChemoWell *does* have is an optional **"Reason for change" picker on a WEIGHT log**
+(`WEIGHT_REASONS`, added in app-v21, source comment: "per Aaron's request"). That is almost
+certainly what Aaron was remembering.
+
+So what was built is the *interaction pattern* ported to missed doses — a new feature, not a
+literal port. It is complete and tested (41/41 checks, 18 falsifications) but it is bigger
+than what Aaron asked for, and he should decide whether he wants it, or only the literal
+weight-reason picker, before it ships.
 
 ---
 
