@@ -26,9 +26,38 @@ There are two independent layers, and BOTH must be switched on for Aaron to hear
 
 **Whoever starts a build owns both switches.** Set the flag to `ACTIVE` and enable the two
 tasks when work begins; set it back to `IDLE` and disable them the moment work stops or
-finishes. Leaving it `ACTIVE` after a build ends means Aaron gets pinged about nothing every
-30 minutes, which is exactly the failure this design exists to prevent. If you are unsure
-whether work counts as "active," the answer is `IDLE`.
+finishes. If you are unsure whether work counts as "active," the answer is `IDLE`.
+
+### The switch must not depend on anyone's memory
+
+Aaron raised this directly: the Lead Developer has a track record of skipping the
+durability step under time pressure — four finished features were lost by not pushing
+them, and the 10-minute check-in rule was written and then broken by its own author.
+A switch that relies on remembering to flip it back is aimed straight at that weakness.
+
+So the design fails SAFE — every failure mode ends in silence, not spam:
+
+- Flag missing or unreadable → dispatch treats it as IDLE and says nothing.
+- Repo unreachable → dispatch says nothing.
+- **Flag left `ACTIVE` by mistake → auto-expires.** If the flag says `ACTIVE` but the newest
+  commit is more than **4 hours** old, dispatch assumes it was abandoned, goes quiet, and
+  stops notifying. Forgetting to flip it back costs Aaron at most a few hours, not forever.
+- Between 90 minutes and 4 hours with no new commit, dispatch raises a stall warning —
+  that window is real work that may be stuck, which is the whole point of the system.
+
+### MANDATORY — announce every start and every finish
+
+**Aaron's standing instruction, regardless of whether dispatch is ACTIVE or IDLE:**
+tell him directly when work STARTS and when it FINISHES. Do not rely on dispatch for this.
+Dispatch is a safety net for silence; it is not the reporting channel.
+
+Every start/finish message must state:
+1. What is starting or finishing
+2. The dispatch state at that moment — **ACTIVE or IDLE** — said explicitly
+3. On finish: the commit hash that was pushed, and what is next
+
+This is not optional and it is not satisfied by a dispatch ping. If Aaron learns that work
+started or ended from anywhere other than a direct message, that is a miss.
 
 ---
 
