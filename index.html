@@ -90,9 +90,23 @@ if (messaging) {
 function subscribeEntries(callback) {
   const q = query(col, orderBy("ts", "asc"));
   return onSnapshot(q, (snap) => {
-    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const mrRaw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Missed-dose reasons are notes ABOUT a non-event, not doses.  They are split out of
+    // state.entries here — before anything downstream can see them — exactly the way chemo_date is
+    // split out on the next line.  That is what keeps them out of every dose count, out of the
+    // daily log, out of the printable report's entry tables and out of the CSV BY CONSTRUCTION,
+    // rather than by a dozen call sites each remembering to filter.  allExportEntries() is
+    // entries + chemoDates and this patch deliberately does not change it.
+    state.missReasons = mrResolveReasons(mrRaw);
+    const all = mrRaw.filter((e) => !e || e.medId !== MR_MED_ID);
     state.chemoDates = all.filter(e => e.medId === 'chemo_date');
-    callback(all.filter(e => e.medId !== 'chemo_date'));
+    // Appointments are scheduling records, not doses. They are split out of state.entries exactly
+    // the way chemo_date is, one line above, so that every dose calculation, every report, the CSV
+    // and the printable record all keep ignoring them BY CONSTRUCTION rather than by each one
+    // remembering to filter. allExportEntries() is entries+chemoDates and is deliberately left
+    // untouched: an appointment is not a dose and has no place in a clinical hand-off.
+    state.appointments = calResolveAppointments(all.filter(e => e.medId === CAL_APPT_MED_ID));
+    callback(all.filter(e => e.medId !== 'chemo_date' && e.medId !== CAL_APPT_MED_ID));
   });
 }
 async function addEntryDB(entry) { await addDoc(col, entry); }
@@ -263,11 +277,11 @@ function persistMedicationConfig(meds, archivedMeds) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v43.4';
+const APP_VERSION = 'v44';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, demo: false, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, confirmClearChemo: false, exporting: false };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -588,7 +602,14 @@ function status(med) {
 function setToast(msg) {
   setState({ toast: msg });
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => setState({ toast: null }), 4500);
+  // A toast clears itself by repainting, and render() rebuilds the whole tree — so a toast raised
+  // just before the reason sheet was opened can destroy that sheet mid-tap. The clear is DEFERRED,
+  // not cancelled: it re-arms every 600ms and fires the moment the sheet closes, so the toast still
+  // goes away on its own and no state is left stuck.
+  toastTimer = setTimeout(function mrClearToast() {
+    if (state.missReasonSheet) { toastTimer = setTimeout(mrClearToast, 600); return; }
+    setState({ toast: null });
+  }, 4500);
 }
 
 function afterLog(entry) {
@@ -743,27 +764,6 @@ async function removeEntry(id) {
 }
 
 // clearAll removed - history must be preserved
-
-// Seed demo data
-async function seedDemo() {
-  const n = simNow(), H = 3600000, d0 = dayStart(n);
-  const y = d0 - 24 * H;
-  const seeds = [
-    { medId: 'tylenol', dose: '500 mg', mg: 500, ts: y + 9 * H },
-    { medId: 'temp', temp: 100.9, dose: '100.9 °F', mg: 0, ts: y + 9 * H },
-    { medId: 'zofran', dose: null, mg: 0, ts: y + 13 * H },
-    { medId: 'protonix', dose: null, mg: 0, ts: y + 19 * H },
-    { medId: 'tylenol', dose: '1000 mg', mg: 1000, ts: n - 2 * H },
-    { medId: 'tylenol', dose: '500 mg', mg: 500, ts: n - 6.5 * H },
-    { medId: 'zofran', dose: null, mg: 0, ts: n - 3.2 * H },
-    { medId: 'morphine', dose: 'Full · 15 mg', mg: 15, ts: n - 1.1 * H },
-    { medId: 'protonix', dose: null, mg: 0, ts: d0 + 8 * H },
-    { medId: 'iron', dose: null, mg: 0, ts: n - 5 * H },
-    { medId: 'temp', temp: 99.8, dose: '99.8 °F', mg: 0, ts: n - 1.5 * H },
-  ].filter(e => e.ts <= n);
-  for (const s of seeds) await addEntryDB(s);
-  setState({ demo: true });
-}
 
 // Lock SVG
 const lockSVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7D6974" stroke-width="2.4"><rect x="4" y="10.5" width="16" height="10" rx="2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg>';
@@ -1121,6 +1121,10 @@ function svgIcon(name, size) {
   const iconSize = size || 22;
   const common = 'width="' + iconSize + '" height="' + iconSize + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
   const paths = {
+    // Deliberately the mirror of `download` (same tray, arrow reversed) rather than a new shape:
+    // save-a-copy and put-a-copy-back are one pair and read as one pair. Distinct from `history`,
+    // which is already the Daily-log report card.
+    bkRestore: '<path d="M12 14V3"/><path d="m7.5 7 4.5-4.5 4.5 4.5"/><path d="M4 16v3.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V16"/>',
     heart: '<path d="M20.8 4.8a5.4 5.4 0 0 0-7.6 0L12 6l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.6a5.4 5.4 0 0 0 0-7.6Z"/>',
     home: '<path d="m3 10.5 9-7 9 7"/><path d="M5.5 9.7V20h13V9.7"/><path d="M9.5 20v-6h5v6"/>',
     pill: '<path d="M10.5 4.5 4.8 10.2a4.2 4.2 0 0 0 5.9 5.9l5.7-5.7a4.2 4.2 0 0 0-5.9-5.9Z"/><path d="m7.8 7.2 5 5"/>',
@@ -1136,7 +1140,13 @@ function svgIcon(name, size) {
     notes: '<path d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M14 4v3h4"/><path d="M8 12h8"/><path d="M8 16h5"/>',
     // v43.1: the save-a-copy card used `notes`, which is the same glyph as the Appetite report card
     // directly above it and the Symptoms nav tab below it. A tray-with-down-arrow is unique here.
-    download: '<path d="M12 3v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M4 16v3.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V16"/>'
+    download: '<path d="M12 3v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M4 16v3.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V16"/>',
+    // Calendar patch. Namespaced cal* on purpose: plain `menu`, `calendar`, `close`, `gear` and
+    // `help` are the obvious names, which is exactly why two patches reach for them and one wins
+    // silently -- a duplicate object key is legal JavaScript with no error and no warning.
+    calMenu: '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
+    calMonth: '<path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="M4 10h16"/><path d="M9 3v4"/><path d="M15 3v4"/>',
+    calClose: '<path d="m6 6 12 12"/><path d="m18 6-12 12"/>'
   };
   return '<svg ' + common + '>' + (paths[name] || paths.home) + '</svg>';
 }
@@ -1162,6 +1172,9 @@ function renderHeader(now) {
   const dateLabel = new Date(now).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
   return h('header', { style: { position: 'sticky', top: '0', zIndex: '20', background: 'rgba(255,240,243,0.88)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderBottom: '1px solid rgba(212,104,138,0.16)', padding: '12px 16px', boxShadow: '0 4px 22px rgba(180,130,150,0.10)' } },
     h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px' } },
+      // The only route to the Calendar. 44x44 exactly -- it is the smallest control on the busiest
+      // screen and it is hit one-handed while holding something else.
+      h('button', { 'data-cal-menu-button': 'true', type: 'button', onClick: calOpenDrawer, 'aria-label': 'Open menu', 'aria-expanded': state.drawerOpen ? 'true' : 'false', style: { flexShrink: '0', width: '44px', height: '44px', borderRadius: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.12)', color: '#AA5375' } }, appIcon('calMenu', 21)),
       h('div', { style: { minWidth: '0', flex: '1' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '7px', color: '#AA5375', marginBottom: '4px' } },
           appIcon('heart', 18),
@@ -1260,6 +1273,7 @@ function renderContent(now, mg, pct, tyColor, ceiling) {
   if (state.view === 'reports') return state.reportsView ? renderReportDetail(state.reportsView, now) : renderReportsMenu(now);
   if (state.view === 'inpatient') return renderInPatient(now);
   if (state.view === 'symptoms') return renderSymptoms(now);
+  if (state.view === 'calendar') return renderCalendarView(now);
   return [...renderToday(now, mg, pct, tyColor, ceiling)];
 }
 
@@ -1279,9 +1293,12 @@ function render() {
     h('main', { style: { position: 'relative', zIndex: '1', maxWidth: '720px', margin: '0 auto', padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: '18px' } }, ...renderContent(now, mg, pct, tyColor, ceiling)),
     state.toast ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'fixed', bottom: 'calc(96px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '18px', fontSize: '14px', fontWeight: '600', lineHeight: '1.35', boxShadow: '0 10px 28px rgba(120,60,90,0.2), 0 0 0 1px rgba(255,255,255,0.3)', zIndex: '50', maxWidth: 'calc(100vw - 32px)', width: 'max-content', textAlign: 'center', whiteSpace: 'normal', overflowWrap: 'anywhere' } }, state.toast) : null,
     renderTimeModal(),
+    renderCalDrawer(),
+    renderApptSheet(),
     (state.view === 'reports' && state.reportsView) ? h('div', { style: { position: 'fixed', zIndex: '34', left: '0', right: '0', bottom: 'calc(78px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', pointerEvents: 'none' } },
       h('button', { onClick: () => setState({ reportsView: null }), style: { pointerEvents: 'auto', minHeight: '42px', padding: '0 18px', borderRadius: '99px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '800', boxShadow: '0 10px 28px rgba(120,60,90,0.22)' } }, '↩ Back')
     ) : null,
+    renderMissReasonSheet(),
     renderBottomNav(),
     !state.loaded ? h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(255,240,243,0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '100' } },
       h('div', { style: { textAlign: 'center' } },
@@ -1353,17 +1370,371 @@ function renderTimeModal() {
   );
 }
 
-function missedRow(e, i) {
-  return h('div', { onClick: () => logMissedDose(e), style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: i > 0 ? '1px solid rgba(192,69,59,0.2)' : 'none', background: 'rgba(192,69,59,0.10)', borderLeft: '4px solid #C0453B', cursor: 'pointer' } },
-    h('div', { className: 'mono', style: { fontSize: '13px', color: '#C0453B', fontWeight: '700', minWidth: '66px' } }, fmtTime(e.ts)),
-    h('div', { style: { flex: '1' } },
-      h('div', { style: { fontSize: '15px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', color: '#C0453B' } },
-        nameOf(e.medId),
-        h('span', { style: { fontSize: '10.5px', fontWeight: '800', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#fff', background: '#C0453B', borderRadius: '6px', padding: '2px 7px' } }, 'Missed')
+// =================================================================================================
+// MISSED-DOSE REASONS   (the ChemoWell "Reason for change" interaction, attached to missed doses)
+//
+// WHAT WAS PORTED.  ChemoWell has no missed-dose reason picker — its missed doses are resolved with
+// "Took later", "Skipped" and "Clear", and none of the three records why.  What it does have is the
+// optional "Reason for change" quick-select on a WEIGHT log: a short tap-to-pick list that can
+// always be skipped, stored on the record, shown back in History and summarised in the Weight
+// report.  That is the interaction being ported.  The list of reasons is new — ChemoWell's is about
+// fluid and appetite — and the wording is argued line by line in REASON-REPORT.md.
+//
+// WHAT A REASON IS ATTACHED TO.  A missed dose in care-tracker is not a document.  missedDosesFor()
+// recomputes it from the medication schedule on every single render, so there is no id to hang a
+// reason from.  Identity here is `medication id + window-start timestamp` — the exact pair the miss
+// object already carries and the banner already prints.  It is stable across re-derivation because
+// the window start is dayStart(day) + startHour: a pure function of the day and the saved schedule.
+// The consequences, stated here rather than discovered later:
+//   * Change a window's START HOUR in the medication editor and reasons recorded against the old
+//     window stop matching.  That is correct — the window they described no longer exists.
+//   * RENAME a window and the reason survives, because the name is not part of the key.  Renaming
+//     is common; re-timing is not.  That is the trade the key is making.
+//   * Two windows on one medication that start at the same hour share one key.  They are already
+//     indistinguishable to the banner and to the CSV, and one reason covering both is the
+//     least-wrong answer available.
+//   * Log the dose late, the window becomes covered, the miss disappears — and the reason goes with
+//     it, because a reason is only ever read through a currently-derived miss.  The document stays
+//     in Firestore (nothing here deletes anything) and reappears if the miss ever does.
+//
+// WHY EVERY CHANGE IS AN INSERT.  This project's Firestore rules are append-only: existing documents
+// cannot be edited, and deletes are refused after 48 hours.  So changing an answer APPENDS a new
+// document for the same key and the newest loggedAt wins (mrSupersedes); removing an answer APPENDS
+// one with an empty reasonId.  Nothing in this block calls updateDoc, setDoc or deleteDoc.  People
+// mis-tap, and a mis-tap must be fixable on a screen where nothing can be un-said.
+//
+// WHY IT IS NOT IN THE CSV.  Reason documents are removed from state.entries the moment they arrive
+// (see subscribeEntries), so allExportEntries() — and therefore the CSV — never sees one, and the
+// export's byte format is untouched.  That is deliberate and it is a trade-off, stated loudly in
+// REASON-REPORT.md: the CSV is the backup, and reasons are currently not in it.
+//
+// TONE.  Recording a reason is optional everywhere and blocks nothing.  There is no prompt, no
+// badge, no count, no red, no "1 of 3 explained" and no unfinished-business styling anywhere in
+// this block.  The only way to reach it is to deliberately tap one quiet button on a missed row.  A
+// patient on chemotherapy does not have to justify a missed dose to use her own app.
+// =================================================================================================
+
+// Its own medId namespace inside caretracker_entries.  A NEW collection was the tidier option and
+// was rejected: the published security rules match named collections, and a client write to an
+// unmatched path is refused — the feature would fail silently on the live build and work perfectly
+// in every harness.  It must never be a real medication's id: missedDosesFor() counts any same-day
+// entry under a medication's own id as covering a window, so a reason filed under 'protonix' would
+// erase the very miss it describes.
+const MR_MED_ID = 'missed_reason';
+const MR_NOTE_MAX = 140;
+
+// THE WORDING.  Two options, matching ChemoWell exactly, per Aaron's explicit decision:
+// "took later, skipped and clear are the reasons".  Clear is not a third chip -- it is the
+// "Remove this reason" action below, which appends an empty answer (the rules are append-only,
+// so nothing is ever deleted).  An earlier build offered nine illness-first options; Aaron
+// reviewed them and chose the ChemoWell set instead.  Do not re-expand this list without asking
+// him -- the shorter list is the requirement, not an oversight.
+//
+// mrLabelFor() falls back to the label stored on the document, so any answer written by a build
+// that offered more options still prints as words rather than as a slug.
+const MR_REASONS = [
+  { id: 'later',   label: 'Took it later' },
+  { id: 'skipped', label: 'Skipped' }
+];
+const MR_NOTE_ONLY_LABEL = 'Described in the note';
+
+// Resolves an id to its label.  A document written by an older build carries the label it was shown
+// at the time, so an id this build no longer knows still prints as words rather than as a slug.
+function mrLabelFor(id, fallbackLabel) {
+  const found = MR_REASONS.find((r) => r.id === id);
+  if (found) return found.label;
+  const fb = String(fallbackLabel || '').trim();
+  return fb || MR_NOTE_ONLY_LABEL;
+}
+
+// The identity of a missed dose.  See the block comment above for why it is this pair and what that
+// costs.  Number() and String() are not decoration: these two values come back off the wire.
+function mrKey(medId, ts) { return String(medId) + '|' + Number(ts); }
+function mrKeyOf(miss) { return miss ? mrKey(miss.medId, miss.ts) : ''; }
+
+// Append-only supersede: newest loggedAt wins.  The document-id tie-break makes the winner
+// deterministic when two writes land in the same millisecond, so two devices resolving the same
+// pair of documents cannot disagree about which one is current.
+function mrSupersedes(next, prev) {
+  const a = (typeof next.loggedAt === 'number' && isFinite(next.loggedAt)) ? next.loggedAt : 0;
+  const b = (typeof prev.loggedAt === 'number' && isFinite(prev.loggedAt)) ? prev.loggedAt : 0;
+  if (a !== b) return a > b;
+  return String(next.id || '') > String(prev.id || '');
+}
+
+// Collapses every reason document down to one winner per missed-dose key.  A Map, not an object
+// literal: the key contains a medication id, medication ids are user-supplied, and a medication
+// named "constructor" or "toString" against a plain {} yields an inherited function where a record
+// should be — truthy, not a record, and every read downstream breaks in a different place.
+function mrResolveReasons(docs) {
+  const out = new Map();
+  (docs || []).forEach((d) => {
+    if (!d || d.medId !== MR_MED_ID) return;
+    if (typeof d.missMedId !== 'string' || !d.missMedId) return;
+    const ts = Number(d.missTs);
+    if (!isFinite(ts) || ts <= 0) return;
+    const rec = {
+      id: d.id,
+      key: mrKey(d.missMedId, ts),
+      missMedId: d.missMedId,
+      missTs: ts,
+      missWindow: String(d.missWindow || ''),
+      reasonId: String(d.reasonId || ''),
+      reasonLabel: String(d.reasonLabel || ''),
+      note: String(d.note || ''),
+      loggedAt: d.loggedAt
+    };
+    const prev = out.get(rec.key);
+    if (!prev || mrSupersedes(rec, prev)) out.set(rec.key, rec);
+  });
+  return out;
+}
+
+// The current reason for one missed dose, or null.  A record whose reasonId and note are both empty
+// is a removal — it exists only because nothing can be deleted, and it reads as "no reason".
+function mrReasonFor(miss) {
+  const map = state.missReasons;
+  if (!miss || !map || typeof map.get !== 'function') return null;
+  const rec = map.get(mrKeyOf(miss));
+  if (!rec) return null;
+  if (!rec.reasonId && !rec.note) return null;
+  return rec;
+}
+
+function mrOpenSheet(miss) {
+  if (!miss) return;
+  const existing = mrReasonFor(miss);
+  setState({ missReasonSheet: {
+    medId: miss.medId,
+    ts: miss.ts,
+    windowName: String(miss.windowName || ''),
+    reasonId: existing ? existing.reasonId : '',
+    note: existing ? existing.note : '',
+    hadSaved: !!existing,
+    busy: false,
+    error: ''
+  } });
+}
+
+function mrCloseSheet() { setState({ missReasonSheet: null }); }
+
+// Chip taps go through setState because they change what is drawn.  The note field never does —
+// setState rebuilds the whole tree and would destroy the textarea being typed into, taking the
+// caret and the IME composition with it.  The draft is written straight onto the state object and
+// is read back by the next render, which is what makes the sheet survive a repaint intact.
+function mrToggleReason(id) {
+  const s = state.missReasonSheet;
+  if (!s || s.busy) return;
+  setState({ missReasonSheet: Object.assign({}, s, { reasonId: s.reasonId === id ? '' : id, error: '' }) });
+}
+
+async function mrSaveReason() {
+  const s = state.missReasonSheet;
+  if (!s || s.busy) return;
+  const reasonId = String(s.reasonId || '');
+  const note = String(s.note || '').slice(0, MR_NOTE_MAX).trim();
+  // Save with nothing chosen is not an error and does not scold: it means "never mind".  If there
+  // was a saved reason it is removed, otherwise the sheet simply closes.
+  if (!reasonId && !note) { await mrRemoveReason(); return; }
+  setState({ missReasonSheet: Object.assign({}, s, { busy: true, error: '' }) });
+  try {
+    await addEntryDB({
+      medId: MR_MED_ID,
+      missMedId: String(s.medId),
+      missTs: Number(s.ts),
+      missWindow: String(s.windowName || ''),
+      reasonId: reasonId,
+      // A snapshot of the words shown when it was tapped, so a future edit to MR_REASONS cannot
+      // retroactively change what a past record says.
+      reasonLabel: reasonId ? mrLabelFor(reasonId, '') : '',
+      note: note,
+      // ts mirrors the window it describes so a raw dump of the collection still sorts sensibly.
+      ts: Number(s.ts),
+      mg: 0,
+      dose: 'Missed-dose reason',
+      loggedAt: Date.now()
+    });
+    setState({ missReasonSheet: null });
+    setToast('Saved. You can change it any time.');
+  } catch (err) {
+    console.error('[missed-reason:save]', err);
+    const cur = state.missReasonSheet;
+    if (cur) setState({ missReasonSheet: Object.assign({}, cur, { busy: false, error: "Couldn't save that just now — your records are safe. Please try again." }) });
+  }
+}
+
+// Removal is an append, not a delete.  The rules refuse a delete after 48 hours, and a reason
+// recorded last week must still be retractable.
+async function mrRemoveReason() {
+  const s = state.missReasonSheet;
+  if (!s || s.busy) return;
+  if (!s.hadSaved) { mrCloseSheet(); return; }
+  setState({ missReasonSheet: Object.assign({}, s, { busy: true, error: '' }) });
+  try {
+    await addEntryDB({
+      medId: MR_MED_ID,
+      missMedId: String(s.medId),
+      missTs: Number(s.ts),
+      missWindow: String(s.windowName || ''),
+      reasonId: '',
+      reasonLabel: '',
+      note: '',
+      ts: Number(s.ts),
+      mg: 0,
+      dose: 'Missed-dose reason removed',
+      loggedAt: Date.now()
+    });
+    setState({ missReasonSheet: null });
+    setToast('Removed.');
+  } catch (err) {
+    console.error('[missed-reason:remove]', err);
+    const cur = state.missReasonSheet;
+    if (cur) setState({ missReasonSheet: Object.assign({}, cur, { busy: false, error: "Couldn't save that just now — your records are safe. Please try again." }) });
+  }
+}
+
+function mrChipStyle(active) {
+  return {
+    minHeight: '44px', padding: '0 15px', borderRadius: '999px',
+    border: active ? '1px solid #8E3D61' : '1px solid rgba(212,104,138,0.28)',
+    background: active ? '#8E3D61' : 'rgba(255,255,255,0.78)',
+    color: active ? '#FFFFFF' : '#5C4553',
+    fontSize: '14.5px', fontWeight: active ? '800' : '600',
+    lineHeight: '1.2', textAlign: 'left'
+  };
+}
+
+function mrLabelStyle() {
+  return { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' };
+}
+
+// The sheet.  Opened only by an explicit tap on a missed row; dismissed by the overlay, by Cancel,
+// or by saving.  Nothing anywhere opens it on the patient's behalf.
+function renderMissReasonSheet() {
+  const s = state.missReasonSheet;
+  if (!s) return null;
+  const when = new Date(s.ts);
+  const dateLine = (isFinite(s.ts) && s.ts > 0)
+    ? when.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmtTime(s.ts)
+    : '';
+  const busyAttr = s.busy ? { disabled: 'disabled' } : {};
+  return h('div', { 'data-mr-overlay': 'true', onClick: (ev) => { if (ev.target === ev.currentTarget && !s.busy) mrCloseSheet(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '62', padding: '18px' } },
+    h('div', { 'data-mr-sheet': 'true', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a reason', style: { background: 'rgba(255,245,248,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '22px 20px', width: '340px', maxWidth: '100%', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      h('div', { style: { fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, nameOf(s.medId) + (s.windowName ? ' · ' + s.windowName : '')),
+      dateLine ? h('div', { className: 'mono', style: { fontSize: '12.5px', color: '#7D6974', marginTop: '2px' } }, dateLine) : null,
+      h('div', { style: { fontSize: '18px', fontWeight: '800', letterSpacing: '-0.01em', color: '#3D2B3A', marginTop: '10px' } }, 'Add a reason'),
+      // The whole justification for the feature, in one line, in the only place it needs saying.
+      h('div', { style: { fontSize: '13.5px', lineHeight: '1.5', color: '#6B5563', marginTop: '5px', marginBottom: '18px' } }, 'Completely optional — it just gives the care team the context. Skip it, change it or remove it whenever you like.'),
+      h('div', { style: mrLabelStyle() }, 'What happened'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
+        ...MR_REASONS.map((r) => h('button', Object.assign({
+          'data-mr-chip': r.id,
+          'aria-pressed': s.reasonId === r.id ? 'true' : 'false',
+          onClick: () => mrToggleReason(r.id),
+          style: mrChipStyle(s.reasonId === r.id)
+        }, busyAttr), r.label))
       ),
-      h('div', { style: { fontSize: '12.5px', color: '#C0453B', fontWeight: '600' } }, e.windowName + ' window closed — tap to log')
+      h('div', { style: Object.assign(mrLabelStyle(), { marginTop: '20px' }) }, 'Anything else worth remembering'),
+      h('textarea', Object.assign({
+        'data-mr-note-input': 'true',
+        value: s.note || '',
+        // NEVER setState from onInput — it rebuilds the tree and destroys the field being typed in.
+        onInput: (ev) => { if (state.missReasonSheet) state.missReasonSheet.note = ev.target.value; },
+        rows: 3,
+        maxlength: String(MR_NOTE_MAX),
+        placeholder: 'Optional, in your own words',
+        // 16px, not 14: below 16 iOS Safari zooms the page in on focus and never zooms back out.
+        style: { width: '100%', boxSizing: 'border-box', border: '1px solid rgba(212,104,138,0.2)', borderRadius: '13px', padding: '10px 13px', fontSize: '16px', lineHeight: '1.45', background: 'rgba(255,255,255,0.7)', color: '#3D2B3A', resize: 'vertical', fontFamily: 'inherit' }
+      }, busyAttr)),
+      s.error ? h('div', { 'data-mr-error': 'true', role: 'alert', style: { marginTop: '14px', background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.3)', borderRadius: '12px', padding: '11px 13px', fontSize: '13px', lineHeight: '1.45', color: '#A13830', fontWeight: '600' } }, s.error) : null,
+      // The action row is STICKY inside the scrolling panel. Nine chips plus a note field are
+      // taller than a 375x812 phone, and with a statically-positioned footer the primary action sat
+      // below the fold: the patient had to scroll past the whole list to find Save. Sticky keeps it
+      // on screen from the first frame. The negative bottom/margin cancels the panel's own 22px
+      // padding so the strip sits flush with the bottom edge when it is pinned.
+      h('div', { 'data-mr-actions': 'true', style: { position: 'sticky', bottom: '-22px', marginTop: '20px', marginBottom: '-22px', paddingTop: '12px', paddingBottom: '22px', background: '#FFF5F8', borderTop: '1px solid rgba(212,104,138,0.14)' } },
+      h('div', { style: { display: 'flex', gap: '10px' } },
+        h('button', Object.assign({ 'data-mr-cancel': 'true', onClick: mrCloseSheet, style: { flex: '1', minHeight: '50px', borderRadius: '13px', border: '1px solid rgba(212,104,138,0.22)', background: 'rgba(255,255,255,0.55)', color: '#7D6974', fontSize: '15px', fontWeight: '700' } }, busyAttr), 'Cancel'),
+        h('button', Object.assign({ 'data-mr-save': 'true', onClick: mrSaveReason, style: { flex: '1', minHeight: '50px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, busyAttr), s.busy ? 'Saving…' : 'Save')
+      ),
+      s.hadSaved ? h('button', Object.assign({ 'data-mr-remove': 'true', onClick: mrRemoveReason, style: { display: 'block', width: '100%', minHeight: '44px', marginTop: '8px', borderRadius: '13px', background: 'transparent', color: '#8A6479', fontSize: '13.5px', fontWeight: '700' } }, busyAttr), 'Remove this reason') : null
+      )
+    )
+  );
+}
+
+// The report subsection.  Summarised by reason, the way the table above it is summarised by
+// medication, and gated on the same "only when something was actually logged" rule — a document
+// built purely from non-events is never emitted.  Kept visibly separate from the dose data: this is
+// what the patient said, not what the schedule computed.
+function mrReportDate(ts) { return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+
+function mrReportBlock(derivedRows) {
+  const map = state.missReasons;
+  if (!map || typeof map.get !== 'function' || !map.size) return '';
+  const groups = new Map();
+  const noteRows = [];
+  (derivedRows || []).forEach((r) => {
+    const medId = r[5];
+    const t = r[2] ? new Date(r[2]).getTime() : 0;
+    if (!medId || !t || !isFinite(t)) return;
+    const rec = map.get(mrKey(medId, t));
+    if (!rec || (!rec.reasonId && !rec.note)) return;
+    const label = rec.reasonId ? mrLabelFor(rec.reasonId, rec.reasonLabel) : MR_NOTE_ONLY_LABEL;
+    let g = groups.get(label);
+    if (!g) { g = { n: 0, first: Infinity, last: 0, meds: [] }; groups.set(label, g); }
+    g.n++;
+    if (t < g.first) g.first = t;
+    if (t > g.last) g.last = t;
+    const medName = reportNameOf(medId);
+    if (g.meds.indexOf(medName) < 0) g.meds.push(medName);
+    if (rec.note) noteRows.push({ t: t, med: medName, win: rec.missWindow || String(r[3] || ''), note: rec.note });
+  });
+  if (!groups.size) return '';
+  const who = escHtml(CONFIG.patientName);
+  const rows = Array.from(groups.keys())
+    .sort((a, b) => groups.get(b).n - groups.get(a).n || (a < b ? -1 : 1))
+    .map((label) => {
+      const g = groups.get(label);
+      const span = (g.first === Infinity) ? '—' : (mrReportDate(g.first) + (g.last !== g.first ? ' – ' + mrReportDate(g.last) : ''));
+      return '<tr><td>' + escHtml(label) + '</td><td class="num">' + g.n + '</td><td>' + escHtml(g.meds.sort().join(', ')) + '</td><td>' + escHtml(span) + '</td></tr>';
+    }).join('');
+  const notes = noteRows.sort((a, b) => a.t - b.t)
+    .map((n) => '<tr><td>' + escHtml(mrReportDate(n.t)) + '</td><td>' + escHtml(n.med + (n.win ? ' · ' + n.win : '')) + '</td><td>' + escHtml(n.note) + '</td></tr>').join('');
+  return '<h3>What ' + who + ' recorded about these</h3>' +
+    '<div class="lead">Recording a reason is optional in the app, so a window with nothing against it means nothing was entered — not that a dose was refused. These are ' + who + '’s own words at the time and are not a clinical assessment.</div>' +
+    '<table><thead><tr><th>Reason recorded</th><th class="num" style="width:70px">Windows</th><th style="width:32%">Medications</th><th style="width:150px">Dates</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    (notes ? '<h3>Notes ' + who + ' added</h3>' +
+      '<table><thead><tr><th style="width:90px">Date</th><th style="width:32%">Medication</th><th>Note</th></tr></thead><tbody>' + notes + '</tbody></table>' : '');
+}
+
+function missedRow(e, i) {
+  const saved = mrReasonFor(e);
+  // The row splits in two: the original tap-to-log strip, byte-for-byte the same interaction it has
+  // always been, and a quiet second line underneath it that is the ONLY entry point to this
+  // feature.  It is not red, not badged and not counted, because a running total of unexplained
+  // doses is a guilt meter.
+  // The hook carries the identity, not a boolean: it is the one place the derived key is visible
+  // from outside, which is what lets a test assert that a reason attached to THIS window and to no
+  // other, and what makes a mis-attached reason findable in the DOM rather than only in Firestore.
+  return h('div', { 'data-mr-missed-row': mrKeyOf(e), style: { borderTop: i > 0 ? '1px solid rgba(192,69,59,0.2)' : 'none', background: 'rgba(192,69,59,0.10)', borderLeft: '4px solid #C0453B' } },
+    h('div', { onClick: () => logMissedDose(e), style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', cursor: 'pointer' } },
+      h('div', { className: 'mono', style: { fontSize: '13px', color: '#C0453B', fontWeight: '700', minWidth: '66px' } }, fmtTime(e.ts)),
+      h('div', { style: { flex: '1' } },
+        h('div', { style: { fontSize: '15px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', color: '#C0453B' } },
+          nameOf(e.medId),
+          h('span', { style: { fontSize: '10.5px', fontWeight: '800', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#fff', background: '#C0453B', borderRadius: '6px', padding: '2px 7px' } }, 'Missed')
+        ),
+        h('div', { style: { fontSize: '12.5px', color: '#C0453B', fontWeight: '600' } }, e.windowName + ' window closed — tap to log')
+      ),
+      h('span', { style: { flexShrink: '0', fontSize: '11.5px', fontWeight: '800', color: '#C0453B', opacity: '0.7' } }, '›')
     ),
-    h('span', { style: { flexShrink: '0', fontSize: '11.5px', fontWeight: '800', color: '#C0453B', opacity: '0.7' } }, '›')
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '0 14px 9px' } },
+      saved ? h('span', { 'data-mr-row-reason': 'true', style: { display: 'inline-block', maxWidth: '100%', padding: '5px 11px', borderRadius: '999px', background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(142,61,97,0.22)', color: '#6B4257', fontSize: '13px', fontWeight: '700' } }, saved.reasonId ? mrLabelFor(saved.reasonId, saved.reasonLabel) : MR_NOTE_ONLY_LABEL) : null,
+      // stopPropagation, or this tap also fires the row's log flow underneath it.
+      h('button', { 'data-mr-row-button': 'true', 'aria-label': (saved ? 'Change the reason recorded for ' : 'Add a reason for ') + nameOf(e.medId) + (e.windowName ? ' ' + e.windowName + ' window' : ''), onClick: (ev) => { ev.stopPropagation(); mrOpenSheet(e); }, style: { minHeight: '44px', padding: '0 13px', borderRadius: '11px', background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(192,69,59,0.28)', color: '#A13830', fontSize: '13.5px', fontWeight: '700' } }, saved ? 'Change' : 'Add a reason')
+    ),
+    (saved && saved.note) ? h('div', { 'data-mr-row-note': 'true', style: { padding: '0 14px 10px', fontSize: '12.5px', lineHeight: '1.45', color: '#6B4257' } }, saved.note) : null
   );
 }
 
@@ -1608,13 +1979,6 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
         h('div', { style: { fontWeight: '800', color: s.color, fontSize: '14px', letterSpacing: '0.02em', marginBottom: '2px', textTransform: 'uppercase' } }, 'Daily Weight'),
         h('div', { style: { color: s.color, fontSize: '13.5px', fontWeight: '600', lineHeight: '1.4' } }, wMsg)
       )
-    ));
-  }
-
-  // Demo banner
-  if (state.demo) {
-    parts.push(h('div', { style: { background: 'rgba(212,104,138,0.08)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '16px', padding: '12px 14px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.5)' } },
-      h('div', { style: { flex: '1', color: '#8A6479', fontSize: '13px', lineHeight: '1.45' } }, 'Showing sample data so you can see the tracker in action. Log a real dose or clear it to start fresh.')
     ));
   }
 
@@ -2292,7 +2656,14 @@ function renderSaveRecordsCard(now) {
     return (typeof v === 'number' && isFinite(v) && v > mx && v <= state.now) ? v : mx;
   }, 0);
   const empty = nLogged === 0;
-  const busy = !!state.exporting;
+  // The backup covers strictly more than the spreadsheet does. allExportEntries() is
+  // entries + chemoDates BY DESIGN -- that is what keeps appointments and missed-dose reasons out
+  // of the spreadsheet and out of the printable record -- so a phone whose only content is
+  // appointments has nLogged === 0. Gating "Save backup file" on that number would have greyed it
+  // out on exactly the data the spreadsheet cannot hold. Counted separately.
+  const emptyBackup = empty && !bkHasAnything();
+  const nAppts = (state.appointments || []).length;
+  const busy = !!state.exporting || !!state.restoring;
   // Disabled treatment. The fill this replaced measured 1.95:1 against white text, and an earlier
   // attempt at a fix claimed 3.6:1 for a colour that produces 3.23:1 and then stacked opacity on
   // top, taking the empty state to 1.81:1 -- worse than what was rejected. Flat fills, measured:
@@ -2302,11 +2673,14 @@ function renderSaveRecordsCard(now) {
   // beat the `button:disabled{cursor:default}` rule and leave the ONE working button as the only
   // one showing a pointer -- precisely inverted from intent.
   const dim = (on) => on ? { cursor: 'default', pointerEvents: 'none' } : {};
-  const btn = (kind, label, onClick, primary) => {
+  const btn = (kind, label, onClick, primary, offWhen) => {
     const running = state.exporting === kind;
-    const off = busy || empty;
+    const off = busy || (offWhen === undefined ? empty : offWhen);
     return h('button', {
       onClick,
+      // A stable hook per button. Matching these on their visible label instead is what let an
+      // earlier round test a button that had been renamed, against a screen that no longer had it.
+      'data-backup-btn': kind,
       ...(off ? { disabled: 'disabled' } : {}),
       'aria-busy': running ? 'true' : 'false',
       style: {
@@ -2333,20 +2707,74 @@ function renderSaveRecordsCard(now) {
         h('span', { style: { width: '44px', height: '44px', borderRadius: '14px', marginTop: '1px', background: 'rgba(170,83,117,0.12)', color: '#AA5375', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } }, appIcon('download', 22)),
         h('span', { style: { display: 'block', flex: '1', minWidth: '0' } },
           h('h2', { style: { fontSize: '16px', fontWeight: '800', letterSpacing: '-0.015em', color: '#342530', margin: '0' } }, 'Save a copy of your records'),
-          h('span', { style: { display: 'block', fontSize: '12px', color: '#6E5261', lineHeight: '1.35', marginTop: '2px', maxWidth: '52ch' } }, "Everything you've logged — doses, temperatures, weights, symptoms and treatment dates. The file saves to this phone. Nothing is sent anywhere."),
+          h('span', { style: { display: 'block', fontSize: '12px', color: '#6E5261', lineHeight: '1.35', marginTop: '2px', maxWidth: '52ch' } }, "Everything you've logged — doses, temperatures, weights, symptoms, treatment dates and appointments. The files save to this phone. Nothing is sent anywhere."),
           h('span', { className: 'mono', style: { display: 'block', fontSize: '10.5px', color: '#8E3D61', fontWeight: '700', marginTop: '5px' } },
-            empty ? 'Nothing logged yet' : (nLogged + ' entr' + (nLogged === 1 ? 'y' : 'ies') + (lastTs ? ' · last logged ' + new Date(lastTs).toLocaleDateString() : '')))
+            emptyBackup ? 'Nothing saved yet' : [
+              nLogged ? (nLogged + ' entr' + (nLogged === 1 ? 'y' : 'ies')) : '',
+              nAppts ? (nAppts + ' appointment' + (nAppts === 1 ? '' : 's')) : '',
+              lastTs ? ('last logged ' + new Date(lastTs).toLocaleDateString()) : ''
+            ].filter(Boolean).join(' · '))
         )
       ),
       h('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', marginTop: '13px', justifyContent: 'flex-start', maxWidth: '470px' } },
-        btn('csv', 'Save spreadsheet', downloadEntriesCSV, true),
+        btn('backup', 'Save backup file', downloadBackupFile, true, emptyBackup),
+        btn('csv', 'Save spreadsheet', downloadEntriesCSV, false),
         btn('report', 'Save printable report', openPrintReport, false)
       ),
+      // The card used to say "Keep the spreadsheet as your backup." It is not one and never was:
+      // a CSV cannot be loaded back into this app, it has no document ids, and it deliberately
+      // omits appointments. Telling her the wrong file is her backup is worse than telling her
+      // nothing, because it stops her looking for the right one.
       h('div', { style: { fontSize: '11.5px', color: '#6E5261', marginTop: '10px', lineHeight: '1.45', maxWidth: '52ch' } },
-        empty ? "Once you start logging, you'll be able to save or print your records here."
-              : 'Keep the spreadsheet as your backup. Print the report to take to an appointment.')
+        emptyBackup ? "Once you start logging, you'll be able to save or print your records here."
+              : 'The backup file is the only one of these that can be put back. It holds everything — doses, temperatures, weights, symptoms, treatment dates and appointments. The spreadsheet and the printable report are for reading and for handing to a doctor; neither one can be loaded back into the app.'),
+      renderRestoreRow()
     )
   );
+}
+
+// Put-a-backup-back. Its own row under a rule, not a fourth button in the save row: saving is
+// routine and restoring is not, and a restore control sitting in the same row as the one she taps
+// every week is a control she will eventually tap by accident.
+//
+// NOT gated on `empty`. A brand-new phone has nothing logged on it, and a brand-new phone is the
+// entire reason this exists.
+function renderRestoreRow() {
+  const busy = !!state.exporting || !!state.restoring;
+  const notice = state.backupNotice;
+  return h('div', { 'data-backup-restore-row': 'true', style: { marginTop: '14px', paddingTop: '13px', borderTop: '1px solid rgba(212,104,138,0.16)' } },
+    h('div', { style: { fontSize: '13px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'Put a backup back'),
+    h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '3px', maxWidth: '52ch' } },
+      'On a new phone, or if something has gone missing, load a backup file here. Anything already on this phone stays exactly as it is — nothing is deleted and nothing is written over. Loading the same file twice is safe.'),
+    h('button', Object.assign({
+      'data-backup-restore': 'true', type: 'button', onClick: bkPickFile,
+      style: { marginTop: '10px', minHeight: '46px', padding: '0 16px', borderRadius: '13px', border: '1px solid rgba(212,104,138,0.32)', background: 'rgba(255,255,255,0.72)', color: '#8E3D61', fontSize: '14px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: busy ? 'default' : 'pointer' }
+    // Spread, never `disabled: busy ? 'disabled' : null`. h() does a bare setAttribute, so the
+    // string "null" would disable this button permanently.
+    }, busy ? { disabled: 'disabled' } : {}),
+      appIcon('bkRestore', 17),
+      state.restoring ? 'Reading the file…' : 'Restore from a backup file'),
+    // A failure gets role="alert" because she has to know. A success does NOT get a live-region
+    // role: the toast already announces the same event, and two polite live regions firing on one
+    // tap makes a screen reader read the whole thing twice. This panel is the persistent record of
+    // what happened, there to be re-read, not to interrupt.
+    notice ? h('div', Object.assign({
+      'data-backup-notice': 'true',
+      'data-backup-notice-kind': notice.kind,
+      style: bkNoticeStyle(notice.kind)
+    }, notice.kind === 'bad' ? { role: 'alert' } : {}), notice.message) : null
+  );
+}
+
+function bkNoticeStyle(kind) {
+  const bad = kind === 'bad';
+  return {
+    marginTop: '11px', padding: '11px 13px', borderRadius: '12px', fontSize: '12.5px',
+    lineHeight: '1.45', fontWeight: '600', maxWidth: '52ch',
+    background: bad ? 'rgba(192,69,59,0.10)' : 'rgba(58,132,94,0.10)',
+    border: '1px solid ' + (bad ? 'rgba(192,69,59,0.32)' : 'rgba(58,132,94,0.30)'),
+    color: bad ? '#96382F' : '#1F5A3D'
+  };
 }
 
 function renderReportDetail(type, now) {
@@ -2361,6 +2789,500 @@ function renderReportDetail(type, now) {
       )
     ),
     ...content
+  ];
+}
+
+// =================================================================================================
+// CALENDAR & APPOINTMENTS  (ported from ChemoWell)
+//
+// WHAT THIS IS. Menu -> Calendar: a month grid, a day panel underneath it, and add/edit/remove for
+// appointments. Reached only from the header menu button; the five bottom-nav tabs are unchanged.
+//
+// WHERE APPOINTMENTS LIVE. ChemoWell keeps them in localStorage under its own profile-scoped key.
+// care-tracker does not and must not touch that key or that collection. Here an appointment is an
+// ordinary document in caretracker_entries with medId 'appointment', and subscribeEntries splits
+// those out into state.appointments the same way it already splits chemo_date into
+// state.chemoDates. state.entries therefore never contains one, which is what keeps appointments
+// out of every dose calculation, out of the CSV and out of the printable oncologist report --
+// allExportEntries() is entries+chemoDates and this block does not change it.
+//
+// WHY EDIT AND DELETE ARE BOTH AN INSERT. The Firestore rules for this project are append-only:
+// existing documents cannot be edited at all, and deletes are refused after 48 hours. A literal
+// updateDoc/deleteDoc would therefore work while testing and start failing on the patient's phone
+// the moment an appointment was older than two days. Instead every appointment carries a stable
+// apptId; editing appends a new document with the same apptId and a newer loggedAt, and removing
+// appends one with cancelled:true. The newest document for an apptId is the live version. Nothing
+// is ever mutated, nothing is ever deleted, and the history of a rescheduled appointment stays
+// readable in the raw collection.
+//
+// This block is placed ABOVE the export block deliberately: the export block documents itself as
+// strictly read-only, and inserting a feature that calls addEntryDB inside it would break that
+// claim even though the code is unrelated.
+// =================================================================================================
+
+const CAL_APPT_MED_ID = 'appointment';
+const CAL_TITLE_MAX = 120;
+const CAL_NOTE_MAX = 500;
+const CAL_WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+function calPad2(n) { return String(n).padStart(2, '0'); }
+function calNewApptId() { return 'appt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10); }
+function calIsValidTs(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
+
+// Local date key. Deliberately NOT toISOString().slice(0,10) -- that is UTC, and west of Greenwich
+// an 8pm appointment would land on the following day in the grid.
+function calDateKeyOf(ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + calPad2(d.getMonth() + 1) + '-' + calPad2(d.getDate());
+}
+function calMonthKeyOf(ts) { return calDateKeyOf(ts).slice(0, 7); }
+
+function calShiftMonth(cursor, delta) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(cursor || ''));
+  if (!m) return calMonthKeyOf(simNow());
+  const d = new Date(Number(m[1]), Number(m[2]) - 1 + delta, 1);
+  return d.getFullYear() + '-' + calPad2(d.getMonth() + 1);
+}
+
+// Deterministic: loggedAt decides, and the document id breaks a tie the same way on every device,
+// so two phones can never disagree about which version of an appointment is showing.
+function calApptSupersedes(next, prev) {
+  const a = (typeof next.loggedAt === 'number' && isFinite(next.loggedAt)) ? next.loggedAt : 0;
+  const b = (typeof prev.loggedAt === 'number' && isFinite(prev.loggedAt)) ? prev.loggedAt : 0;
+  if (a !== b) return a > b;
+  return String(next.id || '') > String(prev.id || '');
+}
+
+// Collapse the append-only document history down to the live appointments.
+//
+// The grouping uses a Map, NOT a plain object. apptId comes out of the database, and on a plain
+// object an id of 'constructor', 'toString' or '__proto__' reads back a truthy INHERITED value
+// from Object.prototype -- so the first document with such an id would have been treated as
+// already-seen and dropped, silently, with no error. That exact class of bug has already cost this
+// project one blocker. A Map has no prototype chain on its keys.
+function calResolveAppointments(docs) {
+  const byGroup = new Map();
+  for (const d of (docs || [])) {
+    if (!d) continue;
+    const key = (typeof d.apptId === 'string' && d.apptId) ? d.apptId : ('doc:' + String(d.id));
+    const prev = byGroup.get(key);
+    if (!prev || calApptSupersedes(d, prev)) byGroup.set(key, d);
+  }
+  const live = [];
+  byGroup.forEach((a, key) => {
+    if (a.cancelled) return;                                   // tombstone
+    if (!calIsValidTs(a.ts)) return;                           // unusable date, do not guess one
+    if (typeof a.title !== 'string' || !a.title.trim()) return;
+    // apptId is normalised onto the copy so a legacy document written without one is still
+    // editable and removable -- its group key becomes its identity.
+    live.push(Object.assign({}, a, { apptId: key }));
+  });
+  return live.sort((a, b) => a.ts - b.ts);
+}
+
+function calApptsByDay() {
+  const byDay = new Map();
+  for (const a of (state.appointments || [])) {
+    const k = calDateKeyOf(a.ts);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(a);
+  }
+  byDay.forEach((list) => list.sort((x, y) => x.ts - y.ts));
+  return byDay;
+}
+
+// ---- Menu drawer ----
+
+let calDrawerNeedsFocus = false;
+let calSheetNeedsFocus = false;
+
+// Moves focus into a newly opened dialog once, for a screen reader, without stealing it back on
+// every later repaint (which would fight the person typing) and without focusing a text field
+// (which would throw the on-screen keyboard up unasked).
+function calFocusOnce(el, flagGet, flagClear) {
+  if (!el || !flagGet()) return;
+  flagClear();
+  requestAnimationFrame(() => { try { el.focus(); } catch (err) {} });
+}
+
+function calOpenDrawer() { calDrawerNeedsFocus = true; setState({ drawerOpen: true }); }
+function calCloseDrawer() { calDrawerNeedsFocus = false; setState({ drawerOpen: false }); }
+
+const CAL_DRAWER_ITEMS = [
+  { view: 'home', label: 'Home', icon: 'home', blurb: "Today's doses" },
+  { view: 'calendar', label: 'Calendar', icon: 'calMonth', blurb: 'Appointments and dates' },
+  { view: 'meds', label: 'Medications', icon: 'pill', blurb: 'The medication list' },
+  { view: 'reports', label: 'Reports', icon: 'chart', blurb: 'History, charts, save a copy' },
+  { view: 'inpatient', label: 'In-Patient', icon: 'hospital', blurb: 'Hospital stays' },
+  { view: 'symptoms', label: 'Symptoms', icon: 'notes', blurb: 'How she is feeling' }
+];
+
+function calDrawerGo(view) {
+  calDrawerNeedsFocus = false;
+  state.drawerOpen = false;
+  navigateTo(view);
+}
+
+function renderCalDrawer() {
+  if (!state.drawerOpen) return null;
+  return h('div', { 'data-cal-drawer-overlay': 'true', onClick: (e) => { if (e.target === e.currentTarget) calCloseDrawer(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: '70', display: 'flex', justifyContent: 'flex-start' } },
+    h('div', { 'data-cal-drawer': 'true', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Menu', tabindex: '-1', ref: (el) => calFocusOnce(el, () => calDrawerNeedsFocus, () => { calDrawerNeedsFocus = false; }), style: { width: '286px', maxWidth: '86vw', height: '100%', overflowY: 'auto', background: 'rgba(255,245,248,0.98)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderRight: '1px solid rgba(212,104,138,0.18)', boxShadow: '0 0 60px rgba(120,60,90,0.22)', padding: 'calc(14px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom))', outline: 'none' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '0 4px 12px' } },
+        h('div', { style: { fontSize: '15px', fontWeight: '800', letterSpacing: '-0.02em', color: '#342530' } }, 'Menu'),
+        h('button', { 'data-cal-drawer-close': 'true', type: 'button', onClick: calCloseDrawer, 'aria-label': 'Close menu', style: { width: '44px', height: '44px', flexShrink: '0', borderRadius: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.10)', color: '#AA5375' } }, appIcon('calClose', 19))
+      ),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        ...CAL_DRAWER_ITEMS.map((item) => {
+          const active = state.view === item.view;
+          return h('button', Object.assign({
+            'data-cal-drawer-item': item.view,
+            type: 'button',
+            onClick: () => calDrawerGo(item.view),
+            style: { minHeight: '58px', width: '100%', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', padding: '9px 11px', borderRadius: '14px', background: active ? 'rgba(170,83,117,0.13)' : 'rgba(255,255,255,0.55)', border: active ? '1px solid rgba(170,83,117,0.34)' : '1px solid rgba(212,104,138,0.14)' }
+            // aria-current is OMITTED when it does not apply -- spread in, never passed with a
+            // nullish value. h() calls setAttribute for anything it does not special-case, so a
+            // nullish aria-current renders the literal aria-current="null" and every item in the
+            // menu then announces itself as the current page.
+          }, active ? { 'aria-current': 'page' } : {}),
+            h('span', { style: { width: '34px', height: '34px', flexShrink: '0', borderRadius: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: active ? 'rgba(170,83,117,0.16)' : 'rgba(170,83,117,0.09)', color: '#AA5375' } }, appIcon(item.icon, 18)),
+            h('span', { style: { display: 'block', minWidth: '0', flex: '1' } },
+              h('span', { style: { display: 'block', fontSize: '14.5px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, item.label),
+              h('span', { style: { display: 'block', fontSize: '11.5px', color: '#6E5261', marginTop: '1px', lineHeight: '1.3' } }, item.blurb)
+            )
+          );
+        })
+      )
+    )
+  );
+}
+
+// ---- Appointment sheet ----
+
+// 9am is the default for a future day because clinic appointments are morning-weighted; for today
+// it opens at the current time instead, so "add something for later today" does not start in the
+// past. Neither is a guess the person cannot see -- the field is right there, filled in.
+function calDefaultWhenTs(dateKey) {
+  const todayKey = calDateKeyOf(simNow());
+  const key = /^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || '')) ? dateKey : todayKey;
+  if (key === todayKey) return simNow();
+  const p = key.split('-').map(Number);
+  return new Date(p[0], p[1] - 1, p[2], 9, 0, 0, 0).getTime();
+}
+
+function calOpenApptSheet(apptId, dateKey) {
+  const existing = apptId ? (state.appointments || []).find(a => a.apptId === apptId) : null;
+  calSheetNeedsFocus = true;
+  calDrawerNeedsFocus = false;
+  setState({
+    drawerOpen: false,
+    apptConfirmDelete: null,
+    apptSheet: {
+      apptId: existing ? existing.apptId : null,
+      // The version this sheet is a view OF. Compared against the live one at save time; see
+      // calDetectApptConflict(). A brand-new appointment has nothing to clash with.
+      baseStamp: existing ? calApptStampFor(existing.apptId) : '',
+      conflict: null,
+      overwriteOk: false,
+      title: existing ? String(existing.title || '') : '',
+      when: toLocalISO(existing ? existing.ts : calDefaultWhenTs(dateKey)),
+      note: existing ? String(existing.note || '') : '',
+      confirmRemove: false,
+      busy: false,
+      error: ''
+    }
+  });
+}
+
+function calCloseApptSheet() { calSheetNeedsFocus = false; setState({ apptSheet: null }); }
+
+// Strict. new Date('2026-02-31T09:00') rolls silently over to 2 March in some engines, which would
+// save an appointment onto a day the person never picked.
+function calParseLocalISO(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(s || ''));
+  if (!m) return NaN;
+  const y = Number(m[1]), mo = Number(m[2]), da = Number(m[3]), hh = Number(m[4]), mi = Number(m[5]);
+  if (mo < 1 || mo > 12 || da < 1 || da > 31 || hh > 23 || mi > 59) return NaN;
+  const d = new Date(y, mo - 1, da, hh, mi, 0, 0);
+  if (d.getFullYear() !== y || d.getMonth() !== mo - 1 || d.getDate() !== da) return NaN;
+  const t = d.getTime();
+  return isFinite(t) ? t : NaN;
+}
+
+async function calSaveAppt() {
+  const s = state.apptSheet;
+  if (!s || s.busy) return;
+  const title = String(s.title || '').trim().slice(0, CAL_TITLE_MAX);
+  const note = String(s.note || '').trim().slice(0, CAL_NOTE_MAX);
+  const ts = calParseLocalISO(s.when);
+  if (!title) { s.error = 'Give it a name, so it is recognisable on the calendar.'; setState({ apptSheet: s }); return; }
+  if (!isFinite(ts)) { s.error = 'Pick a date and a time.'; setState({ apptSheet: s }); return; }
+  // CONCURRENT EDIT. Two people use this app. This sheet deliberately does not repaint while it
+  // is open (subscribeEntries defers the snapshot so a half-typed note is not wiped), so a save
+  // posted from here is written against whatever the appointment looked like when the sheet was
+  // opened -- and because an edit is an APPEND carrying a newer loggedAt, it WINS. Aaron
+  // reschedules the oncology appointment from his phone while Brandi has that same appointment
+  // open on hers; she taps Save; his new time is gone and nothing anywhere said so.
+  //
+  // state.appointments is refreshed inside subscribeEntries BEFORE the deferral, so the live
+  // version is available here even though the screen has not repainted. A difference stops the
+  // write and asks. It is never resolved automatically in either direction.
+  const clash = calDetectApptConflict(s);
+  if (clash) { s.conflict = clash; s.error = ''; s.busy = false; setState({ apptSheet: s }); return; }
+  const wasEdit = !!s.apptId;
+  const apptId = s.apptId || calNewApptId();
+  s.busy = true; s.error = '';
+  setState({ apptSheet: s });
+  try {
+    await addEntryDB({ medId: CAL_APPT_MED_ID, apptId: apptId, title: title, note: note, ts: ts, cancelled: false, dose: 'Appointment', mg: 0, loggedAt: Date.now() });
+    calSheetNeedsFocus = false;
+    setState({ apptSheet: null, apptConfirmDelete: null, calSelected: calDateKeyOf(ts), calCursor: calMonthKeyOf(ts) });
+    setToast(wasEdit ? 'Appointment updated' : 'Appointment saved');
+  } catch (err) {
+    // The raw message here is a browser string that reads like the app broke. It goes to the
+    // console; what she sees says what actually happened to her data.
+    console.error('[calendar:save]', err);
+    const cur = state.apptSheet;
+    if (cur) { cur.busy = false; cur.error = "Couldn't save that. Nothing was changed — please try again."; setState({ apptSheet: cur }); }
+    else setToast("Couldn't save the appointment.");
+  }
+}
+
+// Append-only removal: a tombstone document, not a delete. See the block header.
+async function calRemoveAppt(apptId) {
+  const appt = (state.appointments || []).find(a => a.apptId === apptId);
+  if (!appt) { setState({ apptConfirmDelete: null }); setToast('That appointment is no longer there.'); return; }
+  const sheet = state.apptSheet;
+  if (sheet && sheet.busy) return;
+  // Removal is a tombstone against whatever the appointment has BECOME, so removing a stale one
+  // destroys a reschedule made on the other phone exactly as silently as saving over it does.
+  if (sheet && sheet.apptId === apptId) {
+    const clash = calDetectApptConflict(sheet);
+    if (clash) { sheet.conflict = clash; sheet.confirmRemove = false; sheet.error = ''; sheet.busy = false; setState({ apptSheet: sheet }); return; }
+  }
+  if (sheet) { sheet.busy = true; sheet.error = ''; setState({ apptSheet: sheet }); }
+  try {
+    await addEntryDB({ medId: CAL_APPT_MED_ID, apptId: apptId, title: String(appt.title || ''), note: String(appt.note || ''), ts: appt.ts, cancelled: true, dose: 'Appointment removed', mg: 0, loggedAt: Date.now() });
+    calSheetNeedsFocus = false;
+    setState({ apptSheet: null, apptConfirmDelete: null });
+    setToast('Appointment removed');
+  } catch (err) {
+    console.error('[calendar:remove]', err);
+    const cur = state.apptSheet;
+    if (cur) { cur.busy = false; cur.confirmRemove = false; cur.error = "Couldn't remove that. It is still on the calendar — please try again."; setState({ apptSheet: cur }); }
+    else { setState({ apptConfirmDelete: null }); setToast("Couldn't remove the appointment."); }
+  }
+}
+
+// Shared field styling. 16px is a hard floor on every one of these: iOS Safari zooms the page in
+// when a focused field is under 16px and does not zoom back out afterwards, which leaves the app
+// stuck at 1.3x with the nav off-screen. A 14px note field did exactly that in an earlier round.
+function calFieldStyle(extra) {
+  return Object.assign({ width: '100%', minHeight: '52px', border: '1px solid rgba(212,104,138,0.2)', borderRadius: '13px', padding: '13px 14px', fontSize: '16px', lineHeight: '1.35', background: 'rgba(255,255,255,0.72)', color: '#3D2B3A', fontFamily: 'inherit' }, extra || {});
+}
+function calLabelStyle() {
+  return { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' };
+}
+
+function renderApptSheet() {
+  const s = state.apptSheet;
+  if (!s) return null;
+  const editing = !!s.apptId;
+  const heading = editing ? 'Edit appointment' : 'Add appointment';
+  // maxHeight + overflowY, not a taller card: at 375x812 with the keyboard up, a card that grows
+  // past the viewport pushes Save below the fold with no way to reach it.
+  return h('div', { onClick: (e) => { if (e.target === e.currentTarget && !s.busy) calCloseApptSheet(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '80', padding: '20px' } },
+    h('div', { 'data-cal-sheet': editing ? 'edit' : 'add', role: 'dialog', 'aria-modal': 'true', 'aria-label': heading, tabindex: '-1', ref: (el) => calFocusOnce(el, () => calSheetNeedsFocus, () => { calSheetNeedsFocus = false; }), style: { background: 'rgba(255,245,248,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '22px 20px', width: '320px', maxWidth: '100%', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', outline: 'none', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      h('div', { style: { fontSize: '16px', fontWeight: '800', marginBottom: '18px', textAlign: 'center', letterSpacing: '-0.01em', color: '#342530' } }, heading),
+
+      h('div', { style: { marginBottom: '14px' } },
+        h('label', { for: 'cal-appt-title', style: Object.assign({ display: 'block' }, calLabelStyle()) }, 'What is it'),
+        h('input', { 'data-cal-sheet-title-input': 'true', id: 'cal-appt-title', type: 'text', value: s.title || '', maxlength: String(CAL_TITLE_MAX), placeholder: 'Oncology appointment', autocomplete: 'off',
+          // Never setState from onInput: it rebuilds the tree and destroys the field being typed
+          // into. State is mutated directly and the v43.3 deferredValue path in h() replays it on
+          // the next legitimate render.
+          onInput: (e) => { if (state.apptSheet) state.apptSheet.title = e.target.value; }, style: calFieldStyle() })
+      ),
+
+      h('div', { style: { marginBottom: '14px' } },
+        h('label', { for: 'cal-appt-when', style: Object.assign({ display: 'block' }, calLabelStyle()) }, 'Date & time'),
+        h('input', { 'data-cal-sheet-when-input': 'true', id: 'cal-appt-when', type: 'datetime-local', value: s.when || '', className: 'mono',
+          onInput: (e) => { if (state.apptSheet) state.apptSheet.when = e.target.value; }, style: calFieldStyle({ colorScheme: 'light' }) })
+      ),
+
+      h('div', { style: { marginBottom: '14px' } },
+        h('label', { for: 'cal-appt-note', style: Object.assign({ display: 'block' }, calLabelStyle()) }, 'Note (optional)'),
+        h('textarea', { 'data-cal-sheet-note-input': 'true', id: 'cal-appt-note', value: s.note || '', rows: 3, maxlength: String(CAL_NOTE_MAX), placeholder: 'Where to go, who to ask for, what to bring…',
+          onInput: (e) => { if (state.apptSheet) state.apptSheet.note = e.target.value; }, style: calFieldStyle({ minHeight: '84px', resize: 'vertical' }) })
+      ),
+
+      s.conflict ? h('div', { 'data-appt-conflict': 'true', role: 'alert', style: { background: 'rgba(154,100,25,0.10)', border: '1px solid rgba(154,100,25,0.34)', borderRadius: '12px', padding: '12px 13px', marginBottom: '14px' } },
+        h('div', { style: { fontSize: '13.5px', fontWeight: '800', color: '#6E4A0F', marginBottom: '5px' } }, 'This changed while you had it open'),
+        h('div', { style: { fontSize: '12.5px', lineHeight: '1.5', color: '#6E4A0F', fontWeight: '600' } }, s.conflict.message),
+        h('div', { style: { display: 'flex', gap: '8px', marginTop: '11px' } },
+          h('button', Object.assign({ 'data-appt-conflict-theirs': 'true', type: 'button', onClick: calUseTheirs,
+            style: { flex: '1', minHeight: '44px', borderRadius: '11px', border: '1px solid rgba(154,100,25,0.34)', background: 'rgba(255,255,255,0.7)', color: '#6E4A0F', fontSize: '13.5px', fontWeight: '800' } },
+            s.busy ? { disabled: 'disabled' } : {}),
+            s.conflict.kind === 'removed' ? 'Leave it removed' : 'Use the newer one'),
+          h('button', Object.assign({ 'data-appt-conflict-keep': 'true', type: 'button', onClick: calKeepMine,
+            style: { flex: '1', minHeight: '44px', borderRadius: '11px', border: 'none', background: '#9A6419', color: '#FFFFFF', fontSize: '13.5px', fontWeight: '800' } },
+            s.busy ? { disabled: 'disabled' } : {}),
+            'Keep mine')
+        )
+      ) : null,
+      s.error ? h('div', { 'data-cal-sheet-error': 'true', role: 'alert', style: { background: 'rgba(192,69,59,0.10)', border: '1px solid rgba(192,69,59,0.32)', borderRadius: '12px', padding: '11px 13px', fontSize: '13px', lineHeight: '1.45', color: '#96382F', fontWeight: '700', marginBottom: '14px' } }, s.error) : null,
+
+      h('div', { style: { display: 'flex', gap: '10px' } },
+        h('button', Object.assign({ 'data-cal-sheet-cancel': 'true', type: 'button', onClick: calCloseApptSheet,
+          style: { flex: '1', minHeight: '50px', borderRadius: '13px', border: '1px solid rgba(212,104,138,0.22)', background: 'rgba(255,255,255,0.6)', color: '#7A5568', fontSize: '15px', fontWeight: '700' } },
+          // Spread, never `disabled: s.busy ? 'disabled' : null` -- h() setAttribute's it and
+          // disabled="null" disables the control just as thoroughly as disabled="disabled".
+          s.busy ? { disabled: 'disabled' } : {}), 'Cancel'),
+        h('button', Object.assign({ 'data-cal-sheet-save': 'true', type: 'button', onClick: calSaveAppt,
+          style: { flex: '1', minHeight: '50px', borderRadius: '13px', background: s.busy ? '#9C6079' : '#AA5375', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } },
+          s.busy ? { disabled: 'disabled' } : {}), s.busy ? 'Saving…' : 'Save')
+      ),
+
+      editing ? h('div', { style: { marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(212,104,138,0.16)' } },
+        s.confirmRemove
+          ? h('div', null,
+              h('div', { style: { fontSize: '12.5px', color: '#96382F', fontWeight: '700', lineHeight: '1.4', marginBottom: '10px' } }, 'Take this off the calendar? The record of it stays in your history.'),
+              h('div', { style: { display: 'flex', gap: '10px' } },
+                h('button', Object.assign({ 'data-cal-sheet-remove-keep': 'true', type: 'button', onClick: () => { const c = state.apptSheet; if (c) { c.confirmRemove = false; setState({ apptSheet: c }); } },
+                  style: { flex: '1', minHeight: '46px', borderRadius: '12px', border: '1px solid rgba(212,104,138,0.22)', background: 'rgba(255,255,255,0.6)', color: '#7A5568', fontSize: '14px', fontWeight: '700' } }, s.busy ? { disabled: 'disabled' } : {}), 'Keep it'),
+                h('button', Object.assign({ 'data-cal-sheet-remove-confirm': 'true', type: 'button', onClick: () => calRemoveAppt(s.apptId),
+                  style: { flex: '1', minHeight: '46px', borderRadius: '12px', background: '#C0453B', color: '#fff', fontSize: '14px', fontWeight: '800' } }, s.busy ? { disabled: 'disabled' } : {}), s.busy ? 'Removing…' : 'Remove it')
+              )
+            )
+          : h('button', Object.assign({ 'data-cal-sheet-remove': 'true', type: 'button', onClick: () => { const c = state.apptSheet; if (c) { c.confirmRemove = true; setState({ apptSheet: c }); } },
+              style: { width: '100%', minHeight: '46px', borderRadius: '12px', border: '1px solid rgba(192,69,59,0.28)', background: 'rgba(192,69,59,0.06)', color: '#A5443C', fontSize: '14px', fontWeight: '700' } }, s.busy ? { disabled: 'disabled' } : {}), 'Remove appointment')
+      ) : null
+    )
+  );
+}
+
+// ---- Calendar view ----
+
+function renderCalendarView(now) {
+  const todayKey = calDateKeyOf(now);
+  let cursor = state.calCursor;
+  if (!/^\d{4}-\d{2}$/.test(String(cursor || ''))) cursor = todayKey.slice(0, 7);
+  // The selected day is independent of the month on screen, so paging through months to look
+  // ahead does not throw away what you had selected.
+  let selected = state.calSelected;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(selected || ''))) selected = todayKey;
+
+  const cy = Number(cursor.slice(0, 4)), cm = Number(cursor.slice(5, 7));
+  const first = new Date(cy, cm - 1, 1);
+  const startWeekday = first.getDay();
+  const daysInMonth = new Date(cy, cm, 0).getDate();
+  const monthLabel = first.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  const byDay = calApptsByDay();
+  const keyOf = (d) => cursor + '-' + calPad2(d);
+
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  // 44px is the tap-target floor and it is measured, not assumed. The seven columns live inside
+  // <main>'s 16px padding, so the grid itself carries NO horizontal padding and a 2px gap:
+  // (375 - 32 - 12) / 7 = 47.3px on the narrowest supported phone. The earlier 10px section
+  // padding with a 3px gap produced (375 - 32 - 20 - 18) / 7 = 43.57px -- under the floor, on the
+  // control the whole screen exists to be tapped.
+  const dayCell = (d) => {
+    if (d === null) return h('div', { 'aria-hidden': 'true' });
+    const ds = keyOf(d);
+    const list = byDay.get(ds) || [];
+    const isToday = ds === todayKey;
+    const isSel = ds === selected;
+    const long = new Date(cy, cm - 1, d).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    return h('button', {
+      'data-cal-day-cell': ds,
+      'data-cal-day-count': String(list.length),
+      type: 'button',
+      'aria-pressed': isSel ? 'true' : 'false',
+      'aria-label': long + (list.length ? ', ' + list.length + ' appointment' + (list.length === 1 ? '' : 's') : ', nothing scheduled'),
+      onClick: () => setState({ calSelected: ds, apptConfirmDelete: null }),
+      style: { minHeight: '56px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: '4px', padding: '7px 2px 6px', borderRadius: '12px', background: isSel ? '#AA5375' : (isToday ? 'rgba(170,83,117,0.14)' : 'transparent'), border: (isToday && !isSel) ? '1px solid rgba(170,83,117,0.45)' : '1px solid transparent' }
+    },
+      h('span', { style: { fontSize: '14px', fontWeight: (isSel || isToday) ? '800' : '600', color: isSel ? '#fff' : '#3D2B3A', lineHeight: '1' } }, String(d)),
+      list.length
+        ? h('span', { 'aria-hidden': 'true', style: { display: 'flex', gap: '2px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '34px' } },
+            ...list.slice(0, 3).map(() => h('span', { style: { width: '11px', height: '3px', borderRadius: '2px', background: isSel ? 'rgba(255,255,255,0.9)' : '#AA5375' } })),
+            list.length > 3 ? h('span', { style: { fontSize: '8.5px', fontWeight: '800', lineHeight: '1', color: isSel ? '#fff' : '#8E3D61' } }, '+' + (list.length - 3)) : null
+          )
+        : h('span', { 'aria-hidden': 'true', style: { display: 'block', height: '3px' } })
+    );
+  };
+
+  const dayList = (byDay.get(selected) || []);
+  const sp = selected.split('-').map(Number);
+  const selectedLabel = new Date(sp[0], sp[1] - 1, sp[2]).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) + (selected === todayKey ? ' · Today' : '');
+
+  const apptRow = (appt) => {
+    const removing = state.apptConfirmDelete === appt.apptId;
+    return h('div', { 'data-cal-appt-row': appt.apptId, style: { borderTop: '1px solid rgba(212,104,138,0.12)' } },
+      h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px' } },
+        h('span', { 'aria-hidden': 'true', style: { flexShrink: '0', width: '9px', height: '9px', borderRadius: '50%', background: '#AA5375', marginTop: '6px' } }),
+        h('div', { style: { flex: '1', minWidth: '0' } },
+          h('div', { style: { fontSize: '15px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em', wordBreak: 'break-word', overflowWrap: 'anywhere' } }, appt.title),
+          h('div', { className: 'mono', style: { fontSize: '12px', color: '#6E5261', marginTop: '3px', fontWeight: '600' } }, fmtTime(appt.ts)),
+          appt.note ? h('div', { style: { fontSize: '12.5px', color: '#5B4353', marginTop: '4px', lineHeight: '1.4', wordBreak: 'break-word', overflowWrap: 'anywhere' } }, appt.note) : null
+        ),
+        h('div', { style: { display: 'flex', gap: '6px', flexShrink: '0' } },
+          h('button', { 'data-cal-appt-edit': appt.apptId, type: 'button', onClick: () => calOpenApptSheet(appt.apptId, null), 'aria-label': 'Edit ' + appt.title, style: { width: '44px', height: '44px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.10)', color: '#8E3D61' } }, appIcon('edit', 16)),
+          h('button', { 'data-cal-appt-delete': appt.apptId, type: 'button', onClick: () => setState({ apptConfirmDelete: removing ? null : appt.apptId }), 'aria-label': (removing ? 'Cancel removing ' : 'Remove ') + appt.title, style: { width: '44px', height: '44px', borderRadius: '12px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: removing ? 'rgba(192,69,59,0.16)' : 'rgba(192,69,59,0.07)', color: '#A5443C' } }, appIcon('trash', 16))
+        )
+      ),
+      removing ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '0 14px 12px' } },
+        h('span', { style: { flex: '1', fontSize: '12px', color: '#96382F', fontWeight: '700', lineHeight: '1.35' } }, 'Take this off the calendar?'),
+        h('button', { 'data-cal-appt-delete-keep': appt.apptId, type: 'button', onClick: () => setState({ apptConfirmDelete: null }), style: { minHeight: '44px', padding: '0 14px', borderRadius: '11px', border: '1px solid rgba(212,104,138,0.22)', background: 'rgba(255,255,255,0.6)', color: '#7A5568', fontSize: '13px', fontWeight: '700' } }, 'Keep'),
+        h('button', { 'data-cal-appt-delete-confirm': appt.apptId, type: 'button', onClick: () => calRemoveAppt(appt.apptId), style: { minHeight: '44px', padding: '0 14px', borderRadius: '11px', background: '#C0453B', color: '#fff', fontSize: '13px', fontWeight: '800' } }, 'Remove')
+      ) : null
+    );
+  };
+
+  const cardStyle = { background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
+
+  return [
+    h('section', { 'data-cal-view-header': 'true' },
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' } },
+        // Deliberately compact. Measured at 375x812, the first draft's eyebrow row plus a
+        // four-line description pushed the day panel -- the part she actually reads -- 70px below
+        // the fold, so the screen opened on a month grid and nothing else.
+        h('div', { style: { minWidth: '0' } },
+          h('h1', { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.03em', color: '#342530', lineHeight: '1.1' } },
+            h('span', { style: { color: '#AA5375', display: 'inline-flex' } }, appIcon('calMonth', 20)),
+            'Appointments'
+          ),
+          h('div', { style: { fontSize: '12.5px', color: '#6E5261', marginTop: '5px', lineHeight: '1.4', maxWidth: '46ch' } }, 'Scans, labs and clinic visits. Never shown in the spreadsheet or the printable record.')
+        ),
+        h('button', { 'data-cal-add-button': 'true', type: 'button', onClick: () => calOpenApptSheet(null, selected), style: { flexShrink: '0', minHeight: '44px', padding: '0 14px', display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '13px', fontWeight: '800', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, appIcon('plus', 16), 'Add')
+      )
+    ),
+
+    h('section', { 'data-cal-month-section': 'true', style: Object.assign({ borderRadius: '18px', padding: '12px 0 10px' }, cardStyle) },
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '0 10px', marginBottom: '10px' } },
+        h('button', { 'data-cal-prev-month': 'true', type: 'button', onClick: () => setState({ calCursor: calShiftMonth(cursor, -1) }), 'aria-label': 'Previous month', style: { width: '44px', height: '44px', flexShrink: '0', borderRadius: '12px', background: 'rgba(170,83,117,0.10)', color: '#8E3D61', fontSize: '18px', fontWeight: '800' } }, '‹'),
+        h('div', { 'data-cal-month-label': 'true', style: { fontSize: '15px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em', textAlign: 'center', minWidth: '0' } }, monthLabel),
+        h('button', { 'data-cal-next-month': 'true', type: 'button', onClick: () => setState({ calCursor: calShiftMonth(cursor, 1) }), 'aria-label': 'Next month', style: { width: '44px', height: '44px', flexShrink: '0', borderRadius: '12px', background: 'rgba(170,83,117,0.10)', color: '#8E3D61', fontSize: '18px', fontWeight: '800' } }, '›')
+      ),
+      h('div', { 'data-cal-weekday-row': 'true', 'aria-hidden': 'true', style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '2px', marginBottom: '3px' } },
+        ...CAL_WEEKDAY_LETTERS.map(l => h('div', { style: { textAlign: 'center', fontSize: '11.5px', fontWeight: '700', color: '#8A6479', padding: '2px 0' } }, l))
+      ),
+      h('div', { 'data-cal-month-grid': 'true', role: 'grid', 'aria-label': monthLabel, style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '2px' } },
+        ...cells.map(dayCell)
+      )
+    ),
+
+    h('section', { 'data-cal-day-panel': 'true', style: Object.assign({ borderRadius: '18px', overflow: 'hidden' }, cardStyle) },
+      h('div', { style: { padding: '13px 14px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' } },
+        h('div', { 'data-cal-day-panel-label': 'true', style: { fontSize: '13.5px', fontWeight: '800', color: '#342530', minWidth: '0' } }, selectedLabel),
+        h('button', { 'data-cal-day-add-button': 'true', type: 'button', onClick: () => calOpenApptSheet(null, selected), 'aria-label': 'Add an appointment on ' + selectedLabel, style: { flexShrink: '0', minHeight: '44px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: '5px', borderRadius: '12px', background: 'rgba(170,83,117,0.10)', border: '1px solid rgba(170,83,117,0.28)', color: '#8E3D61', fontSize: '12.5px', fontWeight: '800' } }, appIcon('plus', 14), 'Add')
+      ),
+      dayList.length
+        ? h('div', null, ...dayList.map(apptRow))
+        : h('div', { 'data-cal-day-empty': 'true', style: { padding: '14px 16px 22px', textAlign: 'center', fontSize: '13px', color: '#6E5261' } }, 'Nothing scheduled this day.')
+    )
   ];
 }
 
@@ -2760,7 +3682,12 @@ function buildReportDoc(now) {
     (missedRows ? '<h2>Scheduled doses with nothing logged <span class="chip">calculated</span></h2>' +
       '<div class="lead">These are calculated from the medication schedule saved on this device, not entries ' + escHtml(CONFIG.patientName) + ' made. They are not confirmed missed doses.</div>' +
       '<div class="caveat">' + missedTotal + ' scheduled dose' + (missedTotal === 1 ? '' : 's') + ' had nothing logged against ' + (missedTotal === 1 ? 'it' : 'them') + ', summarised by medication. Tracking begins ' + escHtml(fmtD(new Date(MISSED_TRACK_SINCE))) + '; an absence of flags before that date does not mean no doses were missed. Every individual occurrence is listed in the spreadsheet export.</div>' +
-      '<table><thead><tr><th>Medication</th><th class="num" style="width:110px">Not logged</th><th style="width:190px">Date range</th></tr></thead><tbody>' + missedRows + '</tbody></table>' : '') +
+      '<table><thead><tr><th>Medication</th><th class="num" style="width:110px">Not logged</th><th style="width:190px">Date range</th></tr></thead><tbody>' + missedRows + '</tbody></table>' +
+      // Patient-recorded reasons, in their own labelled subsection UNDER the calculated table and
+      // never mixed into it. "Three missed doses, all nausea" is worth a great deal to an
+      // oncologist; three blank rows are worth nothing. It shares this section's suppression rule,
+      // so it cannot appear in a report that has no logged entries behind it.
+      mrReportBlock(derived) : '') +
     '<footer>This is a patient-logged record, not a clinical document — please verify against medical records before relying on it. Times shown are the local time of the device at the moment each entry was logged.</footer>' +
     '</body></html>';
 }
@@ -2796,6 +3723,486 @@ async function openPrintReport() {
   }
 }
 
+
+// =================================================================================================
+// BACKUP & RESTORE
+//
+// WHY THIS EXISTS. "Save a copy" produced two files and NEITHER of them could be put back. The
+// spreadsheet is a report ABOUT the data, not the data: twelve display columns, no way to tell a
+// document from a derived missed-dose row, and appointments deliberately absent. The printable
+// report is HTML for an oncologist. If this phone is lost, or the Firestore project is emptied,
+// neither file restores a single record. This block is the file that does.
+//
+// WHAT IT READS, AND WHY IT DOES NOT GO THROUGH allExportEntries(). subscribeEntries() fans one
+// snapshot out into state.entries, state.chemoDates, state.appointments and state.missReasons, and
+// the last two are then COLLAPSED to their live versions with the superseded history thrown away.
+// Every one of those splits is right for the screen and wrong for a backup. getDocs(col) reads the
+// collection itself, so appointment edit history and missed-dose reason documents are all captured
+// as written. It also has a second property that matters more than convenience: allExportEntries()
+// is not touched. That one function is the seam that keeps appointments and reason documents out
+// of the spreadsheet and out of the record handed to a doctor. A backup routed through it would
+// have had to widen it, and the leak would have been one careless edit away forever after.
+//
+// WHAT IT WRITES ON RESTORE. setDoc(doc(db, COL_NAME, <the document's original id>), fields).
+// That is a CREATE at a known id, which is an append under append-only rules -- no updateDoc, no
+// deleteDoc, nothing removed. Consequences, all deliberate:
+//   * document ids are preserved, so a record restored twice is the same record, not a duplicate;
+//   * restore is IDEMPOTENT -- importing the same file a second time adds nothing;
+//   * an id already present on this phone is SKIPPED, never written over. If both phones have the
+//     record, the one already here wins, because it is the one Firestore has been serving.
+// The only write that is not a create is the prefs high-water mark, and it only ever moves
+// forward; see bkRestorePrefs().
+// =================================================================================================
+
+const BK_FORMAT = 'care-tracker-backup';
+const BK_FORMAT_VERSION = 1;
+// A guard on the file picker, not on the export. Whole-of-history for this patient is a few
+// hundred kB; anything past 40 MB is somebody having selected a video, and JSON.parse on it would
+// lock the phone up before it failed.
+const BK_MAX_BYTES = 40 * 1024 * 1024;
+
+// Canonical JSON: object keys sorted at every depth, document arrays sorted by document id. The
+// same set of records therefore always serialises to the same BYTES, whatever order Firestore
+// handed them back in and whatever order the fields happen to sit in on any given document. That
+// is what makes "export, empty the database, import, export again, compare the md5" an actual
+// test of the round trip instead of a field-by-field opinion about it.
+function bkCanonical(v) {
+  if (Array.isArray(v)) return v.map(bkCanonical);
+  if (v && typeof v === 'object') {
+    const out = {};
+    Object.keys(v).sort().forEach((k) => { out[k] = bkCanonical(v[k]); });
+    return out;
+  }
+  // JSON has no NaN and no Infinity: JSON.stringify silently emits `null` for both. Doing it here
+  // instead means the value that comes back out of a restored file is the same value that went in,
+  // so a corrupt ts does not change shape between one export and the next.
+  if (typeof v === 'number' && !isFinite(v)) return null;
+  return v;
+}
+
+function bkById(a, b) {
+  const x = String((a && a.id) || '');
+  const y = String((b && b.id) || '');
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+// Firestore's own rules for a document id. An id that breaks one of these cannot be written, so it
+// is counted and reported rather than thrown at setDoc to fail one at a time.
+// `__.*__` is reserved by Firestore -- which is also why '__proto__' can never arrive here as an
+// id, and why the membership map below is still Object.create(null): 'constructor', 'toString',
+// 'valueOf' and 'hasOwnProperty' are all perfectly legal Firestore document ids.
+function bkValidDocId(id) {
+  if (typeof id !== 'string') return false;
+  if (!id.length || id.length > 1500) return false;
+  if (id.indexOf('/') >= 0) return false;
+  if (id === '.' || id === '..') return false;
+  if (/^__.*__$/.test(id)) return false;
+  return true;
+}
+
+function bkHasAnything() {
+  return (state.entries || []).length > 0 || (state.chemoDates || []).length > 0 || (state.appointments || []).length > 0;
+}
+
+// Read everything, as written. The document id is applied LAST so that identity always wins: a
+// document carrying its own field called `id` would otherwise overwrite the thing needed to put it
+// back. (No document this app writes has such a field; this is about a file that arrives later.)
+async function bkCollect() {
+  const snap = await getDocs(col);
+  const docs = snap.docs.map((d) => Object.assign({}, d.data(), { id: d.id }));
+  const appointments = docs.filter((d) => d.medId === CAL_APPT_MED_ID).sort(bkById);
+  const entries = docs.filter((d) => d.medId !== CAL_APPT_MED_ID).sort(bkById);
+  // Preferences are one small document in a different collection. A failure to read them must not
+  // cost the entries their backup, so it is caught here and the section is simply absent.
+  let prefs = null;
+  try {
+    const psnap = await getDocs(collection(db, PREFS_COL_NAME));
+    psnap.docs.forEach((d) => { if (d.id === 'settings') prefs = d.data(); });
+  } catch (err) {
+    console.error('[backup:prefs]', err);
+  }
+  return { entries: entries, appointments: appointments, prefs: prefs };
+}
+
+// The medication list is device-local (localStorage), not a Firestore document, so it is read from
+// state rather than from the collection. archivedMeds is the load-bearing half: every dose ever
+// logged against a medication that has since been removed is still a real document in
+// caretracker_entries and still restores, but WITHOUT the archived name those rows come back as a
+// bare id and the printable record reads "Medication (removed)" where a drug name belongs.
+function bkBuildPayload(bundle, atMs) {
+  return bkCanonical({
+    format: BK_FORMAT,
+    formatVersion: BK_FORMAT_VERSION,
+    app: APP_VERSION,
+    patient: String(CONFIG.patientName || ''),
+    createdAt: atMs,
+    entries: bundle.entries,
+    // Its own section, not folded in with the entries. Two reasons: it makes the presence of
+    // appointments in the file auditable at a glance, and it lets a file written BEFORE
+    // appointments existed be recognised as complete rather than as damaged -- a missing section
+    // means none, see bkReadIncoming().
+    appointments: bundle.appointments,
+    prefs: bundle.prefs,
+    medications: { version: 1, meds: state.meds || [], archivedMeds: state.archivedMeds || {} }
+  });
+}
+
+async function downloadBackupFile() {
+  if (state.exporting || state.restoring) return;
+  setState({ exporting: 'backup', backupNotice: null });
+  try {
+    await yieldFrame();
+    const bundle = await bkCollect();
+    const n = bundle.entries.length + bundle.appointments.length;
+    if (!n) {
+      setToast('Nothing to back up yet.');
+      return;
+    }
+    const text = JSON.stringify(bkBuildPayload(bundle, simNow()), null, 2);
+    await deliverFile(new Blob([text], { type: 'application/json' }), exportFilename('backup', 'json'));
+    const nAppt = bundle.appointments.length;
+    setState({
+      backupNotice: {
+        kind: 'ok',
+        message: 'Backup saved — ' + n + ' record' + (n === 1 ? '' : 's') +
+          (nAppt ? ', including ' + nAppt + ' appointment record' + (nAppt === 1 ? '' : 's') : '') +
+          '. Check it landed in your Files app, then load it back here once to be sure it opens.'
+      }
+    });
+    setToast(n + ' record' + (n === 1 ? '' : 's') + ' saved to your backup file.');
+  } catch (err) {
+    // The raw message is a browser string ("The operation is insecure.") that reads like the app
+    // broke in a way that might have damaged her records. It goes to the console.
+    console.error('[backup:save]', err);
+    setState({ backupNotice: { kind: 'bad', message: "Couldn't make the backup file. Nothing was changed — please try again." } });
+    setToast("Couldn't save the backup file. Your records are safe.");
+  } finally {
+    setState({ exporting: false });
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Restore
+// ------------------------------------------------------------------------------------------------
+
+function bkReadText(file) {
+  if (file && typeof file.text === 'function') return file.text();
+  // Older iOS Safari has no Blob.text(). Without this the restore button did nothing at all there.
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ''));
+    r.onerror = () => reject(r.error || new Error('could not read the file'));
+    r.readAsText(file);
+  });
+}
+
+// Validate and flatten. Throws a short machine token; bkImportFile turns it into a sentence.
+function bkReadIncoming(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not-a-backup');
+  if (parsed.format !== BK_FORMAT) throw new Error('not-a-backup');
+  const fv = Number(parsed.formatVersion);
+  if (!isFinite(fv) || fv < 1) throw new Error('not-a-backup');
+  // A file from a NEWER build may carry sections this build does not understand. Importing the
+  // parts it does recognise would look like a complete restore and quietly not be one.
+  if (fv > BK_FORMAT_VERSION) throw new Error('newer-format');
+  const records = [];
+  const take = (arr) => {
+    if (!Array.isArray(arr)) return;
+    arr.forEach((r) => {
+      if (r && typeof r === 'object' && !Array.isArray(r)) records.push(r);
+    });
+  };
+  take(parsed.entries);
+  // BACKWARD COMPATIBILITY, and the whole reason appointments sit in their own section: a backup
+  // written before this existed has no `appointments` key at all. Absent means none, not broken.
+  // Array.isArray() above is what makes `undefined` a no-op instead of a throw.
+  take(parsed.appointments);
+  return {
+    records: records,
+    prefs: (parsed.prefs && typeof parsed.prefs === 'object' && !Array.isArray(parsed.prefs)) ? parsed.prefs : null,
+    medications: (parsed.medications && typeof parsed.medications === 'object' && !Array.isArray(parsed.medications)) ? parsed.medications : null
+  };
+}
+
+async function bkRestore(bundle) {
+  const snap = await getDocs(col);
+  // Object.create(null). NEVER {}. These keys are Firestore document ids, and a document id is
+  // free to be the string "constructor", "toString", "valueOf" or "hasOwnProperty" -- all four are
+  // legal ids. Against a plain object literal the membership test `here[id]` is TRUTHY on an
+  // EMPTY map, because it finds Object.prototype.constructor. Those records would have been
+  // counted as "already on this phone", skipped, and never written, while the screen reported a
+  // clean successful restore. Silent medical-record loss with a green tick on it. This is the
+  // same class of bug v43.4 fixed in nameOf()/reportNameOf(), and export-test.mjs pins it.
+  const here = Object.create(null);
+  snap.docs.forEach((d) => { here[d.id] = 1; });
+
+  const res = { added: 0, already: 0, unusable: 0, failed: 0, appointments: 0 };
+  for (const rec of bundle.records) {
+    const id = rec.id;
+    if (!bkValidDocId(id)) { res.unusable++; continue; }
+    if (here[id]) { res.already++; continue; }
+    const fields = {};
+    Object.keys(rec).forEach((k) => { if (k !== 'id') fields[k] = rec[k]; });
+    try {
+      // A create at a known id. Never updateDoc, never deleteDoc: the rules forbid both, and a
+      // restore that could delete is not a restore.
+      await setDoc(doc(db, COL_NAME, id), fields);
+      here[id] = 1;
+      res.added++;
+      if (fields.medId === CAL_APPT_MED_ID) res.appointments++;
+    } catch (err) {
+      // One document failing must not abandon the other four hundred.
+      console.error('[restore:doc]', id, err);
+      res.failed++;
+    }
+  }
+  return res;
+}
+
+// The medication list is per-device and the person holding this phone is the one who set it up, so
+// it is NOT overwritten by a file. Two cases:
+//   * this phone has never saved a configuration -- a new phone, which is the case restore exists
+//     for -- so the backup's list is adopted whole;
+//   * this phone has its own list, which is left alone. The one thing merged in either way is the
+//     set of ARCHIVED names, because those are what stop a removed medication's restored dose
+//     history from printing as a bare id in a document handed to an oncologist.
+function bkRestoreMedications(medBlock) {
+  const out = { mode: 'none', archivedAdded: 0 };
+  if (!medBlock || typeof medBlock !== 'object') return out;
+  const incomingMeds = Array.isArray(medBlock.meds) ? medBlock.meds : null;
+  const incomingArchived = normalizeArchivedMeds(medBlock.archivedMeds);
+  let hasLocal = true;
+  try {
+    hasLocal = (typeof localStorage !== 'undefined') && !!localStorage.getItem(MED_CONFIG_STORAGE_KEY);
+  } catch (err) {
+    // Storage unreadable (private mode, quota): assume there IS a local list rather than
+    // clobbering whatever is in memory.
+    hasLocal = true;
+  }
+  if (!hasLocal && incomingMeds && incomingMeds.length) {
+    const meds = mergeMissingDefaultMeds(incomingMeds.map(normalizeMedication).map(migrateSenokotV37), incomingArchived);
+    persistMedicationConfig(meds, incomingArchived);
+    setState({ meds: meds, archivedMeds: incomingArchived });
+    out.mode = 'restored';
+    return out;
+  }
+  const archived = Object.assign({}, state.archivedMeds || {});
+  const known = new Set((state.meds || []).map((m) => m.id));
+  Object.keys(incomingArchived).forEach((id) => {
+    if (known.has(id)) return;
+    // hasOwnProperty, not a bare index -- `archived['constructor']` is truthy on an empty map and
+    // would drop the archived name of a medication with an unlucky id. Same trap as `here` above.
+    if (Object.prototype.hasOwnProperty.call(archived, id)) return;
+    archived[id] = incomingArchived[id];
+    out.archivedAdded++;
+  });
+  if (out.archivedAdded) {
+    persistMedicationConfig(state.meds, archived);
+    setState({ archivedMeds: archived });
+    out.mode = 'merged';
+  }
+  return out;
+}
+
+// missedClearedAt is a HIGH-WATER MARK: the moment the missed-dose banner was last dismissed.
+// Restoring an older value would resurface months of already-dismissed warnings on a phone that
+// had moved past them, so it only ever moves forward. This is the one write in this block that is
+// not a create, and it is the same setDoc(..., {merge:true}) the app already uses on this document.
+async function bkRestorePrefs(prefs) {
+  if (!prefs || typeof prefs !== 'object') return false;
+  const incoming = Number(prefs.missedClearedAt);
+  const current = Number(state.missedClearedAt) || 0;
+  if (!isFinite(incoming) || incoming <= current) return false;
+  await setDoc(PREFS_DOC, { missedClearedAt: incoming }, { merge: true });
+  return true;
+}
+
+// The file input is created ONCE and appended to document.body -- NOT returned from render().
+// render() does root.innerHTML = '' on every repaint and the clock tick repaints once a second, so
+// an <input type="file"> living inside #root is destroyed while the operating system's file picker
+// is still open. Its change event then fires on a node that is no longer in the document, the
+// chosen file is dropped, and nothing anywhere reports a failure. Outside #root it survives every
+// repaint, and no repaint guard has to be added to the tick to protect it.
+let bkFileInput = null;
+
+function bkEnsureFileInput() {
+  if (bkFileInput && bkFileInput.isConnected) return bkFileInput;
+  const el = document.createElement('input');
+  el.type = 'file';
+  el.accept = '.json,application/json';
+  el.setAttribute('data-backup-file-input', 'true');
+  // Off-screen rather than display:none: iOS Safari will not open a picker for a control it
+  // considers unrendered.
+  el.style.position = 'fixed';
+  el.style.left = '-10000px';
+  el.style.top = '0';
+  el.style.width = '1px';
+  el.style.height = '1px';
+  el.style.opacity = '0';
+  // 16px even though it is off-screen and never typed into: iOS Safari zooms the page in when a
+  // focused field is under 16px and does not zoom back out, and a file input DOES take focus when
+  // its picker opens. The one under-16px control on the page is not worth the risk of leaving the
+  // app stuck at 1.3x with the nav off-screen.
+  el.style.fontSize = '16px';
+  el.addEventListener('change', () => {
+    const f = el.files && el.files[0];
+    // Cleared so that choosing the SAME file again still fires a change event. The File reference
+    // is already held, so clearing here does not lose it.
+    el.value = '';
+    if (f) bkImportFile(f);
+  });
+  document.body.appendChild(el);
+  bkFileInput = el;
+  return el;
+}
+
+function bkPickFile() {
+  if (state.restoring || state.exporting) return;
+  try {
+    bkEnsureFileInput().click();
+  } catch (err) {
+    console.error('[restore:pick]', err);
+    setState({ backupNotice: { kind: 'bad', message: "This phone wouldn't open the file picker. Nothing was changed." } });
+  }
+}
+
+async function bkImportFile(file) {
+  if (state.restoring || state.exporting) return;
+  setState({ restoring: true, backupNotice: null });
+  try {
+    if (file && typeof file.size === 'number' && file.size > BK_MAX_BYTES) {
+      setState({ backupNotice: { kind: 'bad', message: "That file is far too big to be a CareTracker backup. Nothing was changed." } });
+      return;
+    }
+    let text = '';
+    try {
+      text = await bkReadText(file);
+    } catch (err) {
+      console.error('[restore:read]', err);
+      setState({ backupNotice: { kind: 'bad', message: "Couldn't read that file. Nothing was changed — try choosing it again." } });
+      return;
+    }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      setState({ backupNotice: { kind: 'bad', message: "That doesn't look like a CareTracker backup. Choose the file whose name ends in .json — the spreadsheet and the printable report can't be loaded back." } });
+      return;
+    }
+    let bundle = null;
+    try {
+      bundle = bkReadIncoming(parsed);
+    } catch (err) {
+      const msg = (err && err.message === 'newer-format')
+        ? 'This backup was made by a newer version of CareTracker than the one on this phone. Update the app first — loading it here could leave part of it out without saying so.'
+        : "That doesn't look like a CareTracker backup. Choose the file whose name ends in .json — the spreadsheet and the printable report can't be loaded back.";
+      setState({ backupNotice: { kind: 'bad', message: msg } });
+      return;
+    }
+    if (!bundle.records.length && !bundle.medications) {
+      setState({ backupNotice: { kind: 'bad', message: 'That backup file is empty. Nothing was changed.' } });
+      return;
+    }
+
+    const res = await bkRestore(bundle);
+    const med = bkRestoreMedications(bundle.medications);
+    let prefsMoved = false;
+    try {
+      prefsMoved = await bkRestorePrefs(bundle.prefs);
+    } catch (err) {
+      // Settings are not records. Failing to move the high-water mark is worth a console line and
+      // nothing else; the records are already in.
+      console.error('[restore:prefs]', err);
+    }
+
+    // Every number here is counted from what actually happened, not from what was attempted.
+    const bits = [];
+    bits.push(res.added === 0
+      ? 'Nothing new to add — everything in that file was already on this phone.'
+      : ('Restored ' + res.added + ' record' + (res.added === 1 ? '' : 's') +
+         (res.appointments ? ', including ' + res.appointments + ' appointment record' + (res.appointments === 1 ? '' : 's') : '') + '.'));
+    if (res.already) bits.push(res.already + ' ' + (res.already === 1 ? 'was' : 'were') + ' already here and ' + (res.already === 1 ? 'was' : 'were') + ' left alone.');
+    if (med.mode === 'restored') bits.push('Your medication list came back too.');
+    else if (med.archivedAdded) bits.push('Added ' + med.archivedAdded + ' medication name' + (med.archivedAdded === 1 ? '' : 's') + ' so older doses still read properly.');
+    if (prefsMoved) bits.push('Your settings were brought forward.');
+    if (res.unusable) bits.push(res.unusable + ' ' + (res.unusable === 1 ? 'line' : 'lines') + " in the file couldn't be read and " + (res.unusable === 1 ? 'was' : 'were') + ' left out.');
+    if (res.failed) bits.push(res.failed + ' ' + (res.failed === 1 ? "couldn't" : "couldn't") + ' be written — check your connection and load the file again; loading it twice is safe.');
+    bits.push('Nothing was removed.');
+
+    setState({ backupNotice: { kind: (res.failed || res.unusable) ? 'bad' : 'ok', message: bits.join(' ') } });
+    setToast(res.added ? ('Restored ' + res.added + ' record' + (res.added === 1 ? '' : 's') + '.') : 'Nothing new to restore.');
+  } catch (err) {
+    console.error('[restore]', err);
+    setState({ backupNotice: { kind: 'bad', message: "Something went wrong loading that file. Nothing was removed. Please try again." } });
+  } finally {
+    setState({ restoring: false });
+  }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Concurrent edit — "this changed while you had it open"
+// ------------------------------------------------------------------------------------------------
+
+// A stable fingerprint of the version of an appointment that is live RIGHT NOW. Document id and
+// loggedAt alone would be enough for two copies of this app, but the visible fields are folded in
+// as well so that a document written by anything else -- a repair script, a restore, a future
+// build -- still registers as a change instead of slipping past on a matching timestamp.
+function calApptStampFor(apptId) {
+  const live = (state.appointments || []).find((a) => a.apptId === apptId);
+  if (!live) return 'gone';
+  return [String(live.id || ''), String(live.loggedAt || 0), String(live.ts || 0), String(live.title || ''), String(live.note || '')].join('|');
+}
+
+function calDetectApptConflict(s) {
+  // A brand-new appointment has nothing to clash with. overwriteOk is set only by the person
+  // pressing "Keep mine" on the notice, which is the informed choice this whole thing exists for.
+  if (!s || !s.apptId || s.overwriteOk) return null;
+  if (calApptStampFor(s.apptId) === s.baseStamp) return null;
+  const live = (state.appointments || []).find((a) => a.apptId === s.apptId);
+  if (!live) {
+    return { kind: 'removed', message: 'Someone else removed this appointment from another phone while you had it open. Nothing has been saved yet.' };
+  }
+  const when = calIsValidTs(live.ts) ? (new Date(live.ts).toLocaleDateString() + ' at ' + fmtTime(live.ts)) : '';
+  const note = String(live.note || '').trim();
+  return {
+    kind: 'changed',
+    message: 'Someone else changed this appointment from another phone while you had it open. It now says “' + String(live.title || '') + '”' +
+      (when ? ', ' + when : '') + (note ? ' — ' + note : '') + '. Nothing has been saved yet.',
+    theirs: { title: String(live.title || ''), when: toLocalISO(live.ts), note: note }
+  };
+}
+
+// "Keep mine" is the ONLY route to writing over the other phone's version, and it is reached by
+// reading what the other version says and then pressing a button. Nothing here happens on its own.
+function calKeepMine() {
+  const c = state.apptSheet;
+  if (!c || c.busy) return;
+  c.overwriteOk = true;
+  c.conflict = null;
+  c.error = '';
+  setState({ apptSheet: c });
+  calSaveAppt();
+}
+
+function calUseTheirs() {
+  const c = state.apptSheet;
+  if (!c || c.busy || !c.conflict) return;
+  if (c.conflict.kind === 'removed') {
+    calSheetNeedsFocus = false;
+    setState({ apptSheet: null, apptConfirmDelete: null });
+    setToast('Left as removed. Nothing was changed.');
+    return;
+  }
+  const t = c.conflict.theirs || {};
+  c.title = String(t.title || '');
+  c.when = String(t.when || c.when);
+  c.note = String(t.note || '');
+  c.conflict = null;
+  c.error = '';
+  // Re-based on what is live now, so the next Save is measured against the version on screen.
+  c.baseStamp = calApptStampFor(c.apptId);
+  setState({ apptSheet: c });
+}
 
 function renderHistory(now) {
   const d0 = dayStart(now);
@@ -3215,7 +4622,7 @@ function sendNotif(title, body, tag) {
 
 function checkNotifications() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  if (!state.loaded || state.entries.length === 0 && !state.demo) return;
+  if (!state.loaded || state.entries.length === 0) return;
 
   resetNotifTracking();
   const now = new Date();
@@ -3347,25 +4754,31 @@ unsubPrefs = subscribePrefs((prefs) => {
   setState({ missedClearedAt: prefs.missedClearedAt || 0 });
 });
 unsub = subscribeEntries((entries) => {
-  const wasEmpty = state.entries.length === 0 && !state.loaded;
-  if (state.timeModal) {
+  // state.appointments was already refreshed inside subscribeEntries above, so the calendar is
+  // never stale; what is deferred here is only the state.entries swap and the repaint that comes
+  // with it, which would otherwise wipe a half-typed appointment when a sync lands.
+  if (state.timeModal || state.apptSheet) {
     // Defer update so the modal isn't destroyed mid-interaction
     pendingEntries = entries;
     if (!state.loaded) { state.loaded = true; state.entries = entries; }
     return;
   }
   setState({ entries, loaded: true });
-  // If first load and no entries, offer to seed demo data
-  if (false && wasEmpty && entries.length === 0) {
-    seedDemo();
-  }
 });
 
 setInterval(() => {
   state.now = simNow();
   const activeTag = document.activeElement && document.activeElement.tagName;
-  const isEditing = activeTag === 'INPUT' || activeTag === 'SELECT' || activeTag === 'TEXTAREA';
-  if (!state.timeModal && !isEditing) render();
+  // A repaint rebuilds the entire tree.  If one lands between the touchstart and the touchend of a
+  // tap, the element under the finger is replaced and the click never fires — a chip that silently
+  // does nothing roughly one tap in twelve.  The open reason sheet is folded into this existing
+  // guard rather than into the `if` below it, so this patch and the calendar patch (which rewrites
+  // that `if`) can be applied in either order.
+  const isEditing = activeTag === 'INPUT' || activeTag === 'SELECT' || activeTag === 'TEXTAREA' || !!state.missReasonSheet;
+  // A repaint rebuilds the whole tree, so a once-a-second tick underneath an open dialog
+  // destroys and recreates the control being touched. The drawer and the appointment sheet
+  // get the same protection the time modal already had.
+  if (!state.timeModal && !state.apptSheet && !state.drawerOpen && !isEditing) render();
   checkNotifications();
 }, 1000);
 render();

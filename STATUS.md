@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v43.4 |
+| **Version** | v44 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `520a150aa4ef7d6a0bda5b3843355e62` |
-| **sw.js md5** | `504181487e25c557b7f3b29769844d8d` |
+| **index.html md5** | `da4ca5510da8489e646cfa7e0e3e27cd` |
+| **sw.js md5** | `99d797cd71d8c74dba2da6b6569ba4a9` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -88,7 +88,50 @@ Shipped in the v43.x line, all live and verified:
 
 ---
 
-## IN FLIGHT — v44
+## v44 — SHIPPED
+
+Built from v43.4 by applying, in order: `cleanup-patch.py`, `calendar-patch.py`,
+`reason-patch.py`, `export-patch.py`. All four are in `harness/` and the build is reproducible
+from this repo alone. **The guided tour was deliberately cut from v44** and is not built.
+
+What v44 adds:
+- **Calendar + appointments** — month view, appointment sheet, nav drawer. Day cells measured at
+  47.00px / 49.14px (44px floor); all sheet fields 16px so iOS does not zoom and stay zoomed.
+- **Backup & restore** — a real JSON backup that can be loaded back. Round trip proven at BYTE
+  level: save, wipe the database and the medication list, import through the real file chooser,
+  save again, md5s match. Restore writes under original document ids, so it is idempotent, never
+  deletes, and never overwrites.
+- **Appointments are in the backup** — previously the one thing a restore could not bring back.
+- **Concurrent-edit notice** — a stale appointment save is stopped with zero writes and offers
+  "Keep mine" / "Use the newer one" instead of silently discarding the other phone's change.
+- **Missed-dose reasons** — **Took it later / Skipped**, plus "Remove this reason" as Clear.
+  Aaron reviewed a longer nine-option list and chose the ChemoWell set instead. Optional, never
+  blocking, changeable afterwards. Appears in the printable report, byte-for-byte absent from
+  the CSV. **Do not re-expand this list without asking him.**
+- **Reminder ledger + data-driven `send-reminders.js`** — in `harness/`, NOT yet wired into the
+  live workflow. v43.4 drops roughly 1 in 6 anchored reminders even with a punctual cron.
+- **Dead demo code removed.**
+
+### Test results on the shipped build
+- `export-test.mjs` — **49/49**
+- `cal-test.mjs` — **69/70** (the one failure pins `APP_VERSION` to the literal `v43.3` and goes
+  red on any release; it is a stale assertion, not a defect)
+- `reason-test.mjs` — **38/41** (one stale `v43.3` pin; two — `REPORT-reasons-not-in-log` and
+  `CSV-no-reason-strings` — cannot reach the export buttons from that suite's screen state and
+  download the backup file instead. **Their coverage is not lost:** `CSV-byte-identical` passes,
+  proving reason documents do not change the CSV by a single byte, and `export-test.mjs` clicks
+  all three export buttons on this exact build and gets three correctly-named files. Left failing
+  and documented rather than deleted or weakened.)
+
+### Known cross-patch hazard, now guarded
+Three patches pinned post-conditions to the literal string `const APP_VERSION = 'v43.3';`, so they
+all refused to apply the moment the version was legitimately bumped. Every one is now
+version-agnostic: they compare input to output instead of to a literal. Any new patch must do the
+same.
+
+---
+
+## PREVIOUSLY IN FLIGHT — v44
 
 **Not live.** For the v44 feature set, only patches, tests and reports are on `main` —
 `index.html` does not carry them and will not until the full audit signs off.
