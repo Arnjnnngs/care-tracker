@@ -277,11 +277,11 @@ function persistMedicationConfig(meds, archivedMeds) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -1146,7 +1146,10 @@ function svgIcon(name, size) {
     // silently -- a duplicate object key is legal JavaScript with no error and no warning.
     calMenu: '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
     calMonth: '<path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="M4 10h16"/><path d="M9 3v4"/><path d="M15 3v4"/>',
-    calClose: '<path d="m6 6 12 12"/><path d="m18 6-12 12"/>'
+    calClose: '<path d="m6 6 12 12"/><path d="m18 6-12 12"/>',
+    // Namespaced tour*, for the same reason the calendar patch namespaced cal*: `help` is the
+    // obvious name, which is exactly why the next patch will reach for it too. `help` stays free.
+    tourHelp: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.2-2.5 3.9"/><path d="M12 17.6h.01"/>'
   };
   return '<svg ' + common + '>' + (paths[name] || paths.home) + '</svg>';
 }
@@ -1174,7 +1177,7 @@ function renderHeader(now) {
     h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px' } },
       // The only route to the Calendar. 44x44 exactly -- it is the smallest control on the busiest
       // screen and it is hit one-handed while holding something else.
-      h('button', { 'data-cal-menu-button': 'true', type: 'button', onClick: calOpenDrawer, 'aria-label': 'Open menu', 'aria-expanded': state.drawerOpen ? 'true' : 'false', style: { flexShrink: '0', width: '44px', height: '44px', borderRadius: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.12)', color: '#AA5375' } }, appIcon('calMenu', 21)),
+      h('button', { 'data-cal-menu-button': 'true', 'data-tour-menu': 'true', type: 'button', onClick: calOpenDrawer, 'aria-label': 'Open menu', 'aria-expanded': state.drawerOpen ? 'true' : 'false', style: { flexShrink: '0', width: '44px', height: '44px', borderRadius: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.12)', color: '#AA5375' } }, appIcon('calMenu', 21)),
       h('div', { style: { minWidth: '0', flex: '1' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '7px', color: '#AA5375', marginBottom: '4px' } },
           appIcon('heart', 18),
@@ -1309,6 +1312,11 @@ function render() {
   );
   root.innerHTML = '';
   root.appendChild(page);
+  // The tour lives OUTSIDE #root, because the line above would otherwise destroy it on every
+  // repaint. It survives -- but every element the spotlight could be pointing at has just been
+  // replaced, so re-glue the highlight to the new node now instead of leaving it on stale
+  // coordinates for up to a second.
+  if (state.tour) positionTour(false);
 }
 
 function renderTimeModal() {
@@ -1732,7 +1740,7 @@ function missedRow(e, i) {
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '0 14px 9px' } },
       saved ? h('span', { 'data-mr-row-reason': 'true', style: { display: 'inline-block', maxWidth: '100%', padding: '5px 11px', borderRadius: '999px', background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(142,61,97,0.22)', color: '#6B4257', fontSize: '13px', fontWeight: '700' } }, saved.reasonId ? mrLabelFor(saved.reasonId, saved.reasonLabel) : MR_NOTE_ONLY_LABEL) : null,
       // stopPropagation, or this tap also fires the row's log flow underneath it.
-      h('button', { 'data-mr-row-button': 'true', 'aria-label': (saved ? 'Change the reason recorded for ' : 'Add a reason for ') + nameOf(e.medId) + (e.windowName ? ' ' + e.windowName + ' window' : ''), onClick: (ev) => { ev.stopPropagation(); mrOpenSheet(e); }, style: { minHeight: '44px', padding: '0 13px', borderRadius: '11px', background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(192,69,59,0.28)', color: '#A13830', fontSize: '13.5px', fontWeight: '700' } }, saved ? 'Change' : 'Add a reason')
+      h('button', { 'data-mr-row-button': 'true', 'data-tour-missed': 'true', 'aria-label': (saved ? 'Change the reason recorded for ' : 'Add a reason for ') + nameOf(e.medId) + (e.windowName ? ' ' + e.windowName + ' window' : ''), onClick: (ev) => { ev.stopPropagation(); mrOpenSheet(e); }, style: { minHeight: '44px', padding: '0 13px', borderRadius: '11px', background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(192,69,59,0.28)', color: '#A13830', fontSize: '13.5px', fontWeight: '700' } }, saved ? 'Change' : 'Add a reason')
     ),
     (saved && saved.note) ? h('div', { 'data-mr-row-note': 'true', style: { padding: '0 14px 10px', fontSize: '12.5px', lineHeight: '1.45', color: '#6B4257' } }, saved.note) : null
   );
@@ -2227,7 +2235,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   });
 
   const quickLogOpen = state.quickLogOpen !== false; // default open
-  parts.push(h('section', null,
+  parts.push(h('section', { 'data-tour-quicklog': 'true' },
     h('div', { onClick: () => setState({ quickLogOpen: !quickLogOpen }), style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' } },
       h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, 'Quick log' + (quickLogOpen ? '' : ' (' + medCards.length + ')')),
       h('span', { style: { fontSize: '10px', color: '#8A6479' } }, quickLogOpen ? '▲' : '▼')
@@ -2586,7 +2594,7 @@ function renderMedicationManager(now) {
     ),
     renderMedicationEditor(),
     homeOrderSection,
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)
+    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)
   ];
 }
 
@@ -2617,7 +2625,7 @@ function renderReportsMenu(now) {
       h('div', { style: { fontSize: '12.5px', color: '#6E5261', marginTop: '5px' } }, 'Save or print your records, or open a report below.')
     ),
     renderSaveRecordsCard(now),
-    h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+    h('div', { 'data-tour-reports': 'true', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
       ...reportTypes.map(type => {
         const report = reportDescriptor(type, now);
         return h('button', { onClick: () => openReport(type), style: { width: '100%', minHeight: '92px', display: 'flex', alignItems: 'center', gap: '13px', padding: '14px', textAlign: 'left', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', color: '#342530', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
@@ -2681,6 +2689,9 @@ function renderSaveRecordsCard(now) {
       // A stable hook per button. Matching these on their visible label instead is what let an
       // earlier round test a button that had been renamed, against a screen that no longer had it.
       'data-backup-btn': kind,
+      // Spread, never a nullish ternary: h() falls through to setAttribute, and any value at all
+      // -- including the string "null" -- would put a dead hook on the other two buttons.
+      ...(kind === 'backup' ? { 'data-tour-backup': 'true' } : {}),
       ...(off ? { disabled: 'disabled' } : {}),
       'aria-busy': running ? 'true' : 'false',
       style: {
@@ -2951,6 +2962,18 @@ function renderCalDrawer() {
             )
           );
         })
+      ),
+      h('div', { style: { marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(212,104,138,0.16)' } },
+        h('button', {
+          'data-tour-drawer-item': 'true', type: 'button', onClick: () => tourStart(),
+          style: { minHeight: '58px', width: '100%', display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', padding: '9px 11px', borderRadius: '14px', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.14)', cursor: 'pointer' }
+        },
+          h('span', { style: { width: '34px', height: '34px', flexShrink: '0', borderRadius: '11px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.09)', color: '#AA5375' } }, appIcon('tourHelp', 18)),
+          h('span', { style: { display: 'block', minWidth: '0', flex: '1' } },
+            h('span', { style: { display: 'block', fontSize: '14.5px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'Take a quick tour'),
+            h('span', { style: { display: 'block', fontSize: '11.5px', color: '#6E5261', marginTop: '1px', lineHeight: '1.3' } }, 'A minute-long look around')
+          )
+        )
       )
     )
   );
@@ -3269,7 +3292,7 @@ function renderCalendarView(now) {
       h('div', { 'data-cal-weekday-row': 'true', 'aria-hidden': 'true', style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '2px', marginBottom: '3px' } },
         ...CAL_WEEKDAY_LETTERS.map(l => h('div', { style: { textAlign: 'center', fontSize: '11.5px', fontWeight: '700', color: '#8A6479', padding: '2px 0' } }, l))
       ),
-      h('div', { 'data-cal-month-grid': 'true', role: 'grid', 'aria-label': monthLabel, style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '2px' } },
+      h('div', { 'data-cal-month-grid': 'true', 'data-tour-calendar': 'true', role: 'grid', 'aria-label': monthLabel, style: { display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '2px' } },
         ...cells.map(dayCell)
       )
     ),
@@ -4749,6 +4772,374 @@ function checkNotifications() {
 // Request push notification permission and subscribe to FCM
 subscribePush();
 
+
+// ---------------- Guided tour (v44) ----------------
+// TOUR-PATCH-MARK
+//
+// Aaron's requirement in full: skippable, re-runnable from the menu, and it must NEVER block the
+// app. ChemoWell's tour gates its app until setup completes; this one deliberately does the
+// opposite, in four ways:
+//
+//  1. IT NEVER STARTS ON ITS OWN. There is no first-run flag, no prefs read, no Firestore read,
+//     no localStorage key -- nothing exists that could decide to show it. The only way in is the
+//     "Take a quick tour" row at the bottom of the menu. A tour with no auto-start has no path by
+//     which it can stand between a patient and logging a dose, which is the failure we are
+//     refusing to ship. It also means the tour is unaffected by prefs failing to load or by
+//     Firestore being offline: it reads neither.
+//  2. FOUR INDEPENDENT EXITS ON EVERY STEP -- Skip, the X, the Escape key, and a tap on the dimmed
+//     backdrop. If any one of them regressed, three still work.
+//  3. IT PUTS THE SCREEN BACK. The view and report the tour was started from are recorded at
+//     start and restored on exit, so leaving at the Reports step does not strand anyone in
+//     Reports.
+//  4. IT LIVES OUTSIDE #root. render() does `root.innerHTML = ''`, so a tour built inside root
+//     would be destroyed by any repaint. It is appended to <body> instead and only ever
+//     repositioned, never rebuilt, by a repaint.
+//
+// The backdrop DOES swallow taps aimed at the app underneath, and that is the one place this is
+// deliberately modal. Letting taps through would mean someone reading the "Logging a dose" step
+// could log a real dose by touching the highlighted card. Wrong dose data in a chemotherapy log
+// is a worse outcome than a modal you leave with one tap. "Never blocks the app" is honoured by
+// the tour never appearing unbidden and never having fewer than four ways out -- not by making
+// the highlighted control live.
+
+const TOUR_STEPS = [
+  {
+    key: 'welcome',
+    title: 'A quick look around',
+    body: 'About a minute. Nothing you tap in here changes your records, and you can stop at any point — the tour stays in the menu for whenever you want it again.',
+    view: 'home'
+  },
+  {
+    key: 'menu',
+    title: 'Everything lives here',
+    body: 'The tabs along the bottom cover the day to day. This button opens the full menu, and it is the only way through to the Calendar.',
+    view: 'home',
+    sel: ['[data-tour-menu]']
+  },
+  {
+    key: 'logging',
+    title: 'Logging a dose',
+    body: 'Tap a medication to log it at the current time. Each card shows what has already been taken today, and if a dose is not due yet it tells you when it will be.',
+    view: 'home',
+    sel: ['[data-tour-quicklog]']
+  },
+  {
+    key: 'missed',
+    title: 'If a dose gets missed',
+    body: 'A scheduled dose with nothing logged shows up in red. You can add a short reason — asleep, felt sick, out of the house — or leave it blank. It is a record for the clinic, not a mark against you.',
+    view: 'home',
+    sel: ['[data-tour-missed]']
+  },
+  {
+    key: 'calendar',
+    title: 'Appointments',
+    body: 'Tap any day to add an appointment or to see what is on it. If the same appointment is edited on two phones at once, CareTracker asks you which version to keep rather than quietly picking one.',
+    view: 'calendar',
+    sel: ['[data-tour-calendar]']
+  },
+  {
+    key: 'meds',
+    title: 'Your medication list',
+    body: 'Add a medication, change its doses, or edit when it is due. Taking one off the list clears its card from Home — everything you already logged for it stays in your history.',
+    view: 'meds',
+    sel: ['[data-tour-meds]']
+  },
+  {
+    key: 'reports',
+    title: 'Looking back',
+    body: 'History, weight, appetite and the rest, day by day. Useful when someone at the clinic asks how the last couple of weeks have gone.',
+    view: 'reports',
+    sel: ['[data-tour-reports]']
+  },
+  {
+    key: 'backup',
+    title: 'Your backup file',
+    body: 'The backup file is the only one of these that can be put back. Save it somewhere safe — a new phone, or anything gone missing, is rebuilt from that file. The spreadsheet and the printable report are for reading and for handing to a doctor; neither can be loaded back in.',
+    view: 'reports',
+    sel: ['[data-tour-backup]']
+  },
+  {
+    key: 'finish',
+    title: 'That is everything',
+    body: 'The tour stays right here, so you can run it again any time you like.',
+    view: 'home',
+    drawer: true,
+    sel: ['[data-tour-drawer-item]']
+  }
+];
+
+let tourEl = null;
+let tourScrimEl = null;
+let tourRingEl = null;
+let tourCardEl = null;
+
+function tourStepAt(i) {
+  const n = TOUR_STEPS.length;
+  const k = Math.max(0, Math.min(n - 1, Number(i) || 0));
+  return TOUR_STEPS[k];
+}
+
+// Returns the element a step points at, or null. Null is a supported outcome, not a failure: the
+// missed-dose step has nothing to point at on a day with no misses, and a brand-new phone with
+// Firestore offline has no medication cards at all. positionTour() centres the card and hides the
+// spotlight in that case, and the step still reads correctly.
+function tourAnchorEl(step) {
+  if (!step || !step.sel) return null;
+  const list = Array.isArray(step.sel) ? step.sel : [step.sel];
+  for (const s of list) {
+    let el = null;
+    try { el = document.querySelector(s); } catch (err) { el = null; }
+    if (el && el.getClientRects && el.getClientRects().length) return el;
+  }
+  return null;
+}
+
+function tourMount() {
+  if (tourEl) return;
+  tourEl = document.createElement('div');
+  tourEl.setAttribute('data-tour-root', 'true');
+  // 120 clears every other layer in the app, including the z-index:100 "Connecting..." overlay,
+  // so a tour that is somehow open while the connection drops is still readable and still
+  // dismissible rather than being buried under a screen with no controls on it.
+  tourEl.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:120;';
+  document.body.appendChild(tourEl);
+}
+
+function tourUnmount() {
+  if (tourEl && tourEl.parentNode) tourEl.parentNode.removeChild(tourEl);
+  tourEl = null;
+  tourScrimEl = null;
+  tourRingEl = null;
+  tourCardEl = null;
+}
+
+function tourReflow() { positionTour(false); }
+
+// Geometry only -- never rebuilds the card, so it can be called from a scroll handler, from the
+// one-second tick and from the tail of render() without ever moving focus.
+function positionTour(animate) {
+  if (!state.tour || !tourEl || !tourCardEl || !tourRingEl || !tourScrimEl) return;
+  const step = tourStepAt(state.tour.i);
+  const el = tourAnchorEl(step);
+  const vw = window.innerWidth || document.documentElement.clientWidth || 375;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 812;
+  const card = tourCardEl;
+  card.style.transition = animate ? 'left 160ms ease, top 160ms ease' : 'none';
+  tourRingEl.style.transition = animate ? 'left 160ms ease, top 160ms ease, width 160ms ease, height 160ms ease' : 'none';
+  const cardW = card.offsetWidth || Math.min(340, vw - 24);
+  const cardH = card.offsetHeight || 190;
+
+  if (!el) {
+    tourRingEl.style.opacity = '0';
+    tourScrimEl.style.background = 'rgba(52,26,44,0.5)';
+    card.style.left = Math.round(Math.max(12, (vw - cardW) / 2)) + 'px';
+    card.style.top = Math.round(Math.max(12, (vh - cardH) / 2)) + 'px';
+    return;
+  }
+
+  const r = el.getBoundingClientRect();
+  const pad = 6;
+  const rx = Math.max(0, r.left - pad);
+  const ry = Math.max(0, r.top - pad);
+  const rw = Math.max(0, Math.min(vw, r.right + pad) - rx);
+  const rh = Math.max(0, Math.min(vh, r.bottom + pad) - ry);
+  tourRingEl.style.opacity = '1';
+  tourRingEl.style.left = Math.round(rx) + 'px';
+  tourRingEl.style.top = Math.round(ry) + 'px';
+  tourRingEl.style.width = Math.round(rw) + 'px';
+  tourRingEl.style.height = Math.round(rh) + 'px';
+  // The dimming is carried by the ring's own outer shadow, which leaves the highlighted control at
+  // full brightness. The scrim underneath goes clear so the two do not stack into a double dim.
+  tourScrimEl.style.background = 'transparent';
+
+  const gap = 12;
+  const margin = 12;
+  const below = r.bottom + gap;
+  const above = r.top - gap - cardH;
+  let top;
+  if (below + cardH <= vh - margin) top = below;
+  else if (above >= margin) top = above;
+  // Neither side fits, which means the target is taller than the room around it. Pin the card to
+  // the bottom rather than centring it: centred, the card lands on the middle of the highlighted
+  // block and covers the very heading the step is naming.
+  else top = Math.max(margin, vh - cardH - margin);
+  let left = r.left + (r.width / 2) - (cardW / 2);
+  left = Math.max(margin, Math.min(left, vw - cardW - margin));
+  card.style.left = Math.round(left) + 'px';
+  card.style.top = Math.round(top) + 'px';
+}
+
+// Puts the app behind the tour onto the screen this step is about. Deliberately does NOT call
+// calCloseDrawer(): that path exists to hand focus back to the menu button, and its handoff lands
+// after the tour has taken focus and pulls it straight back out. The drawer flags are cleared
+// directly here instead, and the tour claims focus on a double rAF so it wins that race outright.
+function tourApplyView(step) {
+  calDrawerNeedsFocus = false;
+  calSheetNeedsFocus = false;
+  state.drawerOpen = !!(step && step.drawer);
+  if (step && step.view) {
+    state.view = step.view;
+    state.reportsView = null;
+  }
+  // Deliberately does not clear state.medEditor. A half-filled medication form is typed data, and
+  // discarding it because someone opened the tour would be the tour destroying work -- the exact
+  // thing it is not allowed to do. It stays open behind the tour and is still there afterwards.
+  render();
+}
+
+function tourRenderStep() {
+  if (!state.tour || !tourEl) return;
+  const i = state.tour.i;
+  const step = tourStepAt(i);
+  const n = TOUR_STEPS.length;
+  const isLast = i === n - 1;
+
+  const scrim = h('div', {
+    'data-tour-scrim': 'true',
+    onClick: (e) => { if (e.target === e.currentTarget) tourEnd(); },
+    style: { position: 'absolute', left: '0', top: '0', right: '0', bottom: '0', background: 'rgba(52,26,44,0.5)' }
+  });
+
+  const ring = h('div', {
+    'data-tour-ring': 'true', 'aria-hidden': 'true',
+    style: { position: 'absolute', left: '0px', top: '0px', width: '0px', height: '0px', borderRadius: '16px', pointerEvents: 'none', opacity: '0', boxShadow: '0 0 0 3px rgba(255,255,255,0.9), 0 0 0 5px rgba(212,104,138,0.85), 0 0 0 9999px rgba(52,26,44,0.5)' }
+  });
+
+  const btnBase = { minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '13px', fontSize: '14px', fontWeight: '800', cursor: 'pointer' };
+
+  const card = h('div', {
+    'data-tour-card': 'true', 'data-tour-step': String(i), 'data-tour-key': step.key,
+    role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title', 'aria-describedby': 'tour-body', tabindex: '-1',
+    style: { position: 'absolute', left: '0px', top: '0px', width: 'min(340px, calc(100vw - 24px))', boxSizing: 'border-box', background: 'rgba(255,247,250,0.985)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '20px', boxShadow: '0 18px 48px rgba(90,40,70,0.32)', padding: '14px 15px 13px', outline: 'none' }
+  },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+      h('span', { 'data-tour-count': 'true', className: 'mono', style: { flex: '1', minWidth: '0', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#8E3D61' } }, 'Step ' + (i + 1) + ' of ' + n),
+      h('button', { 'data-tour-close': 'true', type: 'button', onClick: () => tourEnd(), 'aria-label': 'Close the tour', style: { width: '44px', height: '44px', flexShrink: '0', margin: '-6px -7px -6px 0', borderRadius: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.10)', color: '#AA5375', cursor: 'pointer' } }, appIcon('calClose', 18))
+    ),
+    h('h2', { id: 'tour-title', 'data-tour-title': 'true', style: { margin: '7px 0 0', fontSize: '17px', fontWeight: '800', letterSpacing: '-0.02em', color: '#342530', lineHeight: '1.2' } }, step.title),
+    h('p', { id: 'tour-body', 'data-tour-body': 'true', style: { margin: '6px 0 0', fontSize: '14px', lineHeight: '1.45', color: '#5F4A56' } }, step.body),
+    h('div', { 'data-tour-dots': 'true', role: 'group', 'aria-label': 'Tour progress', style: { display: 'flex', gap: '5px', marginTop: '12px' } },
+      // aria-current is SPREAD IN, never passed as a nullish value. h() falls through to a bare
+      // el.setAttribute() for anything it does not special-case, so `aria-current: null` renders
+      // the literal aria-current="null" and every dot claims to be the current step.
+      ...TOUR_STEPS.map((s, k) => h('span', Object.assign({
+        'data-tour-dot': s.key,
+        style: { width: k === i ? '18px' : '6px', height: '6px', borderRadius: '99px', background: k === i ? '#AA5375' : 'rgba(170,83,117,0.28)', transition: 'width 160ms ease' }
+      }, k === i ? { 'aria-current': 'step' } : {})))
+    ),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' } },
+      h('button', { 'data-tour-skip': 'true', type: 'button', onClick: () => tourEnd(), style: { ...btnBase, padding: '0 11px', background: 'transparent', color: '#745D69', fontSize: '13.5px' } }, 'Skip'),
+      h('span', { style: { flex: '1' } }),
+      // Back is OMITTED on the first step rather than rendered disabled. `disabled: false` and
+      // `disabled: null` both disable a control through h(), and a permanently dead button on the
+      // opening step is exactly the class of defect this app has shipped four times.
+      i > 0 ? h('button', { 'data-tour-back': 'true', type: 'button', onClick: () => tourGo(i - 1), style: { ...btnBase, padding: '0 14px', background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(212,104,138,0.32)', color: '#8E3D61' } }, 'Back') : null,
+      h('button', { 'data-tour-next': 'true', type: 'button', onClick: () => tourNext(), style: { ...btnBase, padding: '0 16px', background: '#AA5375', color: '#fff', boxShadow: 'inset 0 -2px 0 rgba(121,57,84,0.35)' } }, isLast ? 'Done' : 'Next')
+    )
+  );
+
+  tourEl.innerHTML = '';
+  scrim.appendChild(ring);
+  scrim.appendChild(card);
+  tourEl.appendChild(scrim);
+  tourScrimEl = scrim;
+  tourRingEl = ring;
+  tourCardEl = card;
+
+  const el = tourAnchorEl(step);
+  if (el && typeof el.scrollIntoView === 'function') {
+    try {
+      // A block taller than the screen must NOT be centred: centring puts its heading -- the thing
+      // the step is actually naming -- above the top of the viewport, and the spotlight then
+      // clamps to the screen edge instead of tracing the target. Align its top instead, then back
+      // off by the height of the sticky header so the header is not sitting on top of it.
+      const vhNow = window.innerHeight || 812;
+      const tall = el.getBoundingClientRect().height > vhNow * 0.6;
+      el.scrollIntoView({ block: tall ? 'start' : 'center', inline: 'nearest', behavior: 'auto' });
+      if (tall) window.scrollBy(0, -96);
+    } catch (err) {}
+  }
+  positionTour(false);
+  // Two frames, not one. calFocusOnce() hands focus to a newly opened dialog on a single rAF;
+  // taking focus on the second frame means the tour wins that race every time instead of most
+  // of the time. Focus lands on the card, never on a text field, so no keyboard is thrown up.
+  requestAnimationFrame(() => {
+    positionTour(false);
+    requestAnimationFrame(() => {
+      positionTour(false);
+      if (tourCardEl) { try { tourCardEl.focus(); } catch (err) {} }
+    });
+  });
+}
+
+function tourKeyHandler(e) {
+  if (!state.tour) return;
+  if (e.key === 'Escape' || e.key === 'Esc') {
+    e.preventDefault();
+    e.stopPropagation();
+    tourEnd();
+    return;
+  }
+  if (e.key !== 'Tab' || !tourCardEl) return;
+  const items = Array.prototype.slice.call(tourCardEl.querySelectorAll('button'));
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (!tourCardEl.contains(active)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); return; }
+  if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+}
+
+function tourGo(next) {
+  if (!state.tour) return;
+  state.tour.i = Math.max(0, Math.min(TOUR_STEPS.length - 1, Number(next) || 0));
+  tourApplyView(tourStepAt(state.tour.i));
+  tourRenderStep();
+}
+
+function tourNext() {
+  if (!state.tour) return;
+  if (state.tour.i >= TOUR_STEPS.length - 1) { tourEnd(); return; }
+  tourGo(state.tour.i + 1);
+}
+
+function tourStart() {
+  if (state.tour) return;
+  // Anything half-typed is closed before the tour takes over, because the tour changes screens
+  // underneath and a sheet left open behind it would be unreachable. Reached only from the menu,
+  // and the menu cannot be open at the same time as the appointment sheet or the time modal.
+  state.tour = { i: 0, retView: state.view, retReports: state.reportsView || null };
+  tourMount();
+  document.addEventListener('keydown', tourKeyHandler, true);
+  window.addEventListener('resize', tourReflow);
+  window.addEventListener('scroll', tourReflow, true);
+  tourGo(0);
+}
+
+// Safe to call twice, from any step, with the DOM in any state. Every teardown line is guarded or
+// idempotent, because "I tapped Skip twice" must not be a way to end up with a dead overlay.
+function tourEnd() {
+  const t = state.tour;
+  state.tour = null;
+  document.removeEventListener('keydown', tourKeyHandler, true);
+  window.removeEventListener('resize', tourReflow);
+  window.removeEventListener('scroll', tourReflow, true);
+  tourUnmount();
+  if (t) {
+    state.view = t.retView || 'home';
+    state.reportsView = t.retReports || null;
+  }
+  state.drawerOpen = false;
+  calDrawerNeedsFocus = false;
+  render();
+  window.scrollTo(0, 0);
+  requestAnimationFrame(() => {
+    const b = document.querySelector('[data-tour-menu]');
+    if (b) { try { b.focus(); } catch (err) {} }
+  });
+}
+
 // Init
 unsubPrefs = subscribePrefs((prefs) => {
   setState({ missedClearedAt: prefs.missedClearedAt || 0 });
@@ -4778,7 +5169,16 @@ setInterval(() => {
   // A repaint rebuilds the whole tree, so a once-a-second tick underneath an open dialog
   // destroys and recreates the control being touched. The drawer and the appointment sheet
   // get the same protection the time modal already had.
-  if (!state.timeModal && !state.apptSheet && !state.drawerOpen && !isEditing) render();
+  // COMPOSED, NOT OVERWRITTEN.  Every term below belongs to a different patch: timeModal is
+  // original, apptSheet and drawerOpen are the calendar patch's, missReasonSheet rides inside
+  // isEditing from the reason patch, and !state.tour is this one.  Dropping any single term ships
+  // a once-a-second repaint that destroys the control somebody is currently touching -- the
+  // appointment sheet losing focus mid-sentence is a defect this project has already shipped.
+  if (!state.timeModal && !state.apptSheet && !state.drawerOpen && !state.tour && !isEditing) render();
+  // Skipping render() during a tour is what stops the spotlight jumping, but the page underneath
+  // can still reflow with no repaint at all -- a sync landing, an image settling, the keyboard
+  // closing.  Re-glue the highlight to its target instead of leaving it on stale coordinates.
+  else if (state.tour) positionTour(false);
   checkNotifications();
 }, 1000);
 render();

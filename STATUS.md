@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v44 |
+| **Version** | v45 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `da4ca5510da8489e646cfa7e0e3e27cd` |
-| **sw.js md5** | `99d797cd71d8c74dba2da6b6569ba4a9` |
+| **index.html md5** | `a036d6983ea7c30480fd758e35fd4ed3` |
+| **sw.js md5** | `421b74cb9eacebd581a18d0777284aac` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,42 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v45 — SHIPPED — the guided tour
+
+Nine steps, reachable **only** from the menu. There is no auto-start path anywhere in the file
+(`tourStart` appears exactly twice: its declaration and the menu row), so it can never appear
+uninvited and can never trap anyone. Four independent exits on every step. On exit it restores
+both the previous view and any report that was open.
+
+Steps: welcome, the menu, logging a dose, missed doses and reasons, the calendar, the medication
+list, reports, the backup, finish. **The backup step leads verbatim with "The backup file is the
+only one of these that can be put back."** — the check anchors on the start of the line, so
+burying that sentence fails the suite.
+
+The 1-second tick guard is COMPOSED, not overwritten:
+`if (!state.timeModal && !state.apptSheet && !state.drawerOpen && !state.tour && !isEditing) render();`
+The patch refuses to write unless that exact string is present exactly once, so any future edit
+that drops the calendar's or the appointment sheet's term fails at patch time instead of silently
+throwing focus out of a dialog someone is typing in.
+
+### Test results
+- `tour-test.mjs` — **66/68**. The two failures are the checks asserting the *patch* does not
+  change `APP_VERSION` or `sw.js`; both are set at ship time, so they are correct to fail here
+  and pass on the patch itself. **31 falsifications, every one RED then restored.**
+- No regressions: `cal-test.mjs` **69/70**, `export-test.mjs` **49/49**, `reason-test.mjs`
+  **38/41** — identical to their v44 baselines, same failure ids.
+- Measured at 375x812 and 390x844: smallest tour button 44.0px, drawer row 58.0px.
+  Spotlight follows a reflow within 0.22px.
+
+### Harness correction shipped with this release
+`harness/reason-test.mjs` and `harness/export-test.mjs` on `main` were stale — the reason suite
+still asserted the **cut nine-option list** (`Felt too nauseous` and friends appear 8 times in
+the suite, 0 times in the app). They were fixed locally during the v44 build and **never pushed**,
+so anyone cloning this repo got suites that could not pass. Both corrected copies are in this
+commit. Baselines above are against the corrected suites.
 
 ---
 
