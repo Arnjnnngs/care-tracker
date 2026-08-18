@@ -265,23 +265,710 @@ function loadMedicationConfig() {
 }
 
 function persistMedicationConfig(meds, archivedMeds) {
+  // The local copy is now a CACHE of the shared list, not the source of truth.  The early return
+  // that used to sit inside this try block was moved into the condition on purpose: a device with
+  // no usable localStorage must still publish its change to the other phone, and returning early
+  // silently skipped that.
   try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(MED_CONFIG_STORAGE_KEY, JSON.stringify({ version: 1, meds, archivedMeds }));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(MED_CONFIG_STORAGE_KEY, JSON.stringify({ version: 1, meds, archivedMeds }));
+    }
   } catch (error) {
     console.warn('Medication configuration could not be saved:', error);
     setToast('Medication changes are active for this session but could not be saved on this device.');
   }
+  // The single choke point.  Every medication edit in this app -- the editor, reordering, removing
+  // a medication, and the archived-name merge that restore performs -- reaches Firestore through
+  // this one line, which is why a later edit on either phone cannot cause the two to diverge again.
+  medsyncPublishLocalChange(meds, archivedMeds);
+}
+
+// ---------------- Shared medication settings ----------------
+// MEDSYNC-PATCH-MARK
+//
+// THE DEFECT THIS EXISTS TO FIX, in Aaron's words: the same logged dose, at the same timestamp,
+// shows "Waiting" on one phone and "Available" on the other. The mechanism is medState():
+//
+//     const at = last.ts + med.gapH * 3600000;
+//     return { locked: now < at, availableAt: at };
+//
+// med.gapH comes from THAT DEVICE'S OWN copy of the medication list, which lived only in
+// localStorage under 'caretracker-medication-config-v1'. Dose entries synced; the configuration
+// that interprets them did not. There is a second path with the same cause -- a medication whose
+// copy carries rollingCeilingH returns { locked: false } unconditionally, so that device always
+// says Available. The failure mode is a DOUBLE DOSE: one phone invites a dose the other phone
+// knows was already taken.
+//
+// WHERE THE SHARED LIST LIVES. In the EXISTING caretracker_prefs/settings document, written with
+// the exact setDoc(..., { merge: true }) the app already uses for missedClearedAt. Deliberately
+// NOT a new collection: the published Firestore rules match named collections, so a new one fails
+// silently on the live app while passing in every harness. That mistake has been made here before.
+// caretracker_entries is append-only and holds no configuration; nothing below writes to it.
+//
+// WHY A JSON STRING AND NOT A NESTED OBJECT. Firestore's merge:true DEEP-MERGES maps. Stored as an
+// object, a medication REMOVED from archivedMeds on one phone would silently fail to be removed on
+// the other -- the exact class of bug this patch exists to end. A string is a scalar and is
+// replaced whole. It also side-steps two real hazards: JSON.stringify drops undefined, and the
+// medication editor can legitimately produce ceilingUnit: undefined, which Firestore rejects
+// outright with a thrown error.
+//
+// NOBODY'S LIST IS DESTROYED. Two independent, recoverable copies exist before anything is
+// adopted:
+//   1. localStorage 'caretracker-medication-config-prechoice-v1' on each phone, written ONCE and
+//      never overwritten -- that phone's list exactly as it was before it first adopted a shared
+//      one;
+//   2. medConfigDevices.<deviceId> in the prefs document, this device's own pre-share list, frozen
+//      the moment a shared list exists and never rewritten after that.
+// Both are reachable from the chooser screen as a button, so recovery is not a support call.
+//
+// NOTHING IS AUTO-MERGED AND NO WINNER IS PICKED SILENTLY. A newest-timestamp-wins merge on a
+// chemotherapy app could overwrite the correct list with the damaged one and nobody would see it
+// happen. medConfigJson is written by exactly one code path that a person can reach: the confirm
+// button in renderMedsyncConfirm(). Until that button is pressed, every phone keeps running on its
+// own list, unchanged.
+//
+// OFFLINE NEVER BLOCKS DOSING. Nothing here is awaited on any render path. If the prefs snapshot
+// never arrives, state.medsync.devices stays null, the card does not appear, and the phone runs on
+// its local list exactly as it does today. Every write is fire-and-forget with its own catch.
+
+const MEDSYNC_SHARED_FIELD = 'medConfigJson';
+const MEDSYNC_DEVICES_FIELD = 'medConfigDevices';
+const MEDSYNC_SET_AT_FIELD = 'medConfigSetAt';
+const MEDSYNC_SET_BY_FIELD = 'medConfigSetBy';
+const MEDSYNC_DEVICE_ID_KEY = 'caretracker-device-id-v1';
+const MEDSYNC_PRECHOICE_KEY = 'caretracker-medication-config-prechoice-v1';
+
+// The shared string this device has already adopted. Compared by value so an echo of our own write
+// is a no-op instead of a second repaint, and so mergeMissingDefaultMeds() -- which can legitimately
+// make the local list differ from the shared string -- cannot cause an adopt loop.
+let medsyncAppliedJson = null;
+// A shared list that landed while the medication editor was open. Applied by setState() the moment
+// the editor closes, never underneath a half-typed form.
+let medsyncPendingShared = null;
+let medsyncDeviceIdCache = null;
+let medsyncBusy = false;
+
+function medsyncLsGet(key) {
+  try { return (typeof localStorage === 'undefined') ? null : localStorage.getItem(key); } catch (err) { return null; }
+}
+function medsyncLsSet(key, value) {
+  try { if (typeof localStorage === 'undefined') return false; localStorage.setItem(key, value); return true; } catch (err) { return false; }
+}
+
+// Stable across sessions so a phone owns exactly one entry in medConfigDevices. If storage is
+// unreadable (private mode) the id is per-session, which means that phone re-publishes a candidate
+// each session; it still never overwrites another phone's entry and never touches a frozen one.
+function medsyncDeviceId() {
+  if (medsyncDeviceIdCache) return medsyncDeviceIdCache;
+  let id = medsyncLsGet(MEDSYNC_DEVICE_ID_KEY);
+  if (typeof id !== 'string' || id.length < 8) {
+    id = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    medsyncLsSet(MEDSYNC_DEVICE_ID_KEY, id);
+  }
+  medsyncDeviceIdCache = id;
+  return id;
+}
+
+function medsyncDeviceLabel() {
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? String(navigator.userAgent) : '';
+  if (/iPad/i.test(ua)) return 'iPad';
+  if (/iPhone|iPod/i.test(ua)) return 'iPhone';
+  if (/Android/i.test(ua)) return 'Android phone';
+  if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac';
+  if (/Windows/i.test(ua)) return 'Windows PC';
+  return 'Phone';
+}
+
+// Key order out of JSON.stringify follows insertion order, which differs between a list that was
+// typed in the editor and the same list round-tripped through Firestore. Two identical lists must
+// produce one identical string or every comparison below becomes a coin toss, so keys are sorted.
+// Array order is NOT sorted: state.meds order is what drives Home's Quick Log card order.
+function medsyncStableStringify(value) {
+  if (value === undefined) return 'null';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(medsyncStableStringify).join(',') + ']';
+  const keys = Object.keys(value).filter((k) => value[k] !== undefined).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + medsyncStableStringify(value[k])).join(',') + '}';
+}
+
+function medsyncConfigJson(meds, archivedMeds) {
+  const list = Array.isArray(meds) ? meds : [];
+  const arch = (archivedMeds && typeof archivedMeds === 'object') ? archivedMeds : {};
+  return medsyncStableStringify({ version: 1, meds: list, archivedMeds: arch });
+}
+
+function medsyncCurrentJson() { return medsyncConfigJson(state.meds, state.archivedMeds); }
+
+// Returns null for anything that is not a usable medication list. An EMPTY meds array is refused
+// on purpose: a truncated or half-written shared document must never be able to wipe a phone's
+// medication list. Refusing leaves that phone on its own list, which is the safe outcome.
+function medsyncParseConfig(json) {
+  if (typeof json !== 'string' || !json) return null;
+  let raw;
+  try { raw = JSON.parse(json); } catch (err) { return null; }
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.meds) || !raw.meds.length) return null;
+  const meds = raw.meds.filter((m) => m && typeof m === 'object').map(normalizeMedication);
+  if (!meds.length) return null;
+  return { meds: meds, archivedMeds: normalizeArchivedMeds(raw.archivedMeds) };
+}
+
+// Object.create(null), not {}. A map keyed by ids that inherits Object.prototype answers truthy for
+// 'constructor', 'toString' and friends even when it is EMPTY -- a blocker of exactly this kind was
+// already found in restore on this app. Every read below goes through hasOwnProperty as well.
+function medsyncOwn(map, key) {
+  return (map && Object.prototype.hasOwnProperty.call(map, key)) ? map[key] : null;
+}
+
+function medsyncReadDevices(raw) {
+  const out = Object.create(null);
+  if (!raw || typeof raw !== 'object') return out;
+  Object.keys(raw).forEach((id) => {
+    const v = raw[id];
+    if (!v || typeof v !== 'object' || typeof v.json !== 'string') return;
+    if (!medsyncParseConfig(v.json)) return;
+    out[id] = { id: id, label: String(v.label || 'Phone'), json: v.json, at: Number(v.at) || 0, frozen: !!v.frozen };
+  });
+  return out;
+}
+
+// Written once and NEVER overwritten: the point of this file is that the list a phone had before it
+// ever adopted a shared one is still there afterwards.
+function medsyncBackupLocalOnce() {
+  if (medsyncLsGet(MEDSYNC_PRECHOICE_KEY)) return false;
+  return medsyncLsSet(MEDSYNC_PRECHOICE_KEY, JSON.stringify({ version: 1, savedAt: Date.now(), app: APP_VERSION, config: medsyncCurrentJson() }));
+}
+
+function medsyncPreShareJson() {
+  const raw = medsyncLsGet(MEDSYNC_PRECHOICE_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.config === 'string' && medsyncParseConfig(parsed.config)) return parsed.config;
+    } catch (err) { /* fall through to the live list */ }
+  }
+  return medsyncCurrentJson();
+}
+
+// The local mirror of the shared list. Written directly rather than through
+// persistMedicationConfig() so that adopting a list can never publish it straight back out.
+function medsyncCacheLocal(meds, archivedMeds) {
+  medsyncLsSet(MED_CONFIG_STORAGE_KEY, JSON.stringify({ version: 1, meds: meds, archivedMeds: archivedMeds }));
+}
+
+function medsyncWritePrefs(payload) {
+  try {
+    return Promise.resolve(setDoc(PREFS_DOC, payload, { merge: true }))
+      .then(function () { return true; }, function (err) { console.warn('[medsync] prefs write failed:', err); return false; });
+  } catch (err) {
+    console.warn('[medsync] prefs write threw:', err);
+    return Promise.resolve(false);
+  }
+}
+
+function medsyncWriteCandidate(json, frozen) {
+  const id = medsyncDeviceId();
+  const entry = {};
+  entry[id] = { label: medsyncDeviceLabel(), json: json, at: Date.now(), frozen: !!frozen, app: APP_VERSION };
+  const payload = {};
+  payload[MEDSYNC_DEVICES_FIELD] = entry;
+  return medsyncWritePrefs(payload);
+}
+
+function medsyncAdopt(cfg, json) {
+  medsyncBackupLocalOnce();
+  const archivedMeds = normalizeArchivedMeds(cfg.archivedMeds);
+  // mergeMissingDefaultMeds is kept because it is how a medication added to DEFAULT_MEDS in a later
+  // release ever reaches a phone that already has a saved list. Both phones run the same merge over
+  // the same shared string, so they still land on the same list; medsyncAppliedJson holds the
+  // SHARED string, not the merged one, so the difference cannot start an adopt loop.
+  const meds = mergeMissingDefaultMeds(cfg.meds.map(normalizeMedication).map(migrateSenokotV37), archivedMeds);
+  medsyncCacheLocal(meds, archivedMeds);
+  medsyncAppliedJson = json;
+  return { meds: meds, archivedMeds: archivedMeds };
+}
+
+// Called from the prefs snapshot. Mutates the caller's patch rather than calling setState itself, so
+// one snapshot produces exactly one repaint.
+function medsyncOnPrefs(prefs, patch) {
+  const raw = (prefs && typeof prefs === 'object') ? prefs : {};
+  const devices = medsyncReadDevices(raw[MEDSYNC_DEVICES_FIELD]);
+  const sharedRaw = raw[MEDSYNC_SHARED_FIELD];
+  const sharedJson = (typeof sharedRaw === 'string' && medsyncParseConfig(sharedRaw)) ? sharedRaw : null;
+  patch.medsync = Object.assign({}, state.medsync, {
+    devices: devices,
+    sharedJson: sharedJson,
+    setAt: Number(raw[MEDSYNC_SET_AT_FIELD]) || 0,
+    setBy: String(raw[MEDSYNC_SET_BY_FIELD] || ''),
+    saving: false
+  });
+  if (sharedJson && sharedJson !== medsyncAppliedJson) {
+    const cfg = medsyncParseConfig(sharedJson);
+    if (cfg) {
+      if (state.medEditor) {
+        medsyncPendingShared = { cfg: cfg, json: sharedJson };
+      } else {
+        const applied = medsyncAdopt(cfg, sharedJson);
+        patch.meds = applied.meds;
+        patch.archivedMeds = applied.archivedMeds;
+      }
+    }
+  }
+  medsyncPublishCandidate(devices, sharedJson);
+}
+
+function medsyncPublishCandidate(devices, sharedJson) {
+  const mine = medsyncOwn(devices, medsyncDeviceId());
+  if (sharedJson) {
+    // Frozen. A phone that first opened the app AFTER the choice was made still gets its own
+    // pre-adoption list recorded here, exactly once, so it is recoverable too.
+    if (mine) return;
+    medsyncWriteCandidate(medsyncPreShareJson(), true);
+    return;
+  }
+  const json = medsyncCurrentJson();
+  if (mine && mine.json === json) return;
+  medsyncWriteCandidate(json, false);
+}
+
+// The one call persistMedicationConfig() makes. Once a shared list exists, every later edit on
+// either phone writes the whole list to the shared field, so they cannot drift apart again.
+function medsyncPublishLocalChange(meds, archivedMeds) {
+  const m = state.medsync;
+  if (!m) return;
+  const json = medsyncConfigJson(meds, archivedMeds);
+  if (m.sharedJson) {
+    if (json === medsyncAppliedJson) return;
+    medsyncAppliedJson = json;
+    state.medsync = Object.assign({}, m, { sharedJson: json, setAt: Date.now(), setBy: medsyncDeviceLabel() });
+    const payload = {};
+    payload[MEDSYNC_SHARED_FIELD] = json;
+    payload[MEDSYNC_SET_AT_FIELD] = Date.now();
+    payload[MEDSYNC_SET_BY_FIELD] = medsyncDeviceLabel();
+    medsyncWritePrefs(payload).then(function (ok) {
+      if (!ok) setToast('Saved on this phone, but the other phone could not be updated — check the connection.');
+    });
+    return;
+  }
+  // No shared list yet, and prefs have not loaded: stay entirely local. Nothing is blocked.
+  if (!m.devices) return;
+  const mine = medsyncOwn(m.devices, medsyncDeviceId());
+  if (mine && mine.json === json) return;
+  medsyncWriteCandidate(json, false);
+}
+
+// ---- The choice ----
+
+// The ONLY writer of the shared field. Nothing else in this app can set a source of truth.
+function medsyncCommitChoice(json, label) {
+  const cfg = medsyncParseConfig(json);
+  if (!cfg) { setToast('That medication list could not be read — nothing was changed.'); return; }
+  if (medsyncBusy) return;
+  medsyncBusy = true;
+  const at = Date.now();
+  const by = String(label || medsyncDeviceLabel());
+  setState({ medsync: Object.assign({}, state.medsync, { saving: true }) });
+  const payload = {};
+  payload[MEDSYNC_SHARED_FIELD] = json;
+  payload[MEDSYNC_SET_AT_FIELD] = at;
+  payload[MEDSYNC_SET_BY_FIELD] = by;
+  medsyncWritePrefs(payload).then(function (ok) {
+    medsyncBusy = false;
+    if (!ok) {
+      // Nothing local was touched. A failed write leaves both phones exactly as they were.
+      setState({ medsync: Object.assign({}, state.medsync, { saving: false }) });
+      setToast('Could not save — check the connection and try again. Nothing was changed.');
+      return;
+    }
+    const applied = medsyncAdopt(cfg, json);
+    setState({
+      meds: applied.meds,
+      archivedMeds: applied.archivedMeds,
+      view: 'meds',
+      medEditor: null,
+      confirmDeleteMed: null,
+      medsync: Object.assign({}, state.medsync, { saving: false, confirm: null, sharedJson: json, setAt: at, setBy: by })
+    });
+    setToast('Medication settings are now shared. Both phones use this list.');
+    window.scrollTo(0, 0);
+  });
+}
+
+// Navigation in and out of the chooser always clears a half-open confirm panel, so returning to
+// the screen never lands on a confirmation Aaron did not just ask for.
+function medsyncGoChooser() {
+  setState({ view: 'medsync', medEditor: null, confirmDeleteMed: null, medsync: Object.assign({}, state.medsync, { confirm: null }) });
+  window.scrollTo(0, 0);
+}
+
+function medsyncGoMeds() {
+  setState({ view: 'meds', medEditor: null, confirmDeleteMed: null, medsync: Object.assign({}, state.medsync, { confirm: null }) });
+  window.scrollTo(0, 0);
+}
+
+function medsyncOpenConfirm(cand) {
+  setState({ medsync: Object.assign({}, state.medsync, { confirm: { id: cand.id, label: cand.label, json: cand.json, mine: cand.id === medsyncDeviceId() } }) });
+  window.scrollTo(0, 0);
+}
+
+function medsyncCloseConfirm() {
+  setState({ medsync: Object.assign({}, state.medsync, { confirm: null }) });
+}
+
+// This phone always appears in the list even before its own candidate write has landed, so the
+// chooser is never a screen with one option on it.
+function medsyncCandidates() {
+  const m = state.medsync || {};
+  const devices = m.devices || Object.create(null);
+  const myId = medsyncDeviceId();
+  const list = Object.keys(devices).map(function (k) { return devices[k]; });
+  if (!medsyncOwn(devices, myId)) list.push({ id: myId, label: medsyncDeviceLabel(), json: medsyncPreShareJson(), at: Date.now(), frozen: false });
+  list.sort(function (a, b) {
+    if (a.id === myId) return -1;
+    if (b.id === myId) return 1;
+    return (b.at || 0) - (a.at || 0);
+  });
+  return list;
+}
+
+// ---- Difference report ----
+
+const MEDSYNC_FIELD_INFO = Object.assign(Object.create(null), {
+  name: { label: 'Name' },
+  sub: { label: 'Generic name' },
+  note: { label: 'Note' },
+  type: { label: 'How it is scheduled', critical: true, fmt: function (v) { return v === 'win' ? 'at set times' : 'as needed, with a gap'; } },
+  gapH: { label: 'Smallest gap between doses', critical: true, fmt: function (v) { return Number(v) > 0 ? (medsyncNum(v) + ' hours') : 'no gap'; } },
+  rollingCeilingH: { label: 'Rolling limit window', critical: true, fmt: function (v) { return Number(v) > 0 ? (medsyncNum(v) + ' hours') : 'none'; } },
+  doses: { label: 'Dose options', critical: true, fmt: medsyncFmtDoses },
+  windows: { label: 'Times of day', critical: true, fmt: medsyncFmtWindows },
+  ceiling: { label: 'Has a limit', fmt: medsyncFmtYesNo },
+  ceilingMax: { label: 'Limit amount', fmt: function (v) { return Number(v) > 0 ? medsyncNum(v) : 'none'; } },
+  ceilingUnit: { label: 'Limit counted in', fmt: function (v) { return String(v || 'mg'); } },
+  ceilingGroup: { label: 'Shares its limit with', fmt: function (v) { return v ? String(v) : 'nothing'; } },
+  volumeCeilingMl: { label: 'Liquid limit per day (mL)', fmt: function (v) { return Number(v) > 0 ? medsyncNum(v) : 'none'; } },
+  volumePerDoseMl: { label: 'Liquid per dose (mL)', fmt: function (v) { return Number(v) > 0 ? medsyncNum(v) : 'none'; } },
+  chemoOnly: { label: 'Chemo days only', fmt: medsyncFmtYesNo },
+  quickLog: { label: 'Has its own card on Home', fmt: medsyncFmtYesNo },
+  groupedMorning: { label: 'In the morning group', fmt: medsyncFmtYesNo },
+  groupedEvening: { label: 'In the evening group', fmt: medsyncFmtYesNo },
+  alerts: { label: 'Missed-dose alerts', fmt: medsyncFmtYesNo },
+  painScale: { label: 'Asks for a pain score', fmt: medsyncFmtYesNo },
+  morningLinkedToProtonix: { label: 'Follows the morning group', fmt: medsyncFmtYesNo },
+  eveningLinkedToProtonix: { label: 'Follows the evening group', fmt: medsyncFmtYesNo }
+});
+
+function medsyncNum(v) {
+  const n = Number(v);
+  if (!isFinite(n)) return String(v);
+  return String(Math.round(n * 100) / 100);
+}
+function medsyncFmtYesNo(v) { return v ? 'yes' : 'no'; }
+function medsyncFmtDoses(v) {
+  if (!Array.isArray(v) || !v.length) return 'none';
+  return v.map(function (d) { return (d && d.label) ? String(d.label) : '—'; }).join(', ');
+}
+function medsyncHour(v) {
+  const n = Number(v);
+  if (!isFinite(n)) return String(v);
+  if (n <= 0 || n >= 24) return 'midnight';
+  if (n === 12) return 'noon';
+  return (n < 12 ? n + ' AM' : (n - 12) + ' PM');
+}
+function medsyncFmtWindows(v) {
+  if (!Array.isArray(v) || !v.length) return 'none';
+  return v.map(function (w) { return (w && w.name ? String(w.name) + ' ' : '') + medsyncHour(w && w.start) + '–' + medsyncHour(w && w.end); }).join(', ');
+}
+function medsyncFieldInfo(key) {
+  const known = medsyncOwn(MEDSYNC_FIELD_INFO, key);
+  if (known) return known;
+  return { label: 'Setting “' + key + '”', fmt: function (v) { return medsyncStableStringify(v); } };
+}
+function medsyncFmtValue(key, value) {
+  const info = medsyncFieldInfo(key);
+  const out = info.fmt ? info.fmt(value) : (value === undefined || value === null || value === '' ? 'not set' : String(value));
+  return (out === undefined || out === null || out === '') ? 'not set' : String(out);
+}
+
+function medsyncMedMap(cfg) {
+  const map = Object.create(null);
+  (cfg.meds || []).forEach(function (m) { if (m && m.id) map[m.id] = m; });
+  return map;
+}
+
+function medsyncFieldDiffs(a, b) {
+  const keys = [];
+  Object.keys(a || {}).forEach(function (k) { if (k !== 'id' && keys.indexOf(k) < 0) keys.push(k); });
+  Object.keys(b || {}).forEach(function (k) { if (k !== 'id' && keys.indexOf(k) < 0) keys.push(k); });
+  const rows = [];
+  keys.forEach(function (k) {
+    if (medsyncStableStringify(a ? a[k] : undefined) === medsyncStableStringify(b ? b[k] : undefined)) return;
+    const info = medsyncFieldInfo(k);
+    rows.push({ key: k, label: info.label, critical: !!info.critical, a: medsyncFmtValue(k, a ? a[k] : undefined), b: medsyncFmtValue(k, b ? b[k] : undefined) });
+  });
+  rows.sort(function (x, y) { return (y.critical ? 1 : 0) - (x.critical ? 1 : 0); });
+  return rows;
+}
+
+function medsyncDiff(aJson, bJson) {
+  const out = { ok: false, onlyA: [], onlyB: [], changed: [], archivedOnlyA: [], archivedOnlyB: [], count: 0 };
+  const A = medsyncParseConfig(aJson);
+  const B = medsyncParseConfig(bJson);
+  if (!A || !B) return out;
+  out.ok = true;
+  const ma = medsyncMedMap(A);
+  const mb = medsyncMedMap(B);
+  const ids = [];
+  (A.meds || []).forEach(function (m) { if (ids.indexOf(m.id) < 0) ids.push(m.id); });
+  (B.meds || []).forEach(function (m) { if (ids.indexOf(m.id) < 0) ids.push(m.id); });
+  ids.forEach(function (id) {
+    const a = medsyncOwn(ma, id);
+    const b = medsyncOwn(mb, id);
+    if (a && !b) { out.onlyA.push(a.name); return; }
+    if (b && !a) { out.onlyB.push(b.name); return; }
+    const fields = medsyncFieldDiffs(a, b);
+    if (fields.length) out.changed.push({ id: id, name: a.name, fields: fields });
+  });
+  const aa = A.archivedMeds || {};
+  const ab = B.archivedMeds || {};
+  Object.keys(aa).forEach(function (id) { if (!medsyncOwn(ab, id)) out.archivedOnlyA.push(String(aa[id].name || id)); });
+  Object.keys(ab).forEach(function (id) { if (!medsyncOwn(aa, id)) out.archivedOnlyB.push(String(ab[id].name || id)); });
+  out.count = out.onlyA.length + out.onlyB.length + out.archivedOnlyA.length + out.archivedOnlyB.length +
+    out.changed.reduce(function (n, c) { return n + c.fields.length; }, 0);
+  return out;
+}
+
+function medsyncCountLabel(json) {
+  const cfg = medsyncParseConfig(json);
+  if (!cfg) return { meds: 0, archived: 0, names: [], archivedNames: [] };
+  return {
+    meds: cfg.meds.length,
+    archived: Object.keys(cfg.archivedMeds || {}).length,
+    names: cfg.meds.map(function (m) { return m.name; }),
+    archivedNames: Object.keys(cfg.archivedMeds || {}).map(function (id) { return String(cfg.archivedMeds[id].name || id); })
+  };
+}
+
+// fmtD in this file is a LOCAL const inside the printable-report builder, not a global; this is
+// this module's own date+time label and depends on nothing outside it.
+function medsyncWhen(ts) {
+  const d = new Date(Number(ts) || 0);
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + ', ' + fmtTime(d.getTime());
+}
+
+function medsyncAgo(at) {
+  const ms = Math.max(0, (state.now || Date.now()) - (Number(at) || 0));
+  const mins = Math.floor(ms / 60000);
+  if (!Number(at)) return 'not seen yet';
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + (mins === 1 ? ' minute ago' : ' minutes ago');
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + (hrs === 1 ? ' hour ago' : ' hours ago');
+  const days = Math.floor(hrs / 24);
+  return days + (days === 1 ? ' day ago' : ' days ago');
+}
+
+// ---- Screens ----
+
+const MEDSYNC_CARD_STYLE = { background: 'rgba(255,255,255,0.66)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '17px', padding: '14px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
+const MEDSYNC_BTN_STYLE = { width: '100%', minHeight: '48px', padding: '12px 14px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '800', lineHeight: '1.25', boxShadow: 'inset 0 -2px 0 rgba(121,57,84,0.35)', cursor: 'pointer' };
+const MEDSYNC_BTN_QUIET = { width: '100%', minHeight: '48px', padding: '12px 14px', borderRadius: '13px', background: 'rgba(255,255,255,0.62)', color: '#6E5261', border: '1px solid rgba(212,104,138,0.22)', fontSize: '14px', fontWeight: '800', lineHeight: '1.25', cursor: 'pointer' };
+
+function medsyncListLine(label, names) {
+  if (!names || !names.length) return null;
+  return h('div', { style: { fontSize: '12.5px', color: '#5F4A56', lineHeight: '1.45', marginTop: '4px' } },
+    h('span', { style: { fontWeight: '800', color: '#8E3D61' } }, label + ': '),
+    names.join(', ')
+  );
+}
+
+// The Medications-screen notice. Returns null until the prefs snapshot has arrived, so an offline
+// phone shows nothing at all rather than a warning it cannot act on.
+function renderMedsyncCard() {
+  const m = state.medsync || {};
+  if (!m.devices) return null;
+  const cands = medsyncCandidates();
+  const myId = medsyncDeviceId();
+  const others = cands.filter(function (c) { return c.id !== myId; });
+
+  if (m.sharedJson) {
+    const when = m.setAt ? (' Set from ' + (m.setBy || 'a phone') + ' on ' + medsyncWhen(m.setAt) + '.') : '';
+    return h('section', { 'data-medsync-card': 'shared', style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: '1px solid rgba(12,127,87,0.24)' }) },
+      h('div', { style: { fontSize: '15px', fontWeight: '800', color: '#0C7F57', letterSpacing: '-0.015em' } }, 'Medication settings are shared'),
+      h('div', { style: { fontSize: '12.5px', color: '#5F4A56', lineHeight: '1.45', marginTop: '5px' } },
+        'Every phone uses the same medication list. A change made on one phone shows up on the other.' + when),
+      h('button', { 'data-medsync-open': 'true', type: 'button', onClick: medsyncGoChooser, style: Object.assign({}, MEDSYNC_BTN_QUIET, { marginTop: '11px' }) }, 'Change which list is used')
+    );
+  }
+
+  if (!others.length) {
+    // No button at all rather than a dead one. h() calls setAttribute for anything it does not
+    // special-case, so `disabled: null` renders disabled="null" and the control is disabled for
+    // good -- four Blockers have shipped from that on this app.
+    return h('section', { 'data-medsync-card': 'alone', style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: '1px solid rgba(192,69,59,0.26)' }) },
+      h('div', { style: { fontSize: '15px', fontWeight: '800', color: '#A15B56', letterSpacing: '-0.015em' } }, 'Medication settings are not shared between phones'),
+      h('div', { style: { fontSize: '12.5px', color: '#5F4A56', lineHeight: '1.45', marginTop: '5px' } },
+        'Each phone is keeping its own medication list, so the two can disagree about when a dose is due. Only this phone has checked in so far — open CareTracker on the other phone once, then come back here.')
+    );
+  }
+
+  const total = others.reduce(function (n, o) { const d = medsyncDiff(cands[0].json, o.json); return n + (d.ok ? d.count : 0); }, 0);
+  const body = total > 0
+    ? ('Each phone is keeping its own medication list, and they do not match. That is why the same dose can say “Waiting” on one phone and “Available” on the other. ' + total + (total === 1 ? ' difference' : ' differences') + ' found.')
+    : 'Each phone is keeping its own medication list. They match right now, but they are separate copies and can drift apart again.';
+  return h('section', { 'data-medsync-card': 'diverged', style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: '1px solid rgba(192,69,59,0.26)' }) },
+    h('div', { style: { fontSize: '15px', fontWeight: '800', color: '#A15B56', letterSpacing: '-0.015em' } }, 'Medication settings are not shared between phones'),
+    h('div', { 'data-medsync-diffcount': String(total), style: { fontSize: '12.5px', color: '#5F4A56', lineHeight: '1.45', marginTop: '5px' } }, body),
+    h('button', { 'data-medsync-open': 'true', type: 'button', onClick: medsyncGoChooser, style: Object.assign({}, MEDSYNC_BTN_STYLE, { marginTop: '11px' }) },
+      total > 0 ? 'See what is different' : 'Set the shared list')
+  );
+}
+
+function renderMedsyncDiffBlock(mineCand, otherCand) {
+  const d = medsyncDiff(mineCand.json, otherCand.json);
+  if (!d.ok) return null;
+  const rows = [];
+  if (!d.count) {
+    rows.push(h('div', { style: { fontSize: '12.5px', color: '#5F4A56', lineHeight: '1.45' } }, 'These two lists are identical right now.'));
+  }
+  const line = medsyncListLine('On this phone only', d.onlyA);
+  if (line) rows.push(line);
+  const line2 = medsyncListLine('On ' + otherCand.label + ' only', d.onlyB);
+  if (line2) rows.push(line2);
+  const line3 = medsyncListLine('Deactivated on this phone only', d.archivedOnlyA);
+  if (line3) rows.push(line3);
+  const line4 = medsyncListLine('Deactivated on ' + otherCand.label + ' only', d.archivedOnlyB);
+  if (line4) rows.push(line4);
+  d.changed.forEach(function (c) {
+    rows.push(h('div', { 'data-medsync-changed': c.id, style: { marginTop: '9px', paddingTop: '8px', borderTop: '1px solid rgba(212,104,138,0.14)' } },
+      h('div', { style: { fontSize: '13px', fontWeight: '800', color: '#342530' } }, c.name),
+      ...c.fields.map(function (f) {
+        return h('div', { style: { fontSize: '12px', color: '#5F4A56', lineHeight: '1.45', marginTop: '3px' } },
+          h('span', { style: { fontWeight: '800', color: f.critical ? '#A15B56' : '#8E3D61' } }, f.label + ': '),
+          'this phone says ' + f.a + ', ' + otherCand.label + ' says ' + f.b,
+          f.critical ? h('span', { style: { display: 'block', fontSize: '11px', color: '#A15B56', fontWeight: '700' } }, 'This one changes when a dose is allowed.') : null
+        );
+      })
+    ));
+  });
+  return h('section', { 'data-medsync-diff': otherCand.id, style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: '1px solid rgba(212,104,138,0.18)' }) },
+    h('div', { style: { fontSize: '12px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8E3D61' } }, 'What is different between them'),
+    h('div', { style: { fontSize: '11.5px', color: '#6E5261', marginTop: '3px', marginBottom: '7px' } }, 'This phone compared with ' + otherCand.label),
+    ...rows
+  );
+}
+
+function renderMedsyncPanel(cand, isMine, inUse, preShare) {
+  const info = medsyncCountLabel(cand.json);
+  const title = (isMine ? 'This phone' : 'Other phone') + ' — ' + cand.label;
+  return h('section', { 'data-medsync-panel': cand.id, style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: inUse ? '1px solid rgba(12,127,87,0.30)' : '1px solid rgba(212,104,138,0.18)' }) },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+      h('div', { style: { fontSize: '15px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, title),
+      inUse ? h('span', { style: { borderRadius: '99px', padding: '3px 8px', background: 'rgba(12,127,87,0.12)', color: '#0C7F57', fontSize: '10.5px', fontWeight: '800' } }, 'In use now') : null,
+      (preShare || cand.frozen) ? h('span', { style: { borderRadius: '99px', padding: '3px 8px', background: 'rgba(125,105,116,0.12)', color: '#6E5261', fontSize: '10.5px', fontWeight: '800' } }, 'Saved before sharing') : null
+    ),
+    h('div', { 'data-medsync-count': String(info.meds), style: { fontSize: '12.5px', color: '#6E5261', fontWeight: '700', marginTop: '3px' } },
+      info.meds + (info.meds === 1 ? ' medication' : ' medications') + ' · ' + info.archived + ' deactivated · ' + (isMine ? 'this phone' : 'last seen ' + medsyncAgo(cand.at))),
+    medsyncListLine('Medications', info.names),
+    medsyncListLine('Deactivated', info.archivedNames),
+    inUse ? null : h('button', { 'data-medsync-choose': cand.id, type: 'button', onClick: function () { medsyncOpenConfirm(cand); }, style: Object.assign({}, MEDSYNC_BTN_STYLE, { marginTop: '11px' }) },
+      isMine ? 'Use this phone’s list on both phones' : 'Use ' + cand.label + '’s list on both phones')
+  );
+}
+
+function renderMedsyncConfirm(confirm) {
+  const chosen = medsyncCountLabel(confirm.json);
+  const replaced = medsyncCandidates().filter(function (c) { return c.json !== confirm.json; });
+  const replacedLine = replaced.length
+    ? replaced.map(function (c) {
+        const info = medsyncCountLabel(c.json);
+        return (c.id === medsyncDeviceId() ? 'This phone' : c.label) + '’s list of ' + info.meds + (info.meds === 1 ? ' medication' : ' medications');
+      }).join(' and ') + ' will be replaced.'
+    : '';
+  const who = confirm.mine ? 'this phone’s' : (confirm.label + '’s');
+  return h('section', { 'data-medsync-confirm': confirm.id, style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: '2px solid rgba(170,83,117,0.45)', background: 'rgba(255,255,255,0.86)' }) },
+    h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.02em' } },
+      'Use ' + who + ' list on both phones?'),
+    h('div', { style: { fontSize: '13px', color: '#5F4A56', lineHeight: '1.5', marginTop: '7px' } },
+      'CareTracker will use ' + who + ' ' + chosen.meds + (chosen.meds === 1 ? ' medication' : ' medications') + ' on every phone, starting now.'),
+    replacedLine ? h('div', { 'data-medsync-replaces': 'true', style: { fontSize: '13px', color: '#A15B56', fontWeight: '700', lineHeight: '1.5', marginTop: '7px' } },
+      replacedLine + ' It is kept — saved on that phone and in your CareTracker records — and you can switch back to it from this screen.') : null,
+    h('div', { style: { fontSize: '12.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '7px' } },
+      'Nothing you have already logged changes. Doses, weights, temperatures and appointments all stay exactly as they are. You only need to do this once — after this, a change made on either phone shows up on both.'),
+    state.medsync && state.medsync.saving
+      ? h('div', { 'data-medsync-saving': 'true', style: { fontSize: '12.5px', color: '#8E3D61', fontWeight: '800', marginTop: '10px' } }, 'Saving…')
+      : null,
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' } },
+      h('button', { 'data-medsync-confirm-yes': 'true', type: 'button', onClick: function () { medsyncCommitChoice(confirm.json, confirm.label); }, style: MEDSYNC_BTN_STYLE },
+        confirm.mine ? 'Yes, use this phone’s list' : 'Yes, use ' + confirm.label + '’s list'),
+      h('button', { 'data-medsync-confirm-no': 'true', type: 'button', onClick: medsyncCloseConfirm, style: MEDSYNC_BTN_QUIET }, 'Not yet')
+    )
+  );
+}
+
+function renderMedsyncScreen(now) {
+  const m = state.medsync || {};
+  const myId = medsyncDeviceId();
+  const cands = medsyncCandidates();
+  const mine = cands.filter(function (c) { return c.id === myId; })[0] || cands[0];
+  const others = cands.filter(function (c) { return c.id !== myId; });
+  const parts = [];
+
+  parts.push(h('section', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+    h('button', { 'data-medsync-back': 'true', type: 'button', onClick: medsyncGoMeds, style: { alignSelf: 'flex-start', minHeight: '44px', padding: '0 14px', display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '12px', background: 'rgba(170,83,117,0.10)', color: '#8E3D61', fontSize: '13px', fontWeight: '800' } }, appIcon('chevron', 15), 'Back to Meds'),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', color: '#AA5375' } }, appIcon('pill', 19),
+      h('span', { style: { fontSize: '12px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase' } }, 'Medication settings')),
+    h('h1', { 'data-medsync-title': 'true', style: { fontSize: '24px', lineHeight: '1.1', color: '#342530', letterSpacing: '-0.035em' } }, 'Which phone has the right medication list?'),
+    h('div', { style: { fontSize: '13px', color: '#5F4A56', lineHeight: '1.5' } },
+      'Pick the phone whose medication list is correct. That list is copied to every phone and is the one CareTracker uses from now on.'),
+    h('div', { style: { fontSize: '13px', color: '#5F4A56', lineHeight: '1.5' } },
+      'Nothing you have already logged changes — doses, weights, temperatures and appointments all stay exactly as they are.'),
+    h('div', { style: { fontSize: '13px', color: '#5F4A56', lineHeight: '1.5' } },
+      'The list you do not pick is kept. It is saved on its own phone and in your CareTracker records, and you can switch back to it from this screen.')
+  ));
+
+  if (!m.devices) {
+    parts.push(h('section', { 'data-medsync-offline': 'true', style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: '1px solid rgba(192,69,59,0.26)' }) },
+      h('div', { style: { fontSize: '14px', fontWeight: '800', color: '#A15B56' } }, 'Not connected right now'),
+      h('div', { style: { fontSize: '12.5px', color: '#5F4A56', lineHeight: '1.45', marginTop: '5px' } },
+        'CareTracker cannot reach your records at the moment, so it cannot show the other phone’s list. This phone is still working normally on its own list — logging a dose is unaffected. Try this screen again once you are back on a connection.')
+    ));
+    return parts;
+  }
+
+  if (m.confirm) parts.push(renderMedsyncConfirm(m.confirm));
+
+  others.forEach(function (o) { const blk = renderMedsyncDiffBlock(mine, o); if (blk) parts.push(blk); });
+
+  if (m.sharedJson) {
+    parts.push(h('section', { 'data-medsync-inuse': 'true', style: Object.assign({}, MEDSYNC_CARD_STYLE, { border: '1px solid rgba(12,127,87,0.30)' }) },
+      h('div', { style: { fontSize: '15px', fontWeight: '800', color: '#0C7F57' } }, 'In use on every phone now'),
+      h('div', { style: { fontSize: '12.5px', color: '#5F4A56', lineHeight: '1.45', marginTop: '4px' } },
+        medsyncCountLabel(m.sharedJson).meds + ' medications' + (m.setAt ? (' · set from ' + (m.setBy || 'a phone') + ' on ' + medsyncWhen(m.setAt)) : '')),
+      medsyncListLine('Medications', medsyncCountLabel(m.sharedJson).names),
+      medsyncListLine('Deactivated', medsyncCountLabel(m.sharedJson).archivedNames),
+      h('div', { style: { fontSize: '12px', color: '#6E5261', lineHeight: '1.45', marginTop: '8px' } },
+        'The lists below are what each phone had before sharing was switched on. They are kept so you can switch back to one of them.')
+    ));
+  }
+
+  cands.forEach(function (c) {
+    const inUse = !!(m.sharedJson && m.sharedJson === c.json);
+    // Once a shared list exists every panel below it is, by construction, a snapshot of what that
+    // phone had BEFORE sharing -- the candidates are frozen at that moment and never rewritten.
+    parts.push(renderMedsyncPanel(c, c.id === myId, inUse, !!m.sharedJson && !inUse));
+  });
+
+  return parts;
 }
 
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -293,6 +980,16 @@ function setState(patch) {
   if (!state.timeModal && pendingEntries) {
     state.entries = pendingEntries;
     pendingEntries = null;
+  }
+  // A shared medication list that arrived while the medication editor was open is applied the
+  // moment the editor closes -- never underneath a half-typed medication form.  Applied directly
+  // rather than through setState() because we are already inside it.
+  if (!state.medEditor && medsyncPendingShared) {
+    const medsyncDeferred = medsyncPendingShared;
+    medsyncPendingShared = null;
+    const medsyncApplied = medsyncAdopt(medsyncDeferred.cfg, medsyncDeferred.json);
+    state.meds = medsyncApplied.meds;
+    state.archivedMeds = medsyncApplied.archivedMeds;
   }
   render();
 }
@@ -1272,6 +1969,7 @@ function renderGroupedMedsCard(title, meds, now) {
 }
 
 function renderContent(now, mg, pct, tyColor, ceiling) {
+  if (state.view === 'medsync') return renderMedsyncScreen(now);
   if (state.view === 'meds') return renderMedicationManager(now);
   if (state.view === 'reports') return state.reportsView ? renderReportDetail(state.reportsView, now) : renderReportsMenu(now);
   if (state.view === 'inpatient') return renderInPatient(now);
@@ -2588,10 +3286,11 @@ function renderMedicationManager(now) {
       h('div', null,
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', color: '#AA5375' } }, appIcon('pill', 19), h('span', { style: { fontSize: '12px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase' } }, 'Medication management')),
         h('h1', { style: { fontSize: '24px', lineHeight: '1.05', color: '#342530', letterSpacing: '-0.035em', marginTop: '5px' } }, 'Meds'),
-        h('div', { style: { fontSize: '12.5px', color: '#6E5261', marginTop: '5px', maxWidth: '470px', lineHeight: '1.4' } }, 'Review, add, edit, or remove the active medication list. Configuration is stored on this device; dose history and live sync stay intact.')
+        h('div', { style: { fontSize: '12.5px', color: '#6E5261', marginTop: '5px', maxWidth: '470px', lineHeight: '1.4' } }, 'Review, add, edit, or remove the active medication list. Dose history and live sync stay intact.')
       ),
       h('button', { onClick: () => openMedicationEditor(null), style: { flexShrink: '0', minHeight: '40px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: '5px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '12.5px', fontWeight: '800', boxShadow: 'inset 0 -2px 0 rgba(121,57,84,0.35)' } }, appIcon('plus', 16), 'Add')
     ),
+    renderMedsyncCard(),
     renderMedicationEditor(),
     homeOrderSection,
     h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)
@@ -2973,7 +3672,12 @@ function renderCalDrawer() {
             h('span', { style: { display: 'block', fontSize: '14.5px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'Take a quick tour'),
             h('span', { style: { display: 'block', fontSize: '11.5px', color: '#6E5261', marginTop: '1px', lineHeight: '1.3' } }, 'A minute-long look around')
           )
-        )
+        ),
+        // The build number, in the one place anybody looks when something is wrong.  Before this it
+        // appeared nowhere in the UI at all -- the printable report was the only way to find out
+        // which build a phone was running, which made diagnosing the medication-config split
+        // considerably harder than it should have been.  Derived from APP_VERSION, never a literal.
+        h('div', { 'data-app-version': 'true', style: { marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(212,104,138,0.12)', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#8A7080', letterSpacing: '0.02em' } }, 'CareTracker ' + APP_VERSION)
       )
     )
   );
@@ -5142,7 +5846,13 @@ function tourEnd() {
 
 // Init
 unsubPrefs = subscribePrefs((prefs) => {
-  setState({ missedClearedAt: prefs.missedClearedAt || 0 });
+  // ONE patch, ONE repaint.  medsyncOnPrefs mutates the patch object rather than calling setState
+  // itself, so a snapshot carrying both a cleared banner and a new shared medication list does not
+  // render twice.  It never throws: every read inside it is defensive and every write is
+  // fire-and-forget, because this callback also runs on the phone that is mid-dose.
+  const patch = { missedClearedAt: prefs && prefs.missedClearedAt ? prefs.missedClearedAt : 0 };
+  try { medsyncOnPrefs(prefs, patch); } catch (err) { console.warn('[medsync] prefs handler:', err); }
+  setState(patch);
 });
 unsub = subscribeEntries((entries) => {
   // state.appointments was already refreshed inside subscribeEntries above, so the calendar is

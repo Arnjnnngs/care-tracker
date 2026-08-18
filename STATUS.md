@@ -14,7 +14,7 @@ to be notified when nothing is being worked on.
 
 - **`DISPATCH: IDLE`** — no active build. Dispatch must report NOTHING and send no
   notification. Silence is the correct outcome.
-- **`DISPATCH: ACTIVE`** — a build is genuinely in progress. Dispatch reports every 30 min
+- **`DISPATCH: IDLE`** — a build is genuinely in progress. Dispatch reports every 30 min
   and raises a stall warning if the newest commit is more than 90 minutes old.
 
 There are two independent layers, and BOTH must be switched on for Aaron to hear anything:
@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v45 |
+| **Version** | v46 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `a036d6983ea7c30480fd758e35fd4ed3` |
-| **sw.js md5** | `421b74cb9eacebd581a18d0777284aac` |
+| **index.html md5** | `cb291c5e0365bbd36dca0d0759efec28` |
+| **sw.js md5** | `1c07b895d7799b02bf004a6ef3b6c9c8` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,75 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v46 — SHIPPED — shared medication settings (LIVE SAFETY FIX)
+
+### The bug this fixes
+Medication settings lived in localStorage **per device**. Dose entries synced correctly, but the
+*configuration* did not, so the two phones silently disagreed. Confirmed live: the same dose at the
+same timestamp showed **"Waiting"** on Aaron's Android and **"Available"** on Brandi's iPhone.
+`medState()` computes the lock from `med.gapH`, read from that device's own copy; a second path,
+`if (med.rollingCeilingH) return { locked: false };`, returns unlocked unconditionally.
+**The risk was a double dose** — her phone inviting a dose his phone knew was already taken.
+`archivedMeds` (deactivated medications) had drifted too.
+
+Likely origin: the v43.3 bug where editing a medication with a wrongly-displayed schedule type
+silently rewrote it. The editor is fixed; the already-altered configs were not.
+
+### What v46 does
+`meds` AND `archivedMeds` now live in the existing `caretracker_prefs/settings` document, written
+with the `setDoc(..., { merge: true })` the app already uses. **No new collection** — the patch and
+the suite both compare the set of Firestore targets before and after and refuse if it grew, because
+the published rules match named collections and a new one would fail silently on the live app while
+passing in every harness.
+
+Stored as a **JSON string, not a nested object**: `merge: true` deep-merges maps, so a *removed*
+deactivated medication would otherwise never be removed on the other phone; `JSON.stringify` also
+drops `undefined`, and the medication editor can produce `ceilingUnit: undefined`, which Firestore
+rejects with a throw.
+
+**Nothing changes until Aaron chooses.** `medConfigJson` has exactly one reachable writer — the
+confirm button. Until it is pressed every phone runs unchanged on its own list. Each phone first
+publishes its own list to `medConfigDevices.<deviceId>`, which is both the diff data and a
+recoverable snapshot, frozen the instant a choice exists; each also writes a one-time local
+snapshot to `caretracker-medication-config-prechoice-v1` that is never overwritten. The
+non-chosen list stays available as a button afterwards. **Neither phone's configuration is ever
+destroyed.**
+
+The chooser shows what actually differs — medications on only one side, deactivated on one side,
+and per-setting differences in plain words, with `type` / `gapH` / `rollingCeilingH` / `doses` /
+`windows` sorted first and marked *"This one changes when a dose is allowed."*
+
+After the choice, `persistMedicationConfig()` — the single choke point every edit already passes
+through — publishes to the shared field, so the two phones cannot diverge again.
+
+**The app version is now shown in the menu footer**, derived from `APP_VERSION`, never hardcoded.
+Until v46 the printable report was the only way to find it, which made this bug much harder to
+diagnose than it should have been.
+
+### Test results
+- `medsync-test.mjs` — **96/99**, 27/27 guards falsifiable. The three failures are the checks
+  asserting the *patch* does not change `APP_VERSION` or `sw.js`, both set at ship time.
+  The suite reproduces the live defect first — one dose, one timestamp, Waiting on the six-hour
+  phone and Available on the four-hour one — then proves both converge after one choice.
+- No regressions: `cal-test.mjs` **69/70**, `export-test.mjs` **49/49**, `reason-test.mjs` **38/41**,
+  `tour-test.mjs` **66/68** — all at their established baselines.
+- One flaky check observed: `TAP-menu-button@375x812` returned a null bounding box on one run and
+  passed on re-run and at 390x844. Render race in the harness, not a defect. Recorded, not hidden.
+
+### KNOWN DEFECT found during this work, deliberately NOT fixed here
+`confirmTimeAndLog()` does `await addEntryDB(entry)` with **no catch**. A refused dose write is an
+unhandled rejection and the patient is told nothing — no toast, the modal closes as though it
+worked. Reproduced identically on unpatched v45 and on the patched build, so v46 neither
+introduced nor moved it. Same shape as the export buttons that reported success with no file.
+**This deserves its own small release and should be next.**
+
+### Concurrency
+Convergence, not conflict detection. Two edits in the same second both write the whole list and the
+later wins; the snapshot listener keeps both phones current within a second or two. The only real
+window is an edit made offline. Documented rather than hidden.
 
 ---
 
