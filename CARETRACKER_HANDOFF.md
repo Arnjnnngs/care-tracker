@@ -1,3 +1,9 @@
+> **PROCESS RESET — Aug 18, 2026.** The operating model changed. Before using anything in
+> this file about workflow, agents, or deploys, read `CLAUDE.md` (the operating model) and
+> `PROCESS-RESET.md` (the top-10 failure analysis behind it). Where this handoff and
+> CLAUDE.md disagree about PROCESS, CLAUDE.md wins. Technical/project facts below remain
+> authoritative.
+
 # CareTracker — AI Agent Handoff Document
 
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.

@@ -3,12 +3,117 @@
 ## READ FIRST
 
 Before making any changes, read these docs in order:
-1. **This file (CLAUDE.md)** — rules, quality standards, deploy workflow
-2. **CARETRACKER_HANDOFF.md** — full project context, tech stack, med definitions,
+1. **This file (CLAUDE.md)** — the operating model, rules, quality standards, deploy workflow
+2. **PROCESS-RESET.md** — the top-10 failure analysis this operating model came from. Read it
+   so you understand WHY each rule exists. Every rule below was paid for.
+3. **CARETRACKER_HANDOFF.md** — full project context, tech stack, med definitions,
    Firebase setup, version history, known issues
+4. **STATUS.md** — what is live right now, what is in flight, what needs Aaron
 
-These are non-negotiable. Skipping them leads to regressions.
+These are non-negotiable. Skipping them leads to regressions — and to repeating expensive,
+documented failures.
 
+---
+
+# THE OPERATING MODEL (adopted Aug 18, 2026 — Aaron-approved, supersedes all prior practice)
+
+This model exists because the previous way of working cost Aaron 2-3x what it should have:
+nine sandbox rollbacks destroyed finished work that wasn't pushed, seven long agent runs burned
+most of a weekly quota in one day (half of it REBUILDING the destroyed work), and multi-hour
+silences forced Aaron to babysit. The full record is in PROCESS-RESET.md.
+
+## Rule 0 — GitHub is the only real computer
+The sandbox rolls back without warning (9+ times so far, including mid-task). It is a
+scratchpad that lies about being permanent.
+- Every artifact — patch, test, report, doc — is pushed within minutes of existing.
+- **Nothing may exist unpushed for more than ~30 minutes.** Not "when the feature is done."
+- Every release must be reproducible from the repo alone: base version + patches in
+  `harness/`. This is true as of v44 and stays mandatory.
+- If you fixed a file (including a test file), it is not fixed until it is pushed. An
+  unpushed fix once sent a later agent chasing a bug in a suite that was already repaired.
+
+## Rule 1 — Git push: RESEARCHED AND SETTLED. Do not re-litigate, do not involve Aaron.
+Verified by live test (dry-run push, Aug 18) and a connector-registry search:
+- `git push` is blocked in this session by the git proxy: the repo is not in the session's
+  authorized source set. **That set is fixed at session creation and cannot be changed from
+  inside a running session.** No amount of cleverness changes this — stop trying.
+- No GitHub connector with write access exists in the MCP registry. There is no add-on route.
+- **Therefore: in this session, browser upload IS the deploy path.** It is confirmed, it
+  works, and it is nobody's fault. Use it without complaint and without asking Aaron for
+  anything. The exact recipe is in "Deploying" below. Batch browser actions to keep a full
+  deploy under ~3 minutes.
+- **For any FUTURE session:** when the task is being started, if the start screen offers a
+  repository/source picker, adding `care-tracker` (and the ChemoWell repos) gives native
+  `git push` and makes deploys 5 seconds. Check for it once per new session. If the picker
+  is not offered on Aaron's account, browser upload remains the path — permanently fine.
+- **NEVER ask Aaron to upload a file, run a git command, or touch GitHub himself.** He is
+  the owner, not the deploy pipeline. This happened twice and is the single most corrosive
+  failure in the record.
+
+## Rule 2 — Agents: cross-checkers for big work, never a default, never parallel
+Aaron's explicit policy, in his words: agents exist "to cross check each others work, not
+independently."
+- **Small changes (a few lines, copy, config, docs): work inline, solo.** No agents, no
+  full chain. Aaron has said this twice; it is not discretionary.
+- **Big changes (features; anything touching dose logic, medication config, storage, or
+  export): builder + independent adversarial auditor.** The auditor's job is to STOP the
+  release, not confirm it.
+- **Strictly sequential — one agent at a time, never parallel.** Aaron: "that doesn't mean
+  at the same time. it needs to go in order."
+- Cap any single agent run at ~30 minutes of scope. Bigger work gets split into stages,
+  each ending in a push.
+- **DISPATCH ON before any agent starts. No exceptions, ever.** An agent run is precisely
+  when the main session is mute. Turning dispatch off and then starting an agent caused a
+  109-minute silence and nearly ended this engagement.
+- Every agent brief must include: the progress rule, push-survivability (key findings go in
+  checkpoint messages — messages survive rollbacks, files do not), falsification duty,
+  version-agnostic assertions, the h() trap, and the Firestore rules.
+
+## Rule 3 — Cost before work
+Before starting any task, state one line: estimated size (S < 50k tokens / M 50-150k /
+L > 150k) and what Aaron gets for it.
+- **S: state it and proceed.**
+- **M and L: give the estimate and WAIT for Aaron's go.** (His chosen gate.)
+- When quota is tight, report the running total as work proceeds. Never again "weekly limit
+  nearly gone with nothing to show for it."
+
+## Rule 4 — Blocked means "try 3 things," not "ask the boss"
+When something fails: search your own tools (ToolSearch — a needed tool sat unused for two
+releases because nobody looked), try at least two alternative approaches, check docs. Only
+if all fail does it go to Aaron — as a decision memo (what was tried, the options, a
+recommendation), never as "please do this for me." Aaron, verbatim: "A employee doesn't
+stop work and go to the boss and ask them to upload a file on the employees computer."
+
+## Rule 5 — Verification that can actually fail
+Every one of these was learned from a check that passed while the product was broken:
+- **Falsify every new check once**: break the thing, watch the check go RED, restore it.
+  A check that cannot fail is worse than no check (a literal `|| true` shipped here).
+- Assert on downloaded file BYTES, never the screen (a leak check read the screen for
+  three rounds while appointments leaked into the CSV).
+- Never assert on `document.body.textContent` — in a single-file app it includes the
+  source code, so string checks always match.
+- Never pin version literals ('v43.3') in patches or suites — compare input to output.
+  Three patches and several suites broke on every legitimate release because of this.
+- Select downloads by FILENAME, elements by explicit `data-` hooks — never "most recent
+  file" or text selectors (three buttons on one card made both wrong).
+
+## Rule 6 — Communication is part of the deliverable
+- START and FINISH messages for every work block, stating dispatch state (ACTIVE/IDLE).
+- Task sheet re-sent after every push, unprompted.
+- A defect is surfaced the moment it is found, never saved for the summary.
+- A silence longer than 10 minutes while able to speak is a defect, like a failing test.
+- Write for a non-technical reader. Plain words, short sentences, no file-path walls.
+
+## Rule 7 — Standing exceptions (root causes still open, each with an owner)
+Keep these in STATUS.md until closed:
+- `deliverFile()` fails silently on iOS with no detection — needs Aaron's phone test to
+  confirm any fix. Until confirmed, the backup is NOT called a backup.
+- `confirmTimeAndLog()` has no error handling — a refused dose write closes the modal as
+  if it worked. Next safety release.
+- Reminder ledger built and tested (`harness/`) but not wired into the live workflow;
+  v43.4+ silently drops ~1 in 6 anchored reminders on late cron runs.
+
+---
 ## What this project is
 
 CareTracker is a real-time medication & vitals tracker PWA for patient Brandi.
