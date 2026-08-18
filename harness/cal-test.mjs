@@ -31,6 +31,9 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('/home/claude/.npm-global/lib/node_modules/playwright');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Was hardcoded to /home/claude/wm, a sandbox directory destroyed by a rollback, so this check
+// could never pass again on a fresh clone. Derived from the suite's own location instead.
+const REPO_DIR = path.resolve(HERE, '..');
 const CHROMIUM = '/opt/pw-browsers/chromium';
 
 const argv = process.argv.slice(2);
@@ -520,7 +523,7 @@ async function runFileChecks(suite, html) {
   });
 
   await suite.run('FILE-sw-untouched', 'sw.js in the repo is byte-identical to the committed v43.3 blob', () => {
-    const out = execSync('git -C /home/claude/wm status --porcelain -- sw.js', { encoding: 'utf-8' }).trim();
+    const out = execSync('git -C ' + REPO_DIR + ' status --porcelain -- sw.js', { encoding: 'utf-8' }).trim();
     assert(out === '', 'sw.js is modified in the working tree: ' + out);
   });
 }
