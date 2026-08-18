@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v47 |
+| **Version** | v48 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `c49367a70be66b9ae2d5a10ace797b7b` |
-| **sw.js md5** | `c90aaab1029b5ed1a6974a562fd85c0e` |
+| **index.html md5** | `c11ffe65cfffdfe248032da03d7e8e74` |
+| **sw.js md5** | `ea49cfbbf91946c4ddf94255f07b5ad0` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,70 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v48 — SHIPPED — honest write failures, the 16px iOS floor, and a mechanical PM
+
+### 1. A failed write is never again a silent failure
+`addEntryDB()` was a bare `await addDoc(col, entry)` called from 18 places. If Firestore refused
+the write (offline, rules, quota) the rejection went unhandled, the modal had already closed, the
+success toast was skipped by the throw — and **the patient was told nothing at all.** She would
+believe a dose was logged when nothing reached the database. Same family as the export buttons
+that reported success with no file.
+
+Now a rejected write raises a **persistent red banner** above everything, including the
+missed-dose alert: *"That didn't save. Nothing was lost — check your connection and log it again."*
+It stays until acknowledged, because a toast that vanishes in three seconds is not an acceptable
+way to report that a dose was not recorded.
+
+**It still throws, and that is load-bearing.** `mrSaveReason()`, `saveApptSheet()` and
+`removeAppt()` wrap their calls in try/catch to keep their sheet open and show an honest inline
+error. A first version of this fix swallowed the error and returned false, which silently
+disarmed all three. **`reason-test.mjs` caught it (ERROR-is-recoverable), not inspection.**
+`honesty-patch.py` now refuses to write if the rethrow is ever removed.
+
+### 2. iOS no longer zooms in and stay zoomed
+**15** inputs, selects and textareas were under 16px — mobile Safari zooms whenever a field under
+16px is focused and does not zoom back out. Reported via the weight field, but systemic. All 15
+are now exactly 16px.
+
+A first attempt reported "raised 4" and its own post-condition agreed, because both used a regex
+that stopped at the first nested `style: {` brace. Replaced with real brace matching, and the
+post-condition now uses the same matcher it verifies with.
+
+### 3. `honesty-patch.py` refuses to emit broken JavaScript
+An early version inserted the banner as a `cond ? h(...) : null,` element into `renderToday()`,
+which builds via `parts.push(...)` — a statement context. Hard syntax error. The patch now
+extracts the module and runs `node --check` as a post-condition, so it cannot write a file that
+does not parse.
+
+### 4. `pm.py` — the Project Manager, mechanical and unskippable
+Aaron: *"a PM is required at all times for each of my messages/changes."* Run `python3 pm.py`
+before starting work and again before reporting anything done. Exit 1 means **do not say it is
+finished.**
+
+It is a script, not an agent, and that is deliberate: **a subagent blocks the main session
+completely** — a PM implemented as an agent would recreate the exact silence it exists to
+prevent. This costs no tokens, runs in seconds, and cannot forget.
+
+It checks: nothing left unpushed or unpushed-but-committed; APP_VERSION and the sw.js CACHE moved
+together; the DISPATCH flag exists and matches the STATUS.md version; the composed 1s tick guard
+is intact; the h() null-attribute trap; `|| true`; TODO/FIXME in production paths; every text
+control at 16px; that `index.html` parses; and that `harness/` still makes the release
+reproducible. **It blocked this very release on unpushed work while it was being written.**
+
+### Test results
+- `syncguard` **5/5**, `export` **49/49**, `reason` **38/41**, `tour` **66/68**,
+  `medsync` **96/99**, `cal` **67-69/70** — all at their established baselines.
+- `cal`'s `FILE-sw-untouched` compares the working tree to the committed blob, so it necessarily
+  fails until the version bump is committed. `TAP-menu-button@375` is a known intermittent
+  (passes at 390 and on re-run). Both recorded rather than hidden.
+
+### Also fixed
+`cal-test.mjs` had a hardcoded `/home/claude/wm` path — a sandbox directory destroyed by a
+rollback days ago, so that check could never pass again on a fresh clone. Now derived from the
+suite's own location.
 
 ---
 
