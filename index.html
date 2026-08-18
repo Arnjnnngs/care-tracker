@@ -964,7 +964,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -973,6 +973,30 @@ let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
 let pendingEntries = null;
+// A prefs snapshot carries the cleared-banner high-water mark and (since v46) the shared
+// medication list.  It is held, never dropped, while the UI is busy -- same contract as
+// pendingEntries.  Merged newest-wins so a burst of prefs writes collapses into one repaint.
+let pendingPrefs = null;
+
+// THE ONE PLACE that answers "would repainting right now destroy what someone is doing?".
+// Both Firestore snapshot handlers consult this.  The 1s clock tick has its own inline guard
+// that is pinned verbatim by tour-test.mjs and composed from four separate patches -- it is
+// deliberately NOT routed through here, because rewriting that line to share this helper
+// would turn a green suite red for no behavioural gain.
+//
+// Why focus matters and not just "is a modal open": the reported bug was the WEIGHT field,
+// which lives on an ordinary screen with no modal at all.  Guarding only on modals is what
+// left it exposed.
+function uiIsBusy() {
+  const tag = document.activeElement && document.activeElement.tagName;
+  const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  return typing
+    || !!state.timeModal
+    || !!state.apptSheet
+    || !!state.missReasonSheet
+    || !!state.medEditor
+    || !!state.tour;
+}
 
 function setState(patch) {
   Object.assign(state, patch);
@@ -5852,23 +5876,53 @@ unsubPrefs = subscribePrefs((prefs) => {
   // fire-and-forget, because this callback also runs on the phone that is mid-dose.
   const patch = { missedClearedAt: prefs && prefs.missedClearedAt ? prefs.missedClearedAt : 0 };
   try { medsyncOnPrefs(prefs, patch); } catch (err) { console.warn('[medsync] prefs handler:', err); }
+  // This handler had NO guard at all: every prefs snapshot repainted the whole tree.  v46 put
+  // the shared medication list and per-device snapshots into this same document, so ordinary
+  // use now generates prefs traffic that lands while somebody is typing.
+  if (uiIsBusy()) {
+    // Newest-wins merge rather than replace: two snapshots arriving back to back must not let
+    // the second one drop a field the first one carried.
+    pendingPrefs = Object.assign(pendingPrefs || {}, patch);
+    return;
+  }
   setState(patch);
 });
 unsub = subscribeEntries((entries) => {
   // state.appointments was already refreshed inside subscribeEntries above, so the calendar is
   // never stale; what is deferred here is only the state.entries swap and the repaint that comes
   // with it, which would otherwise wipe a half-typed appointment when a sync lands.
-  if (state.timeModal || state.apptSheet) {
-    // Defer update so the modal isn't destroyed mid-interaction
+  if (uiIsBusy()) {
+    // Defer the swap AND the repaint that comes with it.  Previously this checked only
+    // timeModal/apptSheet, so a sync landing while someone typed a weight, a temperature or a
+    // medication name rebuilt the tree under them and the entry was lost.  The payload is
+    // held, not discarded -- syncFlushPending() below lands it as soon as the UI is free.
     pendingEntries = entries;
-    if (!state.loaded) { state.loaded = true; state.entries = entries; }
+    // First load still populates immediately: an empty app showing nothing because the user
+    // happened to be focused somewhere would be a worse bug than the one being fixed.
+    if (!state.loaded) { state.loaded = true; state.entries = entries; render(); }
     return;
   }
   setState({ entries, loaded: true });
 });
 
+// Lands anything the snapshot handlers held back.  Driven by the 1s interval below, which runs
+// whether or not a render happens, so a held update can never be stranded -- the worst case is
+// that it appears up to one second late, which is invisible next to losing a typed entry.
+function syncFlushPending() {
+  if (uiIsBusy()) return;
+  if (!pendingEntries && !pendingPrefs) return;
+  const patch = {};
+  if (pendingPrefs) { Object.assign(patch, pendingPrefs); pendingPrefs = null; }
+  if (pendingEntries) { patch.entries = pendingEntries; patch.loaded = true; pendingEntries = null; }
+  setState(patch);   // one repaint for both, never two
+}
+
 setInterval(() => {
   state.now = simNow();
+  // Flush FIRST: if a sync has been waiting for the user to stop typing, showing it is more
+  // urgent than advancing the clock, and doing it here means the tick's own guard below sees
+  // the already-updated state instead of repainting twice in the same second.
+  syncFlushPending();
   const activeTag = document.activeElement && document.activeElement.tagName;
   // A repaint rebuilds the entire tree.  If one lands between the touchstart and the touchend of a
   // tap, the element under the finger is replaced and the click never fires — a chip that silently

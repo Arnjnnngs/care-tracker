@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: IDLE
+DISPATCH: ACTIVE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v46 |
+| **Version** | v47 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `cb291c5e0365bbd36dca0d0759efec28` |
-| **sw.js md5** | `1c07b895d7799b02bf004a6ef3b6c9c8` |
+| **index.html md5** | `c49367a70be66b9ae2d5a10ace797b7b` |
+| **sw.js md5** | `c90aaab1029b5ed1a6974a562fd85c0e` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,60 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v47 — SHIPPED — live sync no longer wipes what you are typing
+
+### The bug (reported live by Aaron on v46)
+Typing into the weight field got destroyed mid-entry; the page appeared to "refresh" by itself.
+Also seen on the calendar. Aaron's read — "sync loop" — was correct.
+
+### Root cause
+The once-a-second clock tick was carefully guarded against repainting while someone types.
+**The two Firestore snapshot handlers were never given the same protection:**
+- `subscribeEntries(...)` deferred only for `state.timeModal` / `state.apptSheet`. Every other
+  input — weight, temperature, medication editor fields, notes — was unprotected.
+- `subscribePrefs(...)` had **no guard at all**; every prefs snapshot repainted the whole tree.
+
+Typing itself never repaints (the weight field mutates state directly, the correct pattern), so
+the wipe could only come from an external render. What is lost is focus and the on-screen
+keyboard, which reads as "the page refreshed."
+
+**v46 made it much more visible:** shared medication settings put device snapshots and the shared
+config into that same prefs document, so ordinary two-phone use now generates prefs traffic
+against a completely unguarded repaint.
+
+### The fix
+One shared predicate, `uiIsBusy()`, consulted by BOTH snapshot handlers — true when focus is in
+an INPUT/SELECT/TEXTAREA, or the time modal, appointment sheet, reason sheet, medication editor
+or tour is open. While busy the snapshot payload is **HELD, never dropped**, and flushed the
+moment the UI is free by the existing 1-second interval (which runs regardless of renders, so a
+held update can never be stranded — worst case it lands up to a second late).
+
+Prefs deferrals merge newest-wins so a burst cannot drop a field. Entries and prefs flush in a
+single `setState`, so one repaint, not two. First load still populates immediately.
+
+### What this fix deliberately did NOT do
+An early version prefixed the 1s tick guard with `!flushed` to avoid a second repaint in the same
+second. **That line is pinned byte-for-byte by `tour-test.mjs`** and is composed from four
+separate patches; the regression run caught it immediately (tour 65/68). The edit was removed —
+the extra repaint is harmless by construction, since a flush only happens when the UI is not
+busy. `syncguard-patch.py` now has a post-condition that refuses to write if that line is
+touched. Cheap correctness beats a micro-optimisation that fights a pinned invariant.
+
+### Test results
+- `syncguard-test.mjs` — **5/5**, and **falsified**: reverting the entries guard to the old
+  modal-only check reproduces the original bug (2 checks go RED); removing the prefs guard makes
+  the prefs check go RED. The tests fail when the fix is absent.
+- No regressions: `export` 49/49, `reason` 38/41, `tour` 66/68, `medsync` 96/99, `cal` 68/70 —
+  all at their established baselines.
+
+### Follow-ups found, not fixed here
+- The weight input is **14.5px** — under the 16px floor, so iOS Safari zooms in on focus and does
+  not zoom back. Same class as defects fixed elsewhere; needs its own pass across all inputs.
+- `cal-test.mjs` has a hardcoded `/home/claude/wm` path in `FILE-sw-untouched`, a sandbox
+  directory destroyed by a rollback. That check can never pass again until the path is removed.
 
 ---
 
