@@ -62,12 +62,37 @@ independently."
   at the same time. it needs to go in order."
 - Cap any single agent run at ~30 minutes of scope. Bigger work gets split into stages,
   each ending in a push.
-- **DISPATCH ON before any agent starts. No exceptions, ever.** An agent run is precisely
+- **DISPATCH ON before any agent starts, AND before any work block where you will go quiet.
+  No exceptions, ever.** The rule was originally written as "before any agent starts", and that
+  wording was then used to justify going silent during long INLINE work with dispatch off. The
+  trigger is going quiet, not the tool being used. An agent run is precisely
   when the main session is mute. Turning dispatch off and then starting an agent caused a
   109-minute silence and nearly ended this engagement.
 - Every agent brief must include: the progress rule, push-survivability (key findings go in
   checkpoint messages — messages survive rollbacks, files do not), falsification duty,
   version-agnostic assertions, the h() trap, and the Firestore rules.
+
+## Rule 2.5 — THE PM IS `pm.py`. RUN IT. IT IS NOT OPTIONAL.
+
+Aaron: *"a PM is required at all times for each of my messages/changes."*
+
+    python3 pm.py        # exit 0 = clear · 1 = BLOCKERS · 2 = warnings to disclose
+
+**Run it twice on every piece of work:** once before starting, once before telling Aaron
+anything is done. **Exit 1 means you may NOT report the work as finished** — no exceptions, no
+judgement call, no "but this case is different."
+
+**It is a script, not an agent, and that is the whole point.** A subagent BLOCKS the main
+session — a PM implemented as an agent would recreate the exact silence it exists to prevent.
+This costs no tokens, runs in seconds, and cannot forget or be reasoned with.
+
+It checks the things that have actually gone wrong here: unpushed work, local commits missing
+from the remote, APP_VERSION and the sw.js CACHE moving together, the DISPATCH flag existing and
+matching STATUS.md, the composed 1s tick guard being intact, the h() null-attribute trap,
+`|| true`, TODO/FIXME in production paths, every text control at the 16px iOS floor, that
+index.html actually parses, and that `harness/` still makes the release reproducible.
+
+It blocked its own release on unpushed work while it was being written. Trust it over yourself.
 
 ## Rule 3 — Cost before work
 Before starting any task, state one line: estimated size (S < 50k tokens / M 50-150k /
