@@ -982,7 +982,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -2897,6 +2897,15 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     const last = latest(med.id);
     const doseList = med.doses || [{ single: true }];
     const countdownLabel = locked && st.availableAt ? fmtCountdown(st.availableAt - now) : '';
+    // Windows of THIS medication that closed today with nothing logged in them. Same source as the
+    // banner. Named windows are listed ("Morning missed"); an unnamed one degrades to a count, so a
+    // medication whose windows have no names still reports honestly instead of printing "undefined".
+    const missedToday = missedDosesFor(now, now).filter(x => x.medId === med.id);
+    const missedNames = missedToday.map(x => x.windowName).filter(Boolean);
+    const missedTodayLabel = !missedToday.length ? ''
+      : (missedNames.length === missedToday.length
+          ? missedNames.join(' + ') + ' missed'
+          : missedToday.length + ' missed today');
     const lastLabel = last ? ('Last dose ' + fmtDateLabel(last.ts) + (last.dose ? (' · ' + last.dose) : '')) : 'No doses logged';
     // Next dose label
     let nextDoseLabel = '';
@@ -2976,6 +2985,14 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       h('div', { style: { fontSize: '11px', color: '#584350', display: 'flex', alignItems: 'center', gap: '4px', minWidth: '0', lineHeight: '1.3' } },
         h('span', { style: { flex: '1', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, lastLabel),
         locked ? h('span', { style: { flexShrink: '0', color: (st.ceilingHit || st.chemoBlock) ? '#A15B56' : '#96631C', fontWeight: '700', fontSize: '11px', whiteSpace: 'nowrap' } }, nextDoseLabel) : null,
+        // A CARD MUST NEVER HIDE A MISSED DOSE BEHIND "Waiting". Reported live: Protonix showed
+        // "Waiting - Next dose at 8:00 PM" with no sign the Morning window had been skipped, while
+        // the missed-dose banner at the top of the SAME screen said it had. Both were individually
+        // correct and together they read as a bug.
+        //
+        // missedDosesFor() is the SAME function the banner uses. Reused deliberately rather than
+        // recomputing "missed" here: a second definition is a second thing to drift.
+        missedTodayLabel ? h('span', { 'data-missed-on-card': 'true', style: { flexShrink: '0', color: '#A13830', fontWeight: '800', fontSize: '11px', whiteSpace: 'nowrap' } }, missedTodayLabel) : null,
         subStatus ? h('span', { style: { display: 'none', color: '#7D6974' } }, subStatus) : null,
         h('span', { style: { display: 'none', color: '#7D6A74', fontSize: '11.5px' } }, med.note)
       ),

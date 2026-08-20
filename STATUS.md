@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v48 |
+| **Version** | v49 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `c11ffe65cfffdfe248032da03d7e8e74` |
-| **sw.js md5** | `ea49cfbbf91946c4ddf94255f07b5ad0` |
+| **index.html md5** | `1b2b7f5177dff8281c38323e35852c77` |
+| **sw.js md5** | `5ba7e944d169056557aa803482e651fa` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,47 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v49 — SHIPPED — a card can no longer hide a missed dose behind "Waiting"
+
+### What Aaron reported
+*"I didn't log protonix or zofran this morning. I have a missed alert for protonix for morning.
+the protonix card shows waiting while the zofran shows available."*
+
+### It was not a bug — and that was the problem
+Protonix is windowed: **Morning 8–12, Evening 20–22, alerts on**. Zofran is as-needed
+(`type:'gap'`, `gapH:0`). After noon with nothing logged, every individual state was correct:
+the morning window closed unlogged → the missed alert is right; the next window is 8 PM → "Waiting"
+is right; Zofran has no schedule so it can never be missed → "Available" is right.
+
+**What was wrong is that the CARD and the BANNER told different stories about the same medication.**
+The card read "Waiting · Next dose at 8:00 PM" with no sign a dose had been skipped. "Waiting"
+reads as *nothing is wrong, just wait* — the worst possible impression when a scheduled dose was
+missed. Aaron read it as broken, and he was right to.
+
+### The fix
+The card now names the missed window ("Morning missed") beside the next-dose time, reusing
+**`missedDosesFor()` — the same function that raises the banner**, so the two can never disagree.
+A second definition of "missed" was deliberately not introduced; that is just a new way to drift.
+The patch refuses to write if that function is ever duplicated.
+
+An as-needed medication can never show it, because it has no window to miss — pinned by a test.
+
+### Test results
+- `missedcard-test.mjs` — **7/7**, freezing the clock at 1:00 PM to reproduce Aaron's exact moment.
+  **Falsified twice:** removing the card label restores the reported defect (2 red); forcing an
+  as-needed medication to report missed turns Zofran red.
+- No regressions: `cal` 68/70, `export` 49/49, `reason` 38/41, `tour` 66/68, `medsync` 96/99,
+  `syncguard` 5/5 — all at their established baselines.
+
+### Two defects found in my own test before it was trusted
+The card selector returned only the header (`"Protonix\nPantoprazole"`), so three checks failed
+against text that could never contain a status — **and a fourth PASSED VACUOUSLY**, because
+"missed" was absent from a string that never could have held it. The selector now requires the
+status chip AND the meta line, and the logging check asserts the label was present *before*
+logging, so it cannot pass on a card that never showed one.
 
 ---
 
