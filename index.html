@@ -982,7 +982,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -2536,6 +2536,27 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   }
   const bannerItems = bannerItemsAll.filter(m => m.ts > (state.missedClearedAt || 0));
 
+  // MEDICATION LISTS DISAGREE AND NOBODY HAS CHOSEN YET.
+  // v46 shipped shared medication settings, but nothing changes until a choice is made, and the
+  // chooser lived only on a card partway down the Medications screen. Aaron reported the two
+  // phones "still not syncing" -- they were waiting on him, and nothing ever said so.
+  // Uses medsyncCandidates(), the SAME source the Medications card uses: no second definition of
+  // "the phones disagree". Renders nothing until the prefs snapshot lands, so an offline phone
+  // shows no warning it cannot act on.
+  if (state.medsync && state.medsync.devices && !state.medsync.sharedJson) {
+    const mineId = medsyncDeviceId();
+    const otherPhones = medsyncCandidates().filter(function (c) { return c.id !== mineId; });
+    if (otherPhones.length) {
+      parts.push(h('div', { 'data-medsync-home-prompt': 'true', style: { display: 'flex', alignItems: 'flex-start', gap: '10px', background: 'rgba(199,120,0,0.14)', border: '1px solid rgba(199,120,0,0.45)', borderRadius: '15px', padding: '12px 13px' } },
+        h('span', { style: { flexShrink: '0', width: '22px', height: '22px', borderRadius: '50%', background: '#C77800', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '13px' } }, '!'),
+        h('span', { style: { flex: '1', minWidth: '0' } },
+          h('span', { style: { display: 'block', fontSize: '13.5px', fontWeight: '800', color: '#7A5313', lineHeight: '1.35' } }, 'The two phones have different medication lists'),
+          h('span', { style: { display: 'block', fontSize: '12.5px', color: '#7A5313', lineHeight: '1.4', marginTop: '3px' } }, 'Until you pick which list both should use, each phone keeps its own — which is why a dose can look due on one and not the other.'),
+          h('button', { 'data-medsync-open': 'true', type: 'button', onClick: medsyncGoChooser, style: { marginTop: '10px', minHeight: '44px', padding: '0 14px', borderRadius: '11px', background: '#C77800', color: '#fff', fontSize: '13.5px', fontWeight: '800' } }, 'Compare the two lists')
+        )
+      ));
+    }
+  }
   // WRITE FAILURE — pushed above everything, including the missed-dose alert. If a dose did not
   // reach the database that is the most important thing on the screen, and unlike a toast it
   // stays until it is acknowledged.
@@ -4244,7 +4265,36 @@ function exportFilename(kind, ext) {
 }
 
 // Plain browser download. No native bridge here -- WEB-MAIN is a web app, so this is the whole path.
+// Returns { method: 'share'|'download', cancelled: boolean }.
+// The caller MUST use this. Announcing "saved" after a cancelled share is the same lie this
+// function existed to tell for six releases.
 async function deliverFile(blob, filename) {
+  // THE iOS PWA PROBLEM, confirmed live on 2026-08-21: in an installed PWA (standalone display
+  // mode) `<a download>` does not save anything. Safari ignores it or opens the blob in a viewer
+  // with no route to Files. Every export produced a success toast and no file. The Web Share API
+  // (Level 2, iOS Safari 15+) is the only reliable route -- the share sheet has "Save to Files".
+  try {
+    if (typeof File === 'function' && navigator.canShare) {
+      const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: filename });
+          return { method: 'share', cancelled: false };
+        } catch (err) {
+          // AbortError means she tapped Cancel. That is not a failure and must not be retried as
+          // a download -- a file appearing after she cancelled is its own kind of wrong.
+          if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')) {
+            return { method: 'share', cancelled: true };
+          }
+          // Anything else: fall through and try the download route rather than losing the export.
+          console.warn('[export] share failed, falling back to download:', err);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[export] share unavailable, using download:', err);
+  }
+
   const url = URL.createObjectURL(blob);
   try {
     const a = document.createElement('a');
@@ -4255,6 +4305,15 @@ async function deliverFile(blob, filename) {
     // is revoked in the same tick as the click.
     setTimeout(() => { try { URL.revokeObjectURL(url); } catch (err) {} }, 4000);
   }
+  return { method: 'download', cancelled: false };
+}
+
+// One place that turns a deliverFile() result into words. "Saved to your downloads" is wrong for a
+// share sheet (she chose where it went) and a lie if she cancelled.
+function deliveredWord(res, what) {
+  if (res && res.cancelled) return null;
+  if (res && res.method === 'share') return what + ' — choose "Save to Files" to keep it.';
+  return what + ' saved to your downloads.';
 }
 
 // The busy state is set, then a frame is yielded, THEN the work runs. Without the yield the whole
@@ -4291,8 +4350,9 @@ async function downloadEntriesCSV() {
     }
     const csv = [EXPORT_COLUMNS].concat(rows).map(r => r.map(csvField).join(',')).join('\r\n');
     // UTF-8 BOM so Excel opens °F, é and em-dashes correctly instead of as mojibake.
-    await deliverFile(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), exportFilename('records', 'csv'));
-    setToast(nLogged + ' entr' + (nLogged === 1 ? 'y' : 'ies') + ' saved to your downloads.');
+    const csvRes = await deliverFile(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), exportFilename('records', 'csv'));
+    const csvWord = deliveredWord(csvRes, nLogged + ' entr' + (nLogged === 1 ? 'y' : 'ies'));
+    if (csvWord) setToast(csvWord);
   } catch (err) {
     // err.message here is a raw browser string -- "The operation is insecure.",
     // "QuotaExceededError". None of it is actionable, and all of it reads like the app broke in a

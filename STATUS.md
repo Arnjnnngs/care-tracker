@@ -65,10 +65,10 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v49 |
+| **Version** | v50 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `1b2b7f5177dff8281c38323e35852c77` |
+| **index.html md5** | `613f18ba62bd93b0450301428a7826af` |
 | **sw.js md5** | `5ba7e944d169056557aa803482e651fa` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
@@ -85,6 +85,58 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v50 — SHIPPED — exports finally reach the iPhone, and the phones stop silently disagreeing
+
+Aaron, 2026-08-21: *"still not syncing up between iPhone and android. can't find file for iPhone either."*
+Two separate root causes, both confirmed in the code.
+
+### 1. The iPhone file — CONFIRMED, and worse than "an open risk"
+`deliverFile()` was a bare `<a download>` + click, and **the Web Share API appeared ZERO times in
+the entire app.** In an INSTALLED iOS PWA (standalone display mode) `<a download>` does not save a
+file — Safari ignores it, or opens the blob in a viewer with no route to Files.
+
+So every export on her iPhone showed a success toast and produced **nothing**. This was flagged as
+a risk from v44 onward (*"until you confirm a file lands, it is not a backup"*). It is now
+confirmed, which means **Brandi's records have never had a working backup on her phone.**
+
+**Fix: `navigator.share({ files })`** — Web Share API Level 2, supported in iOS Safari 15+ including
+standalone PWAs. It opens the native share sheet, which has **Save to Files**. Falls back to
+`<a download>` wherever file sharing does not exist (desktop, older Android).
+
+**And the app stops claiming success it cannot verify.** `deliverFile()` now reports which route ran
+and whether the share was cancelled, and one helper turns that into words. A cancelled share is not
+"saved", and it does **not** silently fall back to a download — a file appearing after she tapped
+Cancel is its own kind of wrong.
+
+### 2. The phones "not syncing" — they were waiting on Aaron, and nothing said so
+v46's shared medication settings work, but **nothing changes until a choice is made**, and the
+chooser was reachable only from a card partway down the Medications screen. Home never mentioned
+it. A safety fix that depends on the user discovering a button is not a shipped fix.
+
+**Fix:** when this phone can see another phone's list and no choice has been made, Home shows a
+prompt that goes straight to the chooser — *"The two phones have different medication lists … which
+is why a dose can look due on one and not the other."* It reuses `medsyncCandidates()`, the same
+source the Medications card uses, so there is no second definition of "the phones disagree".
+
+### Test results
+- `iosshare-test.mjs` — **7/7**, asserting on **which API the app calls and what it says
+  afterwards**. A headless Chromium cannot reproduce iOS standalone behaviour, so asserting "a file
+  appeared" here would prove nothing about the phone; what is provable is that the app prefers the
+  share sheet, falls back correctly, and never announces a save the user cancelled.
+- **Falsified twice:** disabling the share path turns 4 checks red and restores the exact
+  iPhone-silently-fails behaviour; ignoring the cancel result produces a file she never asked for.
+- No regressions: `cal` 68/70, `export` 49/49, `reason` 38/41, `tour` 66/68, `medsync` 96/99,
+  `syncguard` 5/5, `missedcard` 7/7 — all at baseline.
+
+### What Aaron needs to do
+1. **Reports → Save backup file on the iPhone.** A share sheet should now appear — choose
+   **Save to Files**. That is the first working backup her records have ever had.
+2. **Open the app on both phones.** Whichever shows the orange *"The two phones have different
+   medication lists"* prompt, tap **Compare the two lists** and pick which one both should use.
+   That is the step that ends the disagreement.
 
 ---
 
