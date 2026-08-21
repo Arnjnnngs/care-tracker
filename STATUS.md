@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: IDLE
+DISPATCH: ACTIVE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v51 |
+| **Version** | v52 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `853b782bd38e6ebb8dd631df058489ff` |
-| **sw.js md5** | `18445c9461e8d0cdf0350195bba92ac7` |
+| **index.html md5** | `bd051e404aa180baa3d7bbaeb6ef0a13` |
+| **sw.js md5** | `6cd0192bda0bc323310d418f1d771c24` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -87,6 +87,86 @@ Shipped in the v43.x line, all live and verified:
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
 
 ---
+
+## v52 — SHIPPED — paracentesis is its own record, and the weight trend never moves because of it
+
+Aaron, 2026-08-21: *"we need to add para, but maybe leave it as a standalone so it doesn't affect
+weight trend. there can be notes for weight that can add the para together to see how much was
+drained. it does need to be tracked though at some point"*
+
+### What it does
+
+A **Paracentesis card on Home**, under Weight — type the litres, confirm the time, done. It writes
+its **own record**. It never writes, edits, or does arithmetic against a weight entry.
+
+A **Paracentesis report**: total drained, number of procedures, days since the last one, the full
+list, and a Remove on each.
+
+The **Weight report gains annotation, not adjustment**. Each drain draws a dashed marker with its
+litres on the chart, and a line under the stats reads *"2 paracentesis procedures in this range ·
+7.5 L drained"* — counted against the same window the chart is showing, so the number always
+matches the picture. The line says outright that weights are shown as recorded and are not adjusted
+for drainage. That line is Aaron's *"notes for weight that can add the para together."*
+
+### Why it is not a field on the weight entry
+
+That is how ChemoWell has stored it since app-v21, and it is the wrong shape. Tying a procedure to
+a measurement means a drain on a day nobody weighed in cannot be recorded at all, two drains in one
+week collide on a single entry, and the total litres is only ever as complete as the weigh-in
+history. Aaron asked for standalone; standalone is also simply correct.
+
+### Removal is an append, not a delete — this one matters
+
+The Firestore rules block deletes by **document age**, with no medId exemption. `BYPASS_48H_IDS`
+only shows or hides a button; it cannot grant a delete the rules refuse. Adding `paracentesis` to
+it would have produced a Remove button that looked like it worked and silently did nothing on any
+record older than two days. **A wrongly-recorded 6-litre drain that can never be corrected is a
+real harm**, so Remove appends a tombstone the same way appointments do (`paraId` + `cancelled:true`,
+newest document wins). That is a write, so it works at any age. `PARA-7` asserts `deleteDoc` is
+never called.
+
+### Two traps the Developer stage found before a line was written
+
+1. **The Reports dispatch fell through to Appetite.** Both `renderReportDetail` AND `reportDescriptor`
+   ended in a bare unguarded Appetite return, so any type added to `reportTypes` but missed in the
+   chain rendered the Appetite report *under its own heading* — wrong content, no error. Both are
+   now explicit, and an unknown type returns a plain "not available" and warns to the console.
+2. **`reportNameOf` prints unknown ids as "Medication (removed)"** — in the document handed to an
+   oncologist — and two separate dose-count sites with *different* exclusion lists would have
+   printed "Paracentesis — 3 doses". All three are fixed.
+
+### One bug I caught in my own work, worth recording
+
+The first build called `fmtDateShort()`, which **does not exist in this app**. `node --check`
+accepted it happily, because a missing function is a runtime error, not a syntax error — it would
+have thrown on the Home screen of a live medical app. The patch script now verifies that **every
+helper the new code calls is actually defined** before it writes anything, and that post-condition
+is falsified (it correctly refuses the build when `fmtDateShort` is put back).
+
+### Test results
+
+- `harness/para-test.mjs` — **13/13**, including: a drain writes zero weight documents; the plotted
+  weights are byte-for-byte what was seeded; the drained total is aggregated per visible window;
+  the Paracentesis report is not the Appetite report wearing its heading; Remove never calls
+  `deleteDoc`; a drain logged with no weight ever recorded is still reported rather than lost.
+- **Falsified**: **4/13** against the v51 build.
+- Regression set: `eod` 11/11, `export` 49/49, `syncguard` 5/5, `missedcard` 7/7, `iosshare` 7/7,
+  `cal` 68/70, `reason` 38/41, `tour` 66/68 — all at baseline.
+- **`medsync` reads 94/99, and that is not a regression.** It is a *differential* test: it asserts
+  a candidate is byte-identical to a base build in specific places. Five of its checks compare
+  things this release deliberately changes — the version constant, `sw.js`, the version label, and
+  the fact that the entries collection gained a new writer (paracentesis). The ones that matter
+  were verified by hand and are byte-identical to v51: the dose-logging branch of
+  `confirmTimeAndLog`, `addEntryDB`, `removeEntryDB`, `medIsOnActiveList`, `missedDosesFor`, and
+  the composed one-second tick guard. **94/99 is the new baseline for v52.**
+
+### Still to do on this feature
+
+ChemoWell's own version is a **replacement, not an addition** — it already stores paracentesis as
+`weightReason` + `litersDrained` on the weight entry, and three Help answers tell users to log it
+that way. That side needs a one-time migration of existing records into standalone ones, the option
+retired from the reason list, and those Help answers corrected. Tracked and in progress.
+
 
 ## v51 — SHIPPED — bowel movement and appetite are asked at the END of the day, about TODAY
 

@@ -982,11 +982,11 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -1223,7 +1223,7 @@ function fmtCountdown(ms) {
   if (m >= 1) { if (m < 5) { const s = Math.floor((ms % 60000) / 1000); return m + 'm ' + s + 's'; } return m + 'm'; }
   return Math.max(1, Math.floor(ms / 1000)) + 's';
 }
-function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'chemo_date') return 'Chemo treatment'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); /* hasOwnProperty, not a bare index: state.archivedMeds is a plain object, so archivedMeds['constructor'] resolves to Object.prototype.constructor even when the map is EMPTY and this returned the literal string "Object" as a medication name. */ const archived = (state.archivedMeds && Object.prototype.hasOwnProperty.call(state.archivedMeds, id)) ? state.archivedMeds[id] : null; return m ? m.name : (archived ? archived.name : id); }
+function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'paracentesis') return 'Paracentesis'; if (id === 'chemo_date') return 'Chemo treatment'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); /* hasOwnProperty, not a bare index: state.archivedMeds is a plain object, so archivedMeds['constructor'] resolves to Object.prototype.constructor even when the map is EMPTY and this returned the literal string "Object" as a medication name. */ const archived = (state.archivedMeds && Object.prototype.hasOwnProperty.call(state.archivedMeds, id)) ? state.archivedMeds[id] : null; return m ? m.name : (archived ? archived.name : id); }
 function nowLocalISO() { return toLocalISO(simNow()); }
 function toLocalISO(ts) {
   const d = new Date(ts);
@@ -1465,6 +1465,13 @@ async function confirmTimeAndLog() {
     setState({ weightInput: '', timeModal: null });
     await addEntryDB(entry);
     setToast('Weight ' + v + ' lbs logged at ' + fmtTime(ts));
+  } else if (m.type === 'para') {
+    const v = m.paraValue;
+    const entry = { medId: PARA_MED_ID, paraId: paraNewId(), liters: v, dose: paraFmtLiters(v) + ' L',
+                    mg: 0, ts, loggedAt: Date.now() };
+    setState({ paraInput: '', timeModal: null });
+    await addEntryDB(entry);
+    setToast('Paracentesis ' + paraFmtLiters(v) + ' L logged at ' + fmtTime(ts));
   } else if (m.type === 'multi') {
     const ids = m.medIds;
     setState({ timeModal: null });
@@ -2896,7 +2903,28 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
         h('input', { type: 'number', inputMode: 'decimal', step: '0.1', placeholder: weightDefault() || '156.0', value: state.weightInput, onInput: (e) => { state.weightInput = e.target.value; }, className: 'mono', style: { flex: '1', minWidth: '0', minHeight: '38px', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '11px', padding: '0 12px', fontSize: '16px', background: 'rgba(255,255,255,0.6)', color: '#3D2B3A' } }),
         h('button', { onClick: logWeight, style: { flexShrink: '0', minHeight: '38px', padding: '0 15px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700' } }, 'Log')
       )
-    )
+    ),
+    // Paracentesis (v52). Sits under Weight because that is where the question comes up -- a sudden
+    // drop on the scale is the thing that prompts "was that a drain?" -- but it writes its OWN
+    // record and the weight number above is never touched by it.
+    (function () {
+      const pLast = paraLatest();
+      const pSub = pLast
+        ? ('Last drain ' + fmtInpatientDate(pLast.ts) + ' · ' + paraFmtLiters(pLast.liters) + ' L')
+        : 'Litres drained, recorded separately';
+      return h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' } },
+          h('div', null,
+            h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Paracentesis'),
+            h('div', { style: { fontSize: '11px', color: '#7D6974', marginTop: '2px' } }, pSub)
+          )
+        ),
+        h('div', { style: { display: 'flex', gap: '6px', marginTop: '8px' } },
+          h('input', { type: 'number', inputMode: 'decimal', step: '0.1', min: '0', max: String(PARA_MAX_LITERS), placeholder: 'Litres', value: state.paraInput, onInput: (e) => { state.paraInput = e.target.value; }, className: 'mono', style: { flex: '1', minWidth: '0', minHeight: '38px', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '11px', padding: '0 12px', fontSize: '16px', background: 'rgba(255,255,255,0.6)', color: '#3D2B3A' } }),
+          h('button', { onClick: logParacentesis, style: { flexShrink: '0', minHeight: '38px', padding: '0 15px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700' } }, 'Log')
+        )
+      );
+    })()
   ));
 
   // Chemo schedule card
@@ -3419,13 +3447,26 @@ function reportDescriptor(type, now) {
     const bLatest = bEntries[0];
     return { label: 'Bowel Movement', icon: 'notes', description: 'Review bowel movement history logged from Home.', meta: bLatest ? ((BOWEL_MOVEMENT_LABELS[bLatest.value] || bLatest.value) + ' most recent') : 'No entries yet' };
   }
-  const yStart = dayStart(now);
-  const yEntry = appetiteFor(yStart);
-  return { label: 'Appetite', icon: 'notes', description: 'Review appetite history logged from Home.', meta: yEntry ? ((APPETITE_LABELS[yEntry.value] || yEntry.value) + ' today') : 'Not yet logged for today' };
+  if (type === 'paracentesis') {
+    const pList = paracentesisResolved();
+    const pLast = pList[0];
+    return { label: 'Paracentesis', icon: 'chart', description: 'Fluid drainage procedures and how much was taken.',
+             meta: pLast ? (paraFmtLiters(paraTotalLiters(pList)) + ' L over ' + pList.length + (pList.length === 1 ? ' procedure' : ' procedures')) : 'No procedures logged yet' };
+  }
+  // NOTE: this function used to END on the Appetite object with no `if`, so ANY unrecognised type
+  // rendered Appetite's content under its own heading. Appetite is now explicit and the fallthrough
+  // is a visible, reported error rather than a silent wrong answer.
+  if (type === 'appetite') {
+    const yStart = dayStart(now);
+    const yEntry = appetiteFor(yStart);
+    return { label: 'Appetite', icon: 'notes', description: 'Review appetite history logged from Home.', meta: yEntry ? ((APPETITE_LABELS[yEntry.value] || yEntry.value) + ' today') : 'Not yet logged for today' };
+  }
+  console.warn('[reports] unknown report type:', type);
+  return { label: 'Report', icon: 'notes', description: 'This report is not available.', meta: '' };
 }
 
 function renderReportsMenu(now) {
-  const reportTypes = ['history', 'weight', 'cycle', 'bowel_movement', 'appetite'];
+  const reportTypes = ['history', 'weight', 'paracentesis', 'cycle', 'bowel_movement', 'appetite'];
   return [
     h('section', null,
       h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', color: '#AA5375' } }, appIcon('chart', 19), h('span', { style: { fontSize: '12px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase' } }, 'Care reports')),
@@ -3598,7 +3639,9 @@ function bkNoticeStyle(kind) {
 
 function renderReportDetail(type, now) {
   const report = reportDescriptor(type, now);
-  const content = type === 'history' ? renderHistory(now) : type === 'weight' ? renderWeightTrend(now) : type === 'cycle' ? renderCycle(now) : type === 'bowel_movement' ? renderBowelMovementReport(now) : renderAppetite(now);
+  // The bare trailing `: renderAppetite(now)` was a trap: a type added to reportTypes but missed
+  // here rendered the Appetite report silently, under the new report's own heading.
+  const content = type === 'history' ? renderHistory(now) : type === 'weight' ? renderWeightTrend(now) : type === 'paracentesis' ? renderParacentesis(now) : type === 'cycle' ? renderCycle(now) : type === 'bowel_movement' ? renderBowelMovementReport(now) : renderAppetite(now);
   return [
     h('section', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' } },
       h('div', null,
@@ -3646,6 +3689,60 @@ const CAL_WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function calPad2(n) { return String(n).padStart(2, '0'); }
 function calNewApptId() { return 'appt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10); }
+
+// ---- PARACENTESIS (v52) ----
+// Its own entry type, never a field on a weight entry. See the header of para-patch.py for why.
+// Shape:  { medId:'paracentesis', paraId, liters:<number>, dose:'<n> L', mg:0, ts, note?, loggedAt }
+// Correct/remove: append another document with the SAME paraId and a newer loggedAt; the newest
+// one wins, and cancelled:true is a tombstone. Append-only, so it works after 48 hours -- a plain
+// delete does not, because the Firestore rules refuse it by document age.
+const PARA_MED_ID = 'paracentesis';
+const PARA_MAX_LITERS = 25; // a single therapeutic drain above this is a typo, not a procedure
+function paraNewId() { return 'para_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10); }
+function paraSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
+// A Map, NOT a plain object. paraId comes out of the database, and on a plain object an id of
+// 'constructor' or '__proto__' reads back a truthy INHERITED value, so the first record with such
+// an id would be silently dropped as already-seen. That exact bug has already cost this project
+// one blocker in runRestore().
+function paracentesisResolved() {
+  const byGroup = new Map();
+  for (const d of (state.entries || [])) {
+    if (!d || d.medId !== PARA_MED_ID) continue;
+    const key = (typeof d.paraId === 'string' && d.paraId) ? d.paraId : ('doc:' + String(d.id));
+    const prev = byGroup.get(key);
+    if (!prev || paraSupersedes(d, prev)) byGroup.set(key, d);
+  }
+  const live = [];
+  byGroup.forEach((p, key) => {
+    if (p.cancelled) return;                                        // tombstone
+    if (!(typeof p.ts === 'number' && isFinite(p.ts) && p.ts > 0)) return;
+    const L = Number(p.liters);
+    if (!isFinite(L) || L <= 0) return;                             // unusable volume, do not guess one
+    live.push(Object.assign({}, p, { paraId: key, liters: L }));
+  });
+  return live.sort((a, b) => b.ts - a.ts);                          // newest first
+}
+function paraTotalLiters(list) { return (list || []).reduce((s, p) => s + p.liters, 0); }
+function paraFmtLiters(n) { return (Math.round(n * 10) / 10).toFixed(1); }
+function paraLatest() { const l = paracentesisResolved(); return l.length ? l[0] : null; }
+async function logParacentesis() {
+  const raw = (state.paraInput || '').trim();
+  const v = parseFloat(raw);
+  if (!raw || isNaN(v) || v <= 0 || v > PARA_MAX_LITERS) { setToast('Enter the litres drained (up to ' + PARA_MAX_LITERS + ')'); return; }
+  setState({ timeModal: { type: 'para', paraValue: Math.round(v * 10) / 10, timeValue: nowLocalISO() } });
+}
+async function removeParacentesis(paraId) {
+  const p = paracentesisResolved().find(x => x.paraId === paraId);
+  if (!p) return;
+  try {
+    await addEntryDB({ medId: PARA_MED_ID, paraId: paraId, liters: p.liters, dose: 'Paracentesis removed',
+                       mg: 0, ts: p.ts, cancelled: true, loggedAt: Date.now() });
+    setState({ confirmRemovePara: null });
+    setToast('Paracentesis removed');
+  } catch (e) {
+    setToast('Could not remove — check connection and try again');
+  }
+}
 function calIsValidTs(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
 
 // Local date key. Deliberately NOT toISOString().slice(0,10) -- that is UTC, and west of Greenwich
@@ -4188,6 +4285,7 @@ function exportDetailFor(e) {
   if (!e) return '';
   if (e.medId === 'temp') return e.dose || (e.temp !== undefined ? e.temp + tempSuffix() : '');
   if (e.medId === 'weight') return e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '');
+  if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : (e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || ''));
   if (e.medId === 'bowel_movement') return BOWEL_MOVEMENT_LABELS[e.value] || e.dose || e.value || '';
   if (e.medId === 'appetite') return APPETITE_LABELS[e.value] || e.dose || e.value || '';
   if (e.medId === 'chemo_date') return e.dose || 'Chemo date';
@@ -4414,7 +4512,7 @@ function buildReportDoc(now) {
   const totals = {};
   allExportEntries().forEach(e => {
     if (!e.medId || e.medId === 'chemo_date') return;
-    if (['temp', 'weight', 'appetite', 'bowel_movement', 'cycle_start', 'cycle_end', 'inpatient', 'inpatient_start', 'inpatient_end'].indexOf(e.medId) >= 0) return;
+    if (['temp', 'weight', 'paracentesis', 'appetite', 'bowel_movement', 'cycle_start', 'cycle_end', 'inpatient', 'inpatient_start', 'inpatient_end'].indexOf(e.medId) >= 0) return;
     if (e.medId.indexOf('symptom_') === 0) return;
     totals[e.medId] = (totals[e.medId] || 0) + 1;
   });
@@ -5089,7 +5187,7 @@ function renderHistory(now) {
     const missed = missedDosesFor(k, now);
     const items = [...dmap[k], ...missed].sort((a, b) => a.ts - b.ts);
     const tyDay = items.filter(e => e.medId === 'tylenol' && !e.missed).reduce((s, e) => s + (e.mg || 0), 0);
-    const doses = items.filter(e => e.medId !== 'temp' && e.medId !== 'weight' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end' && !e.missed).length;
+    const doses = items.filter(e => e.medId !== 'temp' && e.medId !== 'weight' && e.medId !== 'paracentesis' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end' && !e.missed).length;
     const temps = items.filter(e => e.medId === 'temp').length;
     const weights = items.filter(e => e.medId === 'weight').length;
     const wkday = new Date(k).toLocaleDateString([], { weekday: 'long' });
@@ -5299,6 +5397,47 @@ function renderSymptoms(now) {
   return [header, list];
 }
 
+// The Paracentesis report. Deliberately plain: how much in total, how many procedures, how long
+// since the last one, then the list. Removal appends a tombstone rather than deleting, so it works
+// at any age -- see para-patch.py's header for why a delete would silently fail after 48 hours.
+function renderParacentesis(now) {
+  const list = paracentesisResolved();
+  if (!list.length) {
+    return [h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } },
+      'No paracentesis procedures logged yet.\nLog the litres drained from the card on Today.')];
+  }
+  const total = paraTotalLiters(list);
+  const avg = total / list.length;
+  const daysSince = Math.floor((dayStart(now) - dayStart(list[0].ts)) / 86400000);
+  const sinceLabel = daysSince <= 0 ? 'Today' : daysSince === 1 ? '1 day' : (daysSince + ' days');
+  const statCard = (label, value) => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#7D6974', marginBottom: '6px' } }, label),
+    h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: '#3D2B3A' } }, value)
+  );
+  const stats = h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' } },
+    statCard('Total drained', paraFmtLiters(total) + ' L'),
+    statCard('Procedures', String(list.length)),
+    statCard('Since last', sinceLabel)
+  );
+  const note = h('div', { style: { background: 'rgba(170,83,117,0.08)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '14px', padding: '12px 14px', fontSize: '12.5px', color: '#6E5261', lineHeight: '1.5' } },
+    'Averaging ' + paraFmtLiters(avg) + ' L per procedure. These are recorded separately from weight — the Weight report still shows what the scale actually said, with a marker on each drain date.');
+  const rows = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+    ...list.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      h('div', { style: { flex: '1', minWidth: '0' } },
+        h('div', { style: { fontSize: '14.5px', fontWeight: '700', color: '#3D2B3A' } }, paraFmtLiters(p.liters) + ' L drained'),
+        h('div', { style: { fontSize: '12px', color: '#7D6974', marginTop: '2px' } }, fmtDateLabel(p.ts))
+      ),
+      state.confirmRemovePara === p.paraId
+        ? h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
+            h('button', { onClick: () => removeParacentesis(p.paraId), style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px' } }, 'Delete'),
+            h('button', { onClick: () => setState({ confirmRemovePara: null }), style: { color: '#7D6974', fontSize: '12.5px', padding: '8px 6px', fontWeight: '600' } }, 'Keep')
+          )
+        : h('button', { onClick: () => setState({ confirmRemovePara: p.paraId }), style: { flexShrink: '0', color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
+    ))
+  );
+  return [stats, note, rows];
+}
+
 function renderWeightTrend(now) {
   const weightEntries = state.entries.filter(e => e.medId === 'weight' && e.weight).sort((a, b) => a.ts - b.ts);
   const range = state.weightRange;
@@ -5313,7 +5452,12 @@ function renderWeightTrend(now) {
   if (weightEntries.length === 0) {
     return [
       toggle,
-      h('div', { style: { background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '16px', padding: '40px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No weight readings logged yet.\nLog your first weight on the Today tab.')
+      h('div', { style: { background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '16px', padding: '40px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } },
+        // A paracentesis can exist with no weight ever logged. Saying so here beats an empty page
+        // that looks like the drains were lost.
+        paracentesisResolved().length
+          ? ('No weight readings logged yet.\nLog your first weight on the Today tab.\n\n' + paracentesisResolved().length + ' paracentesis ' + (paracentesisResolved().length === 1 ? 'procedure is' : 'procedures are') + ' recorded — see the Paracentesis report.')
+          : 'No weight readings logged yet.\nLog your first weight on the Today tab.')
     ];
   }
 
@@ -5410,6 +5554,19 @@ function renderWeightTrend(now) {
       svg += '<text x="' + d.x.toFixed(1) + '" y="' + (d.y - 12).toFixed(1) + '" fill="#7B3F6B" font-size="13" font-weight="700" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + d.w + '</text>';
     }
   });
+  // Paracentesis markers. Filtered against tMin/tMax -- the ACTUAL plotted span -- and never
+  // against minTs: line ~5324 falls back to weightEntries.slice(-2) when nothing was weighed inside
+  // the window, so the plotted span is not always the 28/90-day window. A marker outside the span
+  // is dropped rather than clamped to the edge, because clamping would draw a drain on a date it
+  // did not happen.
+  const paraAll = paracentesisResolved();
+  const paraInRange = paraAll.filter(p => p.ts >= tMin && p.ts <= tMax);
+  paraInRange.forEach(p => {
+    const px = x(p.ts);
+    svg += '<line x1="' + px.toFixed(1) + '" y1="' + pad.top + '" x2="' + px.toFixed(1) + '" y2="' + (pad.top + cH) + '" stroke="rgba(62,116,158,0.45)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+    svg += '<circle cx="' + px.toFixed(1) + '" cy="' + (pad.top + cH) + '" r="4.5" fill="#3E749E" stroke="#FFFFFF" stroke-width="1.5"/>';
+    svg += '<text x="' + px.toFixed(1) + '" y="' + (pad.top - 12) + '" fill="#3E749E" font-size="10.5" font-weight="700" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + paraFmtLiters(p.liters) + 'L</text>';
+  });
   svg += '</svg>';
 
   // Chart card
@@ -5461,7 +5618,22 @@ function renderWeightTrend(now) {
     )
   );
 
-  return [toggle, chart, stats, readings];
+  // The drained-total line. This is Aaron's "notes for weight that can add the para together to
+  // see how much was drained" -- reported against the SAME window the chart is showing, so the
+  // number always matches the picture above it. The plotted weights are not adjusted by any of it.
+  const paraLine = paraInRange.length
+    ? h('div', { style: { background: 'rgba(62,116,158,0.09)', border: '1px solid rgba(62,116,158,0.22)', borderRadius: '14px', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px' } },
+        h('span', { style: { flexShrink: '0', width: '10px', height: '10px', borderRadius: '50%', background: '#3E749E' } }),
+        h('div', { style: { fontSize: '12.5px', color: '#4A5C6B', lineHeight: '1.45' } },
+          h('span', { style: { fontWeight: '800' } }, paraInRange.length + ' paracentesis ' + (paraInRange.length === 1 ? 'procedure' : 'procedures') + ' in this range · ' + paraFmtLiters(paraTotalLiters(paraInRange)) + ' L drained'),
+          h('span', { style: { display: 'block', marginTop: '2px' } }, 'Marked on the chart. Weight readings are shown exactly as recorded and are not adjusted for drainage.')
+        )
+      )
+    : (paraAll.length
+        ? h('div', { style: { background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '11px 14px', fontSize: '12.5px', color: '#7D6974', lineHeight: '1.45' } },
+            'No paracentesis in this range. ' + paraAll.length + ' recorded overall · ' + paraFmtLiters(paraTotalLiters(paraAll)) + ' L total.')
+        : null);
+  return paraLine ? [toggle, chart, stats, paraLine, readings] : [toggle, chart, stats, readings];
 }
 
 
