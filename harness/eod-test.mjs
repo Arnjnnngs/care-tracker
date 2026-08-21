@@ -71,8 +71,21 @@ const browser = await chromium.launch({ executablePath:'/opt/pw-browsers/chromiu
 async function bootAt(hour) {
   const at = new Date(); at.setHours(hour, 0, 0, 0);
   const now = at.getTime();
-  let html = baseHtml.replace('function simNow() { return Date.now(); }',
-                              'function simNow() { return ' + now + '; }');
+  // Replace simNow()'s whole BODY rather than matching one exact line. care-tracker ships the
+  // one-liner `function simNow() { return Date.now(); }`; the chemowell-beta build derived from it
+  // carries the TEST_MODE date-offset version across three lines. Matching the literal meant this
+  // gate could not run against the beta at all -- which is the build Aaron wants testing to happen
+  // on before anything reaches care-tracker.
+  const i = baseHtml.indexOf('function simNow()');
+  if (i < 0) { console.error('simNow not found'); process.exit(4); }
+  const brace = baseHtml.indexOf('{', i);
+  let depth = 0, end = -1;
+  for (let k = brace; k < baseHtml.length; k++) {
+    if (baseHtml[k] === '{') depth++;
+    else if (baseHtml[k] === '}') { depth--; if (depth === 0) { end = k; break; } }
+  }
+  if (end < 0) { console.error('simNow body not delimited'); process.exit(4); }
+  const html = baseHtml.slice(0, i) + 'function simNow() { return ' + now + '; }' + baseHtml.slice(end + 1);
   if (!html.includes('return ' + now)) { console.error('clock freeze failed'); process.exit(4); }
   const server = http.createServer((rq,rs)=>{ if(rq.url.startsWith('/index.html')){rs.writeHead(200,{'Content-Type':'text/html'});rs.end(html);return;} rs.writeHead(404);rs.end(); }).listen(0,'127.0.0.1');
   await new Promise(r=>server.once('listening',r));
