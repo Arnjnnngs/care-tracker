@@ -88,6 +88,62 @@ Shipped in the v43.x line, all live and verified:
 
 ---
 
+## REMINDER LEDGER — SHIPPED (server-side; no app version change)
+
+### The defect
+`send-reminders.js` decided whether to notify by asking **"is it 8:00 right now?"** — a ±12 minute
+tolerance against a cron that fires every 30 minutes. GitHub Actions is routinely late, so a run
+due at 13:00 that actually started at 13:08 sent **nothing**. No error, no retry, no record.
+
+**Measured on the real cron grid across 1,147 simulated days: 170 reminders silently dropped.**
+Roughly 1 in 6 anchored doses. Aaron had already accepted "an extra notification is safer than a
+missing one" — this was the opposite failure, and it was never accepted.
+
+### The fix
+A **ledger**. The job now asks *"has this dose already been sent today?"* instead of *"is it exactly
+8:00?"*. A late run still delivers; a double run does not double-send; a run so late the reminder
+would mislead records the miss rather than dropping it.
+
+**Append-only by construction.** The ledger only ever CREATEs documents at deterministic ids —
+never updates, never deletes. State is which documents exist, not what any document contains.
+The deterministic id is also the concurrency primitive: Firestore's `create()` fails with
+ALREADY_EXISTS, so two runs racing on the same dose both call create() and exactly one wins. No
+transaction, no lock document.
+
+**The five hardcoded medications are gone from the logic** — four literal if-statements naming five
+drugs are replaced by one `SCHEDULE` table. Adding or changing a dose is now data, not code.
+
+### Why a NEW collection was safe here
+`reminder_ledger` is a collection the published Firestore rules do not name — normally the exact
+trap that has bitten this project (rules match named collections, so a new one fails silently in
+production while passing every harness). **Verified before shipping:** this job authenticates with
+`firebase-admin`, which bypasses security rules entirely, and there is precedent — `fcm_tracking`
+is already a server-only collection. The append-only shape is kept anyway, so the app UI could read
+the ledger later under existing rules without touching Firebase config.
+
+### Verification — the strongest proof on this project so far
+- **`reminder-equivalence.mjs`: 470,880 ticks, 0 violations.** Three properties hold:
+  (1) **superset** — there is no tick and no fixture where the old engine notifies and the new one
+  does not; (2) every extra send is a genuinely due dose past the old tolerance and within
+  `LATE_GRACE_MS`; (3) no payload is unknown to the schedule. Includes CST, CDT, spring-forward and
+  fall-back days.
+- **On the production cron grid: 170 drops recovered, 0 duplicate sends.**
+- **`ledger-test.mjs`: 28,157 checks, 0 failures** — 4,000 randomised days, 2,998 misses recorded,
+  **0 duplicate deliveries, 0 silent disappearances.**
+
+### Checked before shipping, because either would have silently broken reminders
+- The candidate is written as a module for testing. It **does** self-execute via
+  `if (require.main === module)`, so the workflow's `node send-reminders.js` still runs it.
+- It uses the **same** `FIREBASE_SERVICE_ACCOUNT` secret and the same `caretracker_entries` /
+  `fcm_tokens` collections. `GITHUB_RUN_ID` is provided by Actions automatically.
+
+### Still open
+Quiet hours vs late recovery: the 10 PM reminder sits on the 22:05 quiet boundary, so a run more
+than 5 minutes late can never deliver it. That is a patient-facing policy question — one constant —
+and it is **Aaron's call**, not a bug to fix unilaterally.
+
+---
+
 ## v49 — SHIPPED — a card can no longer hide a missed dose behind "Waiting"
 
 ### What Aaron reported
