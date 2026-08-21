@@ -982,7 +982,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -1571,6 +1571,23 @@ function fmtCyclePeriod(p) {
 const BOWEL_ISSUE_VALUES = new Set(['none', 'diarrhea']);
 const BOWEL_MOVEMENT_LABELS = { normal: 'Normal', very_little: 'Very little', none: 'None', diarrhea: 'Diarrhea' };
 function yesterdayStart(now) { return dayStart(now) - 86400000; }
+
+// ---- END-OF-DAY CHECK-INS (bowel movement, appetite) ----
+// These two are asked about TODAY, and only once the day is effectively over. 18:00 is not a new
+// number: dailyAlertLevel() already treats it as the urgent threshold, so this reuses the app's
+// own established end-of-day boundary rather than inventing a second one.
+// Before this, both asked about YESTERDAY from midnight onward -- so the first thing the app said
+// each morning was a question about a day that had already gone. A day's answer is only complete
+// once the day is.
+const EOD_HOUR = 18;   // the card appears
+const EOD_URGENT = 21; // and turns urgent
+function eodActive(now) { return new Date(now).getHours() >= EOD_HOUR; }
+function eodAlertLevel(now) {
+  const hr = new Date(now).getHours();
+  if (hr >= EOD_URGENT) return 2;
+  if (hr >= EOD_HOUR) return 1;
+  return 0;
+}
 // Shared "must be answered today" escalation rules — quiet reminder in the morning, firmer by
 // afternoon, urgent by evening. Used by the Daily Weight, Bowel Movement, and Appetite Home
 // alerts so all three escalate identically rather than each having its own copy of the logic.
@@ -2632,12 +2649,11 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // Bowel Issue active banner — non-dismissible, pinned like Period/In-Patient. Stays up until
   // a Normal/Very little answer is logged for the day driving the streak (usually "today" or
   // "yesterday" depending on whether a Symptoms entry or the retrospective alert started it).
-  // Always shows its own inline control — the retrospective "Bowel Movement" alert directly below
-  // only ever appears when YESTERDAY is unanswered, and this banner's bannerDay can only equal
-  // yesterday once yesterday already has an entry, so the two controls' visible windows never
-  // actually overlap (v54 note: prior to the Bowel Movement alert hiding-once-answered redesign,
-  // this banner used to defer to a card that was always on screen; that card no longer always
-  // renders, so deferring to it is no longer valid and this banner must always show its own control).
+  // Always shows its own inline control. NOTE (v51): the two controls CAN now be on screen at the
+  // same time — after 18:00 the Bowel Movement card below asks about TODAY while this banner may
+  // still be labelled with an earlier day. That is why both are explicitly day-labelled: this one
+  // says "Update status for <day>" and the card names today outright. Logging today from either
+  // one moves bannerDay to today, after which only this banner remains.
   if (bowelIssueActive()) {
     const bIssueType = currentBowelIssueType();
     const bDayN = daysSinceBowelIssueStart();
@@ -2672,19 +2688,22 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     ));
   }
 
-  // Bowel Movement retrospective check-in — persistent on Home until answered for YESTERDAY,
-  // escalating urgency through the day using the same rules as Daily Weight below. Disappears
-  // entirely once yesterday's entry exists; the answer then lives in Reports > Bowel Movement.
+  // Bowel Movement END-OF-DAY check-in — asks about TODAY, and only from 18:00 (eodActive).
+  // Firm at 18:00, urgent at 21:00. Before v51 this asked about YESTERDAY from midnight onward,
+  // which made the first thing the app said each morning a question about a day already gone.
+  // Disappears once today's entry exists; the answer then lives in Reports > Bowel Movement.
   // To correct a wrong answer after it's been logged, remove it from that Reports history list —
-  // this alert reappears immediately since the day is unanswered again.
+  // this alert reappears immediately (if it is still after 18:00) since the day is unanswered again.
+  // TRADE, deliberate: this was also the only route to answering a MISSED day. A day that ends
+  // unanswered now stays unanswered — see STATUS.md.
   {
-    const bmYStart = yesterdayStart(now);
+    const bmYStart = dayStart(now);
     const bmYEntry = bowelMovementFor(bmYStart);
-    if (!bmYEntry) {
-      const level = dailyAlertLevel(now);
+    if (!bmYEntry && eodActive(now)) {
+      const level = eodAlertLevel(now);
       const s = dailyAlertStyle(level);
-      const bmYLabel = new Date(bmYStart).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-      const bmMsg = level === 2 ? ('Still not logged for ' + bmYLabel + ' — please answer before the day ends.') : level === 1 ? ('No bowel movement status logged for ' + bmYLabel + ' yet.') : (bmYLabel + '’s bowel movement hasn’t been logged yet.');
+      const bmMsg = level === 2 ? 'Still not logged for today — please answer before the day ends.'
+                                : 'Today’s bowel movement hasn’t been logged yet.';
       const bmSelectValue = state.bowelInput !== undefined ? state.bowelInput : '';
       parts.push(h('div', { style: { background: s.bg, border: s.border, borderRadius: '16px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: s.shadow } },
         h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
@@ -2708,17 +2727,17 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     }
   }
 
-  // Appetite retrospective check-in — same persistent/escalating rules as Bowel Movement and
-  // Daily Weight, asking about YESTERDAY. Disappears once answered; the answer lands in
-  // Reports > Appetite (history-only there — no separate input card on that page).
+  // Appetite END-OF-DAY check-in — same rules as the Bowel Movement card directly above: asks
+  // about TODAY, appears only from 18:00, urgent from 21:00. Disappears once answered; the answer
+  // lands in Reports > Appetite (history-only there — no separate input card on that page).
   {
-    const apYStart = yesterdayStart(now);
+    const apYStart = dayStart(now);
     const apYEntry = appetiteFor(apYStart);
-    if (!apYEntry) {
-      const level = dailyAlertLevel(now);
+    if (!apYEntry && eodActive(now)) {
+      const level = eodAlertLevel(now);
       const s = dailyAlertStyle(level);
-      const apYLabel = new Date(apYStart).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-      const apMsg = level === 2 ? ('Still not logged for ' + apYLabel + ' — please answer before the day ends.') : level === 1 ? ('No appetite status logged for ' + apYLabel + ' yet.') : (apYLabel + '’s appetite hasn’t been logged yet.');
+      const apMsg = level === 2 ? 'Still not logged for today — please answer before the day ends.'
+                                : 'Today’s appetite hasn’t been logged yet.';
       const apSelectValue = state.appetiteInput !== undefined ? state.appetiteInput : '';
       const apNoteValue = state.appetiteNoteInput !== undefined ? state.appetiteNoteInput : '';
       parts.push(h('div', { style: { background: s.bg, border: s.border, borderRadius: '16px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: s.shadow } },
@@ -3400,9 +3419,9 @@ function reportDescriptor(type, now) {
     const bLatest = bEntries[0];
     return { label: 'Bowel Movement', icon: 'notes', description: 'Review bowel movement history logged from Home.', meta: bLatest ? ((BOWEL_MOVEMENT_LABELS[bLatest.value] || bLatest.value) + ' most recent') : 'No entries yet' };
   }
-  const yStart = yesterdayStart(now);
+  const yStart = dayStart(now);
   const yEntry = appetiteFor(yStart);
-  return { label: 'Appetite', icon: 'notes', description: 'Review appetite history logged from Home.', meta: yEntry ? ((APPETITE_LABELS[yEntry.value] || yEntry.value) + ' yesterday') : 'Not yet logged for yesterday' };
+  return { label: 'Appetite', icon: 'notes', description: 'Review appetite history logged from Home.', meta: yEntry ? ((APPETITE_LABELS[yEntry.value] || yEntry.value) + ' today') : 'Not yet logged for today' };
 }
 
 function renderReportsMenu(now) {

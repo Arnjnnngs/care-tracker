@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v50 |
+| **Version** | v51 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `613f18ba62bd93b0450301428a7826af` |
-| **sw.js md5** | `5ba7e944d169056557aa803482e651fa` |
+| **index.html md5** | `853b782bd38e6ebb8dd631df058489ff` |
+| **sw.js md5** | `18445c9461e8d0cdf0350195bba92ac7` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -87,6 +87,88 @@ Shipped in the v43.x line, all live and verified:
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
 
 ---
+
+## v51 — SHIPPED — bowel movement and appetite are asked at the END of the day, about TODAY
+
+Aaron, 2026-08-21: *"bowel movement and appetite should be at the end of the day for both
+caretracker and chemowell. no longer for the day before."*
+
+### What it did before
+
+Both cards asked about **yesterday**, and both were on Home **from midnight**. `dailyAlertLevel()`
+escalated them through the day: quiet before noon, firm at 12:00, urgent at 18:00. So the first
+thing the app said every morning was a question about a day that had already gone — a memory test,
+answered from recall rather than observation, before the current day had produced anything to log.
+
+### What it does now
+
+Both ask about **today**, and appear only **from 18:00**. Firm at 18:00, urgent at 21:00.
+
+18:00 is not a new number invented for this change: `dailyAlertLevel()` already treated 18:00 as
+its urgent threshold, so the app's own established end-of-day boundary is what the window reuses.
+The helpers are `eodActive(now)` and `eodAlertLevel(now)`, defined once, used by both cards.
+
+The Reports → Appetite summary line stopped saying "yesterday" too — it had been describing a day
+the app no longer asks about.
+
+### THE TRADE, STATED PLAINLY — this is a real loss, not a footnote
+
+The retrospective prompt was **also the only route to answering a day that was missed**. Under the
+old design, a day nobody answered came back the next morning and could still be filled in. It
+cannot now: **a day that ends unanswered stays unanswered.**
+
+That is the direct consequence of the instruction and it is deliberate, but Aaron should know it
+is the cost. `harness/eod-test.mjs` pins it as `EOD-2` — deliberately, so nobody "fixes" it back
+by accident. If a way to answer a missed day is wanted later, the right home for it is Reports
+(add a past entry), not a morning nag on Home.
+
+### One consequence worth naming
+
+The "Bowel Issue Active" banner and the Bowel Movement card **can now be on screen together** after
+18:00 — the banner labelled with an earlier day, the card asking about today. Before this change
+their visible windows could not overlap, and a comment in the source said so. Both are explicitly
+day-labelled so the pair reads correctly, and the stale comment was corrected rather than left to
+mislead the next person.
+
+### Test results
+
+- `harness/eod-test.mjs` — **11/11**. Three frozen clock positions (10:00 absent, 19:00 present
+  and firm, 22:00 urgent), plus proof that logging from the card writes against today's date.
+- **Falsified**: the same file scores **3/11** against the v50 build. Eight of the nine behavioural
+  checks go red on the old code, so they are measuring the change and not passing vacuously.
+- Regression set, all at baseline: `cal` 68/70, `export` 49/49, `reason` 38/41, `syncguard` 5/5,
+  `missedcard` 7/7, `iosshare` 7/7. (`cal` and `reason`'s failures are the known v43.3 version pins
+  and the deliberate reason-not-in-clinical-log rule — unchanged by this work.)
+
+### Two harness bugs found and fixed while building this
+
+Both would have produced a green run that proved nothing, so they are recorded:
+
+1. **The post-condition counted its own helper.** `out.count("eodActive(now)") != 2` returned 3,
+   because `function eodActive(now)` — the definition — contains the same substring. Now counts the
+   guard form `&& eodActive(now)) {`.
+2. **The card selector matched the whole page.** The card title renders with
+   `text-transform: uppercase`, so `innerText` is `BOWEL MOVEMENT` and a match on `Bowel Movement`
+   walked to `<body>`. Worse, once the day was answered the same words reappeared as a plain
+   journal row, whose ancestors contain another card's `<select>` and a Log button. The selector now
+   requires an uppercase-transformed title and exactly one `<select>`.
+
+---
+
+## ChemoWell app-v58 — the same instruction, and most of it was already true there
+
+ChemoWell replaced the three yesterday-retrospective banners with one Daily check-in card back in
+app-v37, and that card already asked about **today**. So "no longer for the day before" needed no
+change on that side. Two things did:
+
+1. **The card was on Home from midnight.** The caregiver already picks a check-in time in Settings
+   (`dailyCheckinTime`, default 19:00) and the scheduled notification already fired at it — the
+   card just ignored it. It is now gated on `checkinWindowOpen(now)`, which reads that same
+   setting. No second number was introduced: the window is whatever time they chose.
+2. **Reports → Appetite still summarised yesterday.** Fixed, same as care-tracker.
+
+`test/v58-eod-checkin.mjs` — **10/10**, falsified at **6/10** against app-v57.
+
 
 ## v50 — SHIPPED — exports finally reach the iPhone, and the phones stop silently disagreeing
 
