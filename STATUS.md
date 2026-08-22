@@ -66,11 +66,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 | | |
 |---|---|
 | **Version** | v57 |
-| **Commit** | `PENDING` |
+| **Commit** | `f6befa5183d6` (local; GitHub mints its own on a web upload) |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `12fa116d8c22b29c473efc7d792eff1c` |
 | **sw.js md5** | `33f225f510ae83843faa9c578828aa1a` |
-| **State** | Healthy. Verified by re-clone + md5 + live fetch. |
+| **State** | Healthy. v57 verified 2026-08-22 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v57`. |
 
 Shipped in the v43.x line, all live and verified:
 - v43.1 (`fc2c345`) — export buttons fixed (they were dead: the `h()` null-attribute trap)
