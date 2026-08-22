@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v53 |
+| **Version** | v54 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `14a7db6fc65f451334d938642e1ade2a` |
-| **sw.js md5** | `c2e80719bd3c8abb6f6b10bee90ce71d` |
+| **index.html md5** | `128c3f7114eabe697a118d3060bcbe79` |
+| **sw.js md5** | `c738522a2e98939a2575e89776f3b625` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -87,6 +87,88 @@ Shipped in the v43.x line, all live and verified:
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
 
 ---
+
+## v54 — SHIPPED — a saved file says where it went, and a second caregiver can be brought in
+
+Aaron, 2026-08-22: *"on iphone, the save backup saves as JSON. Android doesn't give the option where
+to save. I just tap it and it says how many records were saved, but where it was saved. for either
+phone, it's going to be difficult to share to others if there are multiple caregivers"*
+
+Three separate things, and they needed separate answers.
+
+### 1. "it says how many records were saved, but [not] where" — a real bug
+
+`deliverFile()` has always returned which route it took, and `deliveredWord()` has always turned
+that into "saved to your downloads" or "choose Save to Files to keep it". **The CSV path used it.
+The backup path threw the return value away** and built its own message that never named a location.
+The follow-up notice then told *every* user to "check it landed in your Files app" — Apple's
+wording, shown to Android users who have no Files app.
+
+Now: the download route says **"It is in your Downloads folder, named Brandi-backup-2026-08-22.json"**
+and the share route says **"Choose Save to Files in the share sheet to keep it."** A cancelled share
+now says nothing was saved, instead of claiming success.
+
+### 2. "the save backup saves as JSON" — correct, and badly labelled
+
+JSON is what makes the backup restorable; it is the only one of the three files that can be loaded
+back. The card explained that well. The **buttons** did not — they were named after file formats
+("Save backup file", "Save spreadsheet", "Save printable report") at exactly the point where the
+choice gets made. They now read:
+
+- **Backup — to restore**
+- **Spreadsheet — for data**
+- **Report — to send or print**
+
+The report has *always* been handed to the share sheet as a self-contained `.html`, so it could
+always be sent straight to another caregiver. Nothing on screen said so.
+
+### 3. "difficult to share to others if there are multiple caregivers"
+
+**This was already solved and nobody had been told.** care-tracker has **no login**. Every device
+that opens the URL reads and writes the *same live records* — log a dose on one phone and it appears
+on the other within seconds. A second caregiver never needed a file; they needed the address. There
+is now a **Share this tracker** control that hands the link to the share sheet.
+
+### THE SECURITY FACT THAT COMES WITH IT — Aaron needs to read this
+
+No login means **the link is the password**. Anyone who ends up with it — forwarded, screenshotted,
+left in a group chat, found in a browser history — has **full read AND write access to Brandi's
+complete medical record, permanently**, with no way to revoke it short of moving the data to a new
+address. That was already true before this release; the share button only makes it easier to reach.
+
+Shipping a one-tap share without saying so would have been irresponsible, so the warning is on
+screen **before** the sheet opens, and sharing takes a second deliberate tap:
+
+> **Anyone with this link has full access.** There is no password. Whoever holds the link can read
+> and change every record in here, and if it is forwarded on there is no way to take that access
+> back. Send it only to someone who should have all of it.
+
+`SHARE-4` fails if that warning ever disappears, and `SHARE-7` fails if it is ever put behind a
+condition that could switch it off.
+
+**This is worth a proper decision, not a warning label.** Real access control — per-caregiver
+sign-in, revocable, with the Firestore rules enforcing it rather than obscurity — is the correct
+answer and it is not a small job. Flagged for Aaron rather than quietly assumed away.
+
+### Test results
+
+- `harness/share-test.mjs` — **9/9**, run twice over: once with `navigator.share` absent (the
+  Android/desktop route) and once with it present (the iPhone route), so both messages are checked
+  against the phone that actually shows them.
+- **Falsified: 3/9 against v53.**
+- Regression: `export` 49/49, `para` 15/15, `eod` 11/11, `syncguard` 5/5, `missedcard` 7/7,
+  `iosshare` 7/7, `swfresh` 7/7.
+
+### Two self-inflicted misses caught before shipping
+
+1. A post-condition asserted `out.count("bkRes") != 3`, then `!= 4` — both **guesses at a magic
+   number**, and the guess is what failed, not the code. Replaced with three assertions that name
+   the behaviour: the return value is captured, a cancelled share is handled, and the message
+   distinguishes the two routes.
+2. The test's `navigator.share` stub counted the **backup file's** share as a link share, so
+   `SHARE-4` reported "something was shared before the button was even pressed" about a file share
+   from the previous check. The checks now count only shares carrying a URL.
+
 
 ## v53 — SHIPPED — a pushed build reaches the phone on the next load
 

@@ -982,11 +982,11 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -3614,9 +3614,14 @@ function renderSaveRecordsCard(now) {
         )
       ),
       h('div', { style: { display: 'flex', gap: '9px', flexWrap: 'wrap', marginTop: '13px', justifyContent: 'flex-start', maxWidth: '470px' } },
-        btn('backup', 'Save backup file', downloadBackupFile, true, emptyBackup),
-        btn('csv', 'Save spreadsheet', downloadEntriesCSV, false),
-        btn('report', 'Save printable report', openPrintReport, false)
+        // Labelled by PURPOSE. "Save backup file" / "Save spreadsheet" / "Save printable report"
+        // described the file format and left you to work out which one you wanted; the choice is
+        // made at the button, so the button is where the answer belongs. The report has always been
+        // delivered through the share sheet as a self-contained .html -- it could always be sent to
+        // another caregiver, and nothing on screen said so.
+        btn('backup', 'Backup — to restore', downloadBackupFile, true, emptyBackup),
+        btn('csv', 'Spreadsheet — for data', downloadEntriesCSV, false),
+        btn('report', 'Report — to send or print', openPrintReport, false)
       ),
       // The card used to say "Keep the spreadsheet as your backup." It is not one and never was:
       // a CSV cannot be loaded back into this app, it has no document ids, and it deliberately
@@ -3625,9 +3630,63 @@ function renderSaveRecordsCard(now) {
       h('div', { style: { fontSize: '11.5px', color: '#6E5261', marginTop: '10px', lineHeight: '1.45', maxWidth: '52ch' } },
         emptyBackup ? "Once you start logging, you'll be able to save or print your records here."
               : 'The backup file is the only one of these that can be put back. It holds everything — doses, temperatures, weights, symptoms, treatment dates and appointments. The spreadsheet and the printable report are for reading and for handing to a doctor; neither one can be loaded back into the app.'),
+      renderShareRow(),
       renderRestoreRow()
     )
   );
+}
+
+// Sharing with another caregiver. This app has NO LOGIN: every device that opens the URL reads and
+// writes the same live records. That means a second caregiver needs the address, not a file -- and
+// it also means the link IS the password. Anyone who ends up with it has full read and write access
+// to a real patient's medical record, permanently, with no way to take it back short of moving the
+// data somewhere else. A one-tap share button that did not say so would be irresponsible, so the
+// warning is on screen BEFORE the sheet opens, not buried in a help page.
+function renderShareRow() {
+  const armed = state.shareArmed;
+  return h('div', { 'data-share-row': 'true', style: { marginTop: '14px', paddingTop: '13px', borderTop: '1px solid rgba(212,104,138,0.16)' } },
+    h('div', { style: { fontSize: '13px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'Share with another caregiver'),
+    h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '3px', maxWidth: '52ch' } },
+      'Another caregiver does not need a file. Everyone who opens this tracker sees the same records, live — log a dose on one phone and it appears on the other within seconds.'),
+    armed
+      ? h('div', { style: { marginTop: '10px', background: 'rgba(192,69,59,0.10)', border: '1px solid rgba(192,69,59,0.35)', borderRadius: '13px', padding: '12px 13px' } },
+          h('div', { style: { fontSize: '12.5px', color: '#9A3B33', fontWeight: '700', lineHeight: '1.45' } }, 'Anyone with this link has full access'),
+          h('div', { style: { fontSize: '11.5px', color: '#7D4B46', lineHeight: '1.5', marginTop: '4px' } },
+            'There is no password. Whoever holds the link can read and change every record in here, and if it is forwarded on there is no way to take that access back. Send it only to someone who should have all of it.'),
+          h('div', { style: { display: 'flex', gap: '8px', marginTop: '11px' } },
+            h('button', { onClick: shareTrackerLink, style: { flex: '1', minHeight: '46px', borderRadius: '12px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '800' } }, 'Send the link'),
+            h('button', { onClick: () => setState({ shareArmed: false }), style: { flexShrink: '0', minHeight: '46px', padding: '0 16px', borderRadius: '12px', color: '#7D6974', fontSize: '14px', fontWeight: '700', background: 'rgba(255,255,255,0.6)' } }, 'Cancel')
+          )
+        )
+      : h('button', { 'data-share-btn': 'true', type: 'button', onClick: () => setState({ shareArmed: true }),
+          style: { marginTop: '10px', minHeight: '46px', padding: '0 16px', borderRadius: '13px', border: '1px solid rgba(212,104,138,0.32)', background: 'rgba(255,255,255,0.72)', color: '#8E3D61', fontSize: '14px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px' } },
+          'Share this tracker')
+  );
+}
+
+async function shareTrackerLink() {
+  // location.href, not a hardcoded address: a hardcoded one would be wrong the moment this is
+  // served from anywhere else, and it would be wrong silently.
+  const url = window.location.origin + window.location.pathname;
+  setState({ shareArmed: false });
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'CareTracker', text: 'Shared medication and vitals tracker', url: url });
+      setToast('Link shared.');
+      return;
+    }
+  } catch (err) {
+    // Cancelling the sheet is not a failure and must not fall through to a clipboard copy she
+    // did not ask for.
+    if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError')) return;
+    console.warn('[share] share sheet failed, falling back to clipboard:', err);
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    setToast('Link copied — paste it to the other caregiver.');
+  } catch (err) {
+    setToast('Could not share automatically. The link is the address in your browser bar.');
+  }
 }
 
 // Put-a-backup-back. Its own row under a rule, not a fourth button in the save row: saving is
@@ -4869,17 +4928,29 @@ async function downloadBackupFile() {
       return;
     }
     const text = JSON.stringify(bkBuildPayload(bundle, simNow()), null, 2);
-    await deliverFile(new Blob([text], { type: 'application/json' }), exportFilename('backup', 'json'));
+    const bkName = exportFilename('backup', 'json');
+    const bkRes = await deliverFile(new Blob([text], { type: 'application/json' }), bkName);
     const nAppt = bundle.appointments.length;
+    // deliverFile() knows which route it took; this used to throw that away and then tell every
+    // user to "check it landed in your Files app" -- Apple's wording, shown to Android users who
+    // have no Files app, and never actually naming a location. The CSV path has always used
+    // deliveredWord(); the backup path is the one that did not.
+    if (bkRes && bkRes.cancelled) {
+      setToast('Backup cancelled — nothing was saved.');
+      return;
+    }
+    const where = (bkRes && bkRes.method === 'share')
+      ? 'Choose "Save to Files" in the share sheet to keep it.'
+      : 'It is in your Downloads folder, named ' + bkName + '.';
     setState({
       backupNotice: {
         kind: 'ok',
         message: 'Backup saved — ' + n + ' record' + (n === 1 ? '' : 's') +
           (nAppt ? ', including ' + nAppt + ' appointment record' + (nAppt === 1 ? '' : 's') : '') +
-          '. Check it landed in your Files app, then load it back here once to be sure it opens.'
+          '. ' + where + ' Load it back here once to be sure it opens.'
       }
     });
-    setToast(n + ' record' + (n === 1 ? '' : 's') + ' saved to your backup file.');
+    setToast(n + ' record' + (n === 1 ? '' : 's') + ' saved. ' + where);
   } catch (err) {
     // The raw message is a browser string ("The operation is insecure.") that reads like the app
     // broke in a way that might have damaged her records. It goes to the console.
