@@ -982,7 +982,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -2098,8 +2098,17 @@ function renderTimeModal() {
     title = 'Log ' + m.label;
   } else if (m.type === 'symptom') {
     title = (m.editId ? 'Edit ' : 'Log ') + (m.symptomType ? (SYMPTOM_TYPES[m.symptomType] || m.symptomType) : 'Symptom');
-  } else {
+  } else if (m.type === 'para') {
+    title = 'Log Paracentesis · ' + paraFmtLiters(m.paraValue) + ' L';
+  } else if (m.type === 'weight') {
     title = 'Log Weight · ' + m.weightValue + ' lbs';
+  } else {
+    // This chain used to END on the weight line with a bare `else`, so a paracentesis -- which has
+    // no weightValue -- opened a dialog headed "Log Weight · undefined lbs". Aaron reported that as
+    // a missing date field, because who would trust that dialog. Third bare-else fallthrough found
+    // in this file in one day; an unknown type now says so instead of borrowing another's words.
+    console.warn('[timeModal] unknown type:', m.type);
+    title = 'Log entry';
   }
 
   const medForPain = m.type === 'med' ? state.meds.find(x => x.id === m.medId) : null;
@@ -2124,7 +2133,35 @@ function renderTimeModal() {
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' } }, 'Date & Time'),
         h('input', { type: 'datetime-local', value: m.timeValue, onInput: (e) => { state.timeModal.timeValue = e.target.value; }, className: 'mono', style: { width: '100%', minHeight: '52px', border: '1px solid rgba(212,104,138,0.2)', borderRadius: '13px', padding: '0 14px', fontSize: '16px', background: 'rgba(255,255,255,0.6)', color: '#3D2B3A', colorScheme: 'light' } }),
-        h('div', { style: { fontSize: '12px', color: '#7D6974', marginTop: '6px' } }, 'Defaults to now — edit if logging a past time')
+        // Quick date shortcuts. datetime-local can already do this, but on a phone it means opening
+        // a spinner and scrolling -- and a paracentesis is nearly always recorded after the fact,
+        // once you are home. These set the DATE and keep whatever time is in the field, so the
+        // common case is one tap. Shown for every type: backdating a forgotten dose is the same job.
+        h('div', { style: { display: 'flex', gap: '6px', marginTop: '8px' } },
+          ...[['Today', 0], ['Yesterday', 1], ['2 days ago', 2]].map(([label, back]) => {
+            const target = dayStart(simNow()) - back * 86400000;
+            const isOn = dayStart(new Date(m.timeValue).getTime()) === target;
+            return h('button', {
+              onClick: () => {
+                // Keep the time the person already chose; move only the calendar day. Parsing the
+                // existing value rather than rebuilding from now() is what makes "Yesterday at
+                // 6:30pm" possible in two taps instead of a scroll.
+                const cur = new Date(m.timeValue);
+                const hh = isNaN(cur.getTime()) ? new Date(simNow()).getHours() : cur.getHours();
+                const mm = isNaN(cur.getTime()) ? new Date(simNow()).getMinutes() : cur.getMinutes();
+                const d = new Date(target);
+                d.setHours(hh, mm, 0, 0);
+                state.timeModal.timeValue = toLocalISO(d.getTime());
+                state.timeModal.futureOk = false;
+                setState({ timeModal: state.timeModal });
+              },
+              style: { flex: '1', minHeight: '38px', borderRadius: '10px', fontSize: '12.5px', fontWeight: '700',
+                       background: isOn ? '#AA5375' : 'rgba(170,83,117,0.10)', color: isOn ? '#fff' : '#8E3D61',
+                       border: '1px solid ' + (isOn ? '#AA5375' : 'rgba(212,104,138,0.20)') }
+            }, label);
+          })
+        ),
+        h('div', { style: { fontSize: '12px', color: '#7D6974', marginTop: '6px' } }, 'Defaults to now — pick a day above, or set the exact date and time in the field')
       ),
       showPainScale ? h('div', { style: { marginTop: '16px' } },
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' } }, 'Pain level (1–10)'),
@@ -6245,12 +6282,22 @@ render();
 
 // Service worker registration
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').then(reg => {
+  // updateViaCache:'none' is the whole point of this line. The default ('imports') leaves sw.js
+  // itself subject to the HTTP cache, and GitHub Pages serves it with a max-age -- so reg.update()
+  // could compare the new worker against a CACHED COPY OF ITSELF, find no difference, and do
+  // nothing. The update check now always goes to the network.
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
     // Proactively check for a newer sw.js on every load instead of relying solely on the
     // browser's own background update check, which can be slow/throttled and left the app
     // running stale cached JS (with already-pushed bug fixes not applying) for multiple page
     // loads — found and fixed during the 30-use-case QA pass on the testing app (see README.md).
     reg.update().catch(() => {});
+    // An installed PWA is rarely "loaded" -- it is resumed. iOS in particular can keep a home-screen
+    // app suspended for days, so a check that only runs on first load may not run for days either.
+    // Re-checking when the app comes back to the foreground is the moment that actually matters.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
   }).catch(() => {});
 
   // Once a new service worker activates and takes control, reload once so this tab picks up

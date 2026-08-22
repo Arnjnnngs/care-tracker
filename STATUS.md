@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v52 |
+| **Version** | v53 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `bd051e404aa180baa3d7bbaeb6ef0a13` |
-| **sw.js md5** | `6cd0192bda0bc323310d418f1d771c24` |
+| **index.html md5** | `14a7db6fc65f451334d938642e1ade2a` |
+| **sw.js md5** | `c2e80719bd3c8abb6f6b10bee90ce71d` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -87,6 +87,104 @@ Shipped in the v43.x line, all live and verified:
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
 
 ---
+
+## v53 — SHIPPED — a pushed build reaches the phone on the next load
+
+Aaron, 2026-08-21: *"don't see changes on caretracker"* — for at least the **fourth** release.
+
+v52 was live and correct on the server the whole time. His device was serving a cached v51. He had
+no way to tell the difference, and every time this happens it reads as "the work wasn't done."
+**It is a defect in how this app updates, not user error**, and it has cost more trust than any
+actual bug on this project.
+
+### Why the existing mechanism was not enough
+
+`index.html` already called `reg.update()` on load and reloaded on `controllerchange`. Both are
+correct, both are kept, and neither was sufficient:
+
+1. **`reg.update()` was re-fetching `sw.js` through the HTTP cache.** Registration defaults to
+   `updateViaCache: 'imports'`, which leaves the worker script itself cacheable, and GitHub Pages
+   serves it with a `max-age`. So the update check could compare the new worker against **a cached
+   copy of itself**, find no difference, and do nothing.
+2. **The fetch handler was cache-first for everything except Firebase — including `index.html`.**
+   Freshness therefore depended entirely on the service-worker update cycle succeeding. On an
+   installed iOS PWA that cycle may not run until a cold start, so the app can serve a months-old
+   shell while the server has the new one.
+
+### The fix
+
+- **The app shell is network-first.** Fetch it; fall back to cache only when the network actually
+  fails. Freshness no longer depends on the update cycle at all. Every successful fetch refreshes
+  the cached copy, so the offline fallback is the *last build seen*, not the build first installed.
+- Icons and the manifest **stay cache-first** — bigger, effectively never change, not what goes stale.
+- A non-OK response is **never** written to the cache. Caching a 404 would poison the offline shell.
+- `updateViaCache: 'none'` on registration, so the update check always hits the network.
+- `reg.update()` also runs on **`visibilitychange`**. An installed PWA is rarely *loaded* — it is
+  *resumed*. A check that only runs on first load may not run for days.
+
+### THE LIMITATION, STATED PLAINLY
+
+The worker currently in control on Aaron's phone is the **old cache-first one**, and a new worker
+cannot change how the old one already answered. **This release still needs one cache-busting load
+to land** — open `https://arnjnnngs.github.io/care-tracker/?v=53`. From v53 onward every push
+arrives on the next ordinary load. There is no way to fix a past worker from a future one, and
+claiming otherwise would be a lie.
+
+
+### Also in v53 — the paracentesis dialog said it was logging a weight
+
+Aaron, minutes after the card appeared: *"need a way to enter dates for the paracentis. it defaults
+to today."*
+
+**The date field was always there** — a `datetime-local` labelled "Date & Time", directly under the
+heading. The heading is what was broken. `renderTimeModal()` built its title with an if/else-if
+chain ending in a **bare else**:
+
+```
+} else {
+  title = 'Log Weight · ' + m.weightValue + ' lbs';
+}
+```
+
+A paracentesis has no `weightValue`, so tapping Log opened a dialog headed **"Log Weight ·
+undefined lbs"**. Nobody is going to hunt for a date field inside a dialog that says it is about to
+record a weight of undefined pounds. He reported a broken label as a missing feature, and he was
+right to.
+
+**This is the third bare-`else` fallthrough found in this file in a single day** — `renderReportDetail`
+and `reportDescriptor` both had the identical shape and both silently rendered the Appetite report
+for anything they did not recognise. All three are now explicit, and an unknown type reports itself
+to the console instead of quietly borrowing another type's words.
+
+**And the thing he actually asked for**: three shortcuts — Today / Yesterday / 2 days ago — that set
+the calendar day and *keep the time already in the field*, so "yesterday at 6:30pm" is two taps
+instead of a spinner scroll. They show for every log type, because backdating a forgotten dose is
+the same job. `PARA-3b` and `PARA-3c` pin both, and both are red against v52.
+
+### Test results
+
+- `harness/swfresh-test.mjs` — **7/7**. It reproduces the actual report: serve build A, let the
+  worker take control, **change what the server serves** (what a push does), reload **once**, and
+  require the new build on screen. It also proves offline still works, that the offline fallback is
+  the most recent build rather than the first, and that a failure is never cached.
+- **Falsified: 3/7 against the v52 worker**, with `CACHE-2` red — "the phone is still showing
+  BUILD-A after the server moved to BUILD-B." That is Aaron's bug, reproduced.
+- `harness/para-test.mjs` — **15/15** (was 13/13; `PARA-3b` and `PARA-3c` are new), falsified at
+  **13/15** against v52.
+- Regression: `eod` 11/11, `syncguard` 5/5, `missedcard` 7/7, `iosshare` 7/7, `export` 49/49,
+  `cal` 68/70, `reason` 38/41 — all at baseline.
+- **`tour` reads 65/68 and `medsync` 90/99; neither is a regression.** Both are *differential*
+  tests that assert byte-identity against a base build, and this release deliberately changes the
+  version, `sw.js`, and the service-worker registration block. Verified byte-identical to v52 by
+  hand: `confirmTimeAndLog`, `addEntryDB`, `removeEntryDB`, `medIsOnActiveList`, `missedDosesFor`,
+  `paracentesisResolved`, `renderWeightTrend`, and the pinned one-second tick guard.
+
+### Process note — the sandbox rolled back again, and it cost nothing
+
+While diagnosing this, the local working tree reverted to v51. Every piece of v52 was already on
+GitHub, so recovery was a fresh `git clone` and no work was lost. This is the third rollback on this
+project and the first that cost zero minutes. Push early is not bureaucracy; it is the whole defence.
+
 
 ## v52 — SHIPPED — paracentesis is its own record, and the weight trend never moves because of it
 
