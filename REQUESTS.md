@@ -1,0 +1,81 @@
+# REQUESTS.md — Aaron's running list
+
+Everything Aaron has asked for, whether or not it has been built. This file exists because things
+he said **got lost** — twice in one week, confirmed, not suspected. care-tracker had no request log
+at all, so chat was the only record, and chat scrolls.
+
+## The rule that makes this work
+
+**The moment Aaron asks for something, it is added here — before any code is touched.** Not when
+it is understood, not when it is scheduled, not when it is done. If it is unclear whether something
+he said was a request or a passing remark, it goes in as a request. An extra line costs nothing.
+A dropped ask costs him having to notice and say it again, which is the failure this file exists
+to stop.
+
+Nothing is deleted when it is finished. It moves to Completed with the version it shipped in.
+
+---
+
+## OPEN — nothing here is done
+
+### Blocked on Aaron, not on work
+
+- [ ] **Live sync between two phones** — the biggest gap in the product, in his words: *"there is
+  no sync. and I still think that is the biggest flaw we will have or people will have."*
+  **Blocked on one legal question**, not on engineering: whether a relay holding only ciphertext it
+  cannot decrypt counts as "collection" under Washington's My Health My Data Act. The backend
+  (`sync-backend/`, 930 lines, no stubs) and the client crypto (AES-GCM + ECDH key exchange, at
+  app-v49) are already written. What is missing is the wiring, the screens, and a deployment.
+  Needs a privacy attorney, ~30 minutes. Cheapest, highest-leverage spend on this project.
+- [ ] **Migrate Brandi from care-tracker to ChemoWell** — he asked for this directly. **Deliberately
+  waiting for sync**, his call and the right one: care-tracker syncs today and ChemoWell does not,
+  so moving her now would take two phones that stay in step and make them stop.
+- [ ] **Real access control for care-tracker** — there is no login; the link is the password and it
+  cannot be revoked. v54 added a warning before sharing. That is not a fix. Scoped in the artifact
+  "Backups and Access"; recommendation is to skip the halfway option and do sign-in plus a
+  revocable caregiver list, in a calm week, rehearsed on the beta.
+
+### Ready to build
+
+- [ ] **Undo a restore / snapshot before importing** — 2026-08-22: *"if someone is doing a backup
+  and it fits wrong or they accidentally add to wrong profile. there needs to be a way to undo or
+  capture their live data before input."* Take an automatic snapshot immediately before any restore
+  writes, and offer a single Undo afterwards.
+- [ ] **The encryption part** — asked twice. An encrypted backup file another caregiver can open
+  with a key, using the AES-GCM/ECDH layer that already exists. Needs no server and no legal answer,
+  and the same crypto is what live sync would use later, so nothing is wasted.
+- [ ] **In-app logger for errors and improvements** — *"we were also going to build in a logger for
+  errors or improvements."* Somewhere in the app to record a bug or an idea the moment it happens,
+  so it does not depend on remembering to say it in chat. Was queued in ChemoWell's list and never
+  built.
+- [ ] **ChemoWell hardcoding removal, Phases 1–5** — `HARDCODED_MEDS_PLAN.md`. **LOST ITEM.** He
+  said explicitly *"the hardcode needs to not wait to be built"* and it then waited through six
+  releases. Called out here rather than quietly rescheduled.
+- [ ] **Weight-change reasons in care-tracker** — **LOST ITEM.** From the same message that asked
+  for paracentesis: *"there needs to be a way to log the reason for weight change."* The
+  paracentesis half shipped as v52; the reason half never did. ChemoWell has `WEIGHT_REASONS`;
+  care-tracker has nothing.
+- [ ] **Regenerate chemowell-beta** from care-tracker v55 — the beta is a version behind, so the
+  place he is supposed to test things is not currently testable.
+
+### Known, not urgent
+
+- [ ] **`test/v57-browser-notice.mjs` fails 17 checks in ChemoWell** — pre-existing, present on
+  app-v58 as well, so not caused by any recent release. Those suites need a manually started server
+  on port 8899 and otherwise die with a connection error that reads like infrastructure rather than
+  failure, which is why real design regressions sat unnoticed.
+- [ ] **Quiet-hours vs late-recovery policy** — the 10 PM reminder sits on the 22:05 boundary.
+  Needs a decision from Aaron about which wins.
+
+---
+
+## COMPLETED
+
+- [x] **ChemoWell backup & restore, destination asked not assumed** — app-v61, 2026-08-22.
+- [x] **Pro stops leading with a feature that does not exist** — app-v60, 2026-08-22.
+- [x] **A restore never leaves the medication list behind in silence** — v55, 2026-08-22.
+- [x] **A saved file says where it went; a second caregiver can be brought in** — v54, 2026-08-22.
+- [x] **Builds reach the phone on the next load; the paracentesis dialog says what it is** — v53.
+- [x] **Paracentesis as its own record, never touching the weight trend** — v52 / app-v59.
+- [x] **Bowel movement and appetite asked at the end of the day, about today** — v51 / app-v58.
+- [x] **Naming pass and clearance screen** — 44 candidates, 21 screened, delivered 2026-08-22.
