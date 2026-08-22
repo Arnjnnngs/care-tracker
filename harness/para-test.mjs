@@ -176,6 +176,64 @@ console.log('\nPARACENTESIS — a standalone record that never moves the weight 
     const after = await b.page.evaluate(() => globalThis.__mc.entries().filter(e=>e.medId==='paracentesis').length);
     assert(after === before, 'an invalid volume was written (' + before + ' -> ' + after + ')');
   });
+
+  await run('PARA-3b-dialog-names-the-procedure',
+    'the Log dialog says Paracentesis, not "Log Weight · undefined lbs"', async () => {
+    // Aaron, 2026-08-21: "need a way to enter dates for the paracentis." The date field was always
+    // there. The dialog above it was headed "Log Weight · undefined lbs", because the title chain
+    // ended in a bare else that assumed a weight. He read a broken label as a missing feature.
+    await b.page.evaluate(() => {
+      const hdr=[...document.querySelectorAll('div')].find(d=>d.textContent.trim()==='Paracentesis' && !d.children.length);
+      let el=hdr; for(let i=0;i<6&&el.parentElement;i++){ el=el.parentElement;
+        const inp=el.querySelector('input'); const btn=[...el.querySelectorAll('button')].find(b=>b.textContent.trim()==='Log');
+        if(inp&&btn){ const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+          set.call(inp,'3.2'); inp.dispatchEvent(new Event('input',{bubbles:true})); btn.click(); return; } }
+    });
+    await b.page.waitForTimeout(700);
+    // Find the dialog by its CONTENTS -- the date field plus the Confirm button -- rather than by
+    // a regex on the style attribute. The first version matched on /position:\s*fixed/ against
+    // getAttribute('style'), which does not survive how these styles are actually written, so it
+    // reported "the log dialog did not open" about a dialog that was demonstrably open (PARA-3c
+    // went on to drive the date field inside it).
+    const dlg = await b.page.evaluate(() => {
+      const inp = document.querySelector('input[type="datetime-local"]');
+      if (!inp) return null;
+      let el = inp;
+      for (let i = 0; i < 8 && el.parentElement; i++) {
+        el = el.parentElement;
+        if ([...el.querySelectorAll('button')].some(b => b.textContent.trim() === 'Confirm')) return el.innerText;
+      }
+      return null;
+    });
+    assert(dlg, 'the log dialog did not open');
+    assert(/paracentesis/i.test(dlg), 'the dialog does not name the procedure: ' + brief(dlg));
+    assert(!/undefined/i.test(dlg), 'the dialog still prints "undefined": ' + brief(dlg));
+    assert(!/Log Weight/i.test(dlg), 'the dialog still calls a drain a weight: ' + brief(dlg));
+  });
+
+  await run('PARA-3c-backdating-is-one-tap',
+    'Yesterday sets the date back a day and keeps the time', async () => {
+    const before = await b.page.evaluate(() => {
+      const i=[...document.querySelectorAll('input[type="datetime-local"]')][0]; return i ? i.value : null; });
+    assert(before, 'no date field in the dialog — this is what Aaron said was missing');
+    await b.page.evaluate(async () => {
+      const btn=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Yesterday');
+      if(btn){ btn.click(); await new Promise(r=>setTimeout(r,500)); }
+    });
+    await b.page.waitForTimeout(500);
+    const after = await b.page.evaluate(() => {
+      const i=[...document.querySelectorAll('input[type="datetime-local"]')][0]; return i ? i.value : null; });
+    assert(after, 'the date field vanished after tapping Yesterday');
+    const d0 = new Date(before).getTime(), d1 = new Date(after).getTime();
+    assert(Math.round((d0 - d1) / 86400000) === 1,
+      'Yesterday did not move the date back exactly one day: ' + before + ' -> ' + after);
+    assert(before.slice(11) === after.slice(11),
+      'the time was not preserved: ' + before + ' -> ' + after);
+    await b.page.evaluate(() => {
+      const c=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Cancel'); if(c) c.click(); });
+    await b.page.waitForTimeout(400);
+  });
+
   await b.close();
 }
 
