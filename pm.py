@@ -116,6 +116,33 @@ else:
     n = len([f for f in os.listdir(h) if f.endswith(('.py', '.mjs'))])
     notes.append("harness/ has %d patch+test files" % n)
 
+# --- 6. STATUS.md must record the md5 of what actually shipped ---------------------------------
+# Added after the WRONG hash went into STATUS.md twice (v53 and v55). Both times it was captured
+# BEFORE the version bump, so the file recorded a build that was never pushed. Nothing broke and no
+# test failed -- which is precisely why this needed a check that fails loudly. Verification on this
+# project is "re-clone and compare md5", and a wrong recorded hash makes that ritual meaningless.
+import hashlib as _hl
+_sp = os.path.join(REPO, "STATUS.md")
+if os.path.exists(_sp):
+    _txt = open(_sp, encoding="utf-8").read()
+    _i = _txt.find("## LIVE RIGHT NOW")
+    if _i >= 0:
+        _blk = _txt[_i:_i + 1200]
+        for _name in ("index.html", "sw.js"):
+            _fp = os.path.join(REPO, _name)
+            if not os.path.exists(_fp):
+                continue
+            _m = re.search(r"\*\*" + re.escape(_name) + r" md5\*\* \| `([0-9a-f]{32})`", _blk)
+            if not _m:
+                warnings.append("STATUS.md does not record an md5 for %s" % _name)
+                continue
+            _actual = _hl.md5(open(_fp, "rb").read()).hexdigest()
+            if _m.group(1) != _actual:
+                blockers.append("STATUS.md says %s is %s but it is actually %s — re-clone verification would prove nothing"
+                                % (_name, _m.group(1)[:12], _actual[:12]))
+            else:
+                notes.append("STATUS.md md5 for %s matches the file" % _name)
+
 print("=" * 74)
 print("PM CHECK — %s" % REPO)
 print("=" * 74)

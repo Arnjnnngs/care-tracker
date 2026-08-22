@@ -982,11 +982,11 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -3718,8 +3718,48 @@ function renderRestoreRow() {
       'data-backup-notice': 'true',
       'data-backup-notice-kind': notice.kind,
       style: bkNoticeStyle(notice.kind)
-    }, notice.kind === 'bad' ? { role: 'alert' } : {}), notice.message) : null
+    }, notice.kind === 'bad' ? { role: 'alert' } : {}), notice.message) : null,
+    renderMedListOffer()
   );
+}
+
+// Shown only when a restore declined to apply a medication list that was in the file. Replacing a
+// medication list is not an undo-able tap -- it changes what the app will remind you to take -- so
+// it asks once, and says what happens to the list being replaced.
+function renderMedListOffer() {
+  const pending = state.pendingMedList;
+  if (!pending || !Array.isArray(pending.meds) || !pending.meds.length) return null;
+  if (state.confirmMedList) {
+    return h('div', { 'data-medlist-confirm': 'true', style: { marginTop: '10px', background: 'rgba(154,100,25,0.10)', border: '1px solid rgba(154,100,25,0.34)', borderRadius: '12px', padding: '12px 13px' } },
+      h('div', { style: { fontSize: '12.5px', fontWeight: '700', color: '#7A5214', lineHeight: '1.45' } },
+        'Use the ' + pending.meds.length + ' medication' + (pending.meds.length === 1 ? '' : 's') + ' from the file?'),
+      h('div', { style: { fontSize: '11.5px', color: '#7A5214', lineHeight: '1.5', marginTop: '4px' } },
+        'This phone’s current list is replaced. Every dose you have already logged stays exactly where it is — nothing in your history changes.'),
+      h('div', { style: { display: 'flex', gap: '8px', marginTop: '11px' } },
+        h('button', { onClick: applyPendingMedList, style: { flex: '1', minHeight: '44px', borderRadius: '11px', background: '#9A6419', color: '#fff', fontSize: '13.5px', fontWeight: '800' } }, 'Use the file’s list'),
+        h('button', { onClick: () => setState({ confirmMedList: false, pendingMedList: null }), style: { flexShrink: '0', minHeight: '44px', padding: '0 15px', borderRadius: '11px', color: '#7D6974', fontSize: '13.5px', fontWeight: '700', background: 'rgba(255,255,255,0.6)' } }, 'Keep mine')
+      )
+    );
+  }
+  return h('button', { 'data-medlist-offer': 'true', type: 'button', onClick: () => setState({ confirmMedList: true }),
+    style: { marginTop: '10px', minHeight: '44px', padding: '0 15px', borderRadius: '12px', border: '1px solid rgba(212,104,138,0.32)', background: 'rgba(255,255,255,0.72)', color: '#8E3D61', fontSize: '13.5px', fontWeight: '800' } },
+    'Use the medication list from the file');
+}
+
+function applyPendingMedList() {
+  const pending = state.pendingMedList;
+  if (!pending || !Array.isArray(pending.meds) || !pending.meds.length) return;
+  try {
+    const archived = normalizeArchivedMeds(pending.archivedMeds);
+    const meds = mergeMissingDefaultMeds(pending.meds.map(normalizeMedication).map(migrateSenokotV37), archived);
+    persistMedicationConfig(meds, archived);
+    setState({ meds: meds, archivedMeds: archived, pendingMedList: null, confirmMedList: false,
+      backupNotice: { kind: 'ok', message: 'Now using the ' + meds.length + ' medication' + (meds.length === 1 ? '' : 's') + ' from the backup file. Your logged doses were not touched.' } });
+    setToast('Medication list updated from the backup.');
+  } catch (err) {
+    console.error('[restore:medlist]', err);
+    setState({ confirmMedList: false, backupNotice: { kind: 'bad', message: "That medication list couldn't be read. Your current list is unchanged." } });
+  }
 }
 
 function bkNoticeStyle(kind) {
@@ -5048,7 +5088,11 @@ async function bkRestore(bundle) {
 //     set of ARCHIVED names, because those are what stop a removed medication's restored dose
 //     history from printing as a bare id in a document handed to an oncologist.
 function bkRestoreMedications(medBlock) {
-  const out = { mode: 'none', archivedAdded: 0 };
+  // `skipped` is the count of medications that were in the FILE and deliberately not applied,
+  // because this phone already keeps its own list. It used to be invisible: the caller had no way
+  // to distinguish "the file had no medications" from "the file had nine and we ignored them",
+  // and so the summary said nothing either way.
+  const out = { mode: 'none', archivedAdded: 0, skipped: 0 };
   if (!medBlock || typeof medBlock !== 'object') return out;
   const incomingMeds = Array.isArray(medBlock.meds) ? medBlock.meds : null;
   const incomingArchived = normalizeArchivedMeds(medBlock.archivedMeds);
@@ -5067,6 +5111,8 @@ function bkRestoreMedications(medBlock) {
     out.mode = 'restored';
     return out;
   }
+  // Reached only when this phone already has a list, so the incoming one is not applied.
+  out.skipped = incomingMeds ? incomingMeds.length : 0;
   const archived = Object.assign({}, state.archivedMeds || {});
   const known = new Set((state.meds || []).map((m) => m.id));
   Object.keys(incomingArchived).forEach((id) => {
@@ -5205,12 +5251,24 @@ async function bkImportFile(file) {
     if (res.already) bits.push(res.already + ' ' + (res.already === 1 ? 'was' : 'were') + ' already here and ' + (res.already === 1 ? 'was' : 'were') + ' left alone.');
     if (med.mode === 'restored') bits.push('Your medication list came back too.');
     else if (med.archivedAdded) bits.push('Added ' + med.archivedAdded + ' medication name' + (med.archivedAdded === 1 ? '' : 's') + ' so older doses still read properly.');
+    // The sentence that closes the actual hole. Before this, a medication list sat in the file
+    // unused and nothing on screen ever mentioned it.
+    if (med.skipped) {
+      bits.push('Your medication list was left exactly as it is — this phone already has one. The file also holds ' +
+        med.skipped + ' medication' + (med.skipped === 1 ? '' : 's') + ', which you can use instead if you want.');
+    }
     if (prefsMoved) bits.push('Your settings were brought forward.');
     if (res.unusable) bits.push(res.unusable + ' ' + (res.unusable === 1 ? 'line' : 'lines') + " in the file couldn't be read and " + (res.unusable === 1 ? 'was' : 'were') + ' left out.');
     if (res.failed) bits.push(res.failed + ' ' + (res.failed === 1 ? "couldn't" : "couldn't") + ' be written — check your connection and load the file again; loading it twice is safe.');
     bits.push('Nothing was removed.');
 
-    setState({ backupNotice: { kind: (res.failed || res.unusable) ? 'bad' : 'ok', message: bits.join(' ') } });
+    setState({
+      backupNotice: { kind: (res.failed || res.unusable) ? 'bad' : 'ok', message: bits.join(' ') },
+      // Held so the offer below has something to apply. Cleared the moment it is used or declined,
+      // so a later restore can never quietly apply a list from an earlier file.
+      pendingMedList: med.skipped ? bundle.medications : null,
+      confirmMedList: false
+    });
     setToast(res.added ? ('Restored ' + res.added + ' record' + (res.added === 1 ? '' : 's') + '.') : 'Nothing new to restore.');
   } catch (err) {
     console.error('[restore]', err);

@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v54 |
+| **Version** | v55 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `128c3f7114eabe697a118d3060bcbe79` |
-| **sw.js md5** | `c738522a2e98939a2575e89776f3b625` |
+| **index.html md5** | `c6d5188cc46c3f31b62be1ea4fd43780` |
+| **sw.js md5** | `da3a82dec7c735eda533257e8981b38b` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -87,6 +87,63 @@ Shipped in the v43.x line, all live and verified:
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
 
 ---
+
+## v55 — SHIPPED — a restore never leaves the medication list behind in silence
+
+Aaron, 2026-08-22: *"there isn't a way to backup the list of meds someone has."*
+
+**It is in the backup, and always has been** — active list and the names of everything deactivated.
+He had no way to know that, which is the first half of the problem. The second half is real.
+
+### The defect
+
+Putting a backup back only applies the medication list if that phone has **never saved one**. New
+phone: works. A phone that has ever edited a medication, or ever synced its list from the other
+phone: the incoming list is **ignored entirely** and only archived names are merged.
+
+That behaviour is deliberate and right — a restore must not wipe a list someone maintains. The
+defect was that **nothing said so.** The summary read *"Restored 412 records… Nothing was removed"*
+while a full medication list sat in the file, unused. That silence is what made Aaron conclude it
+had never been saved.
+
+### The fix — a sentence and a button, not a picker screen
+
+A restore happens on a new phone, or when something has already gone wrong. Putting a configuration
+screen in front of someone at that moment is the wrong trade. So the restore still runs immediately
+and still does the safe thing — then says what it declined to do:
+
+> Your medication list was left exactly as it is — this phone already has one. The file also holds
+> 9 medications, which you can use instead if you want.
+
+…with one button underneath. Tapping it asks once and says exactly what happens: the current list is
+replaced, **and every dose already logged stays where it is.** That last clause is there because it
+is the thing people actually fear, and it is true — `SKIP-6` and `SKIP-8` both fail if any code in
+that path can write or delete a dose record.
+
+The offer clears the moment it is used or declined, so a later restore can never quietly apply a
+medication list from an earlier file.
+
+### Test results
+
+- `harness/medskip-test.mjs` — **10/10**, falsified at **5/10** against v54.
+- Regression: `share` 9/9, `para` 15/15, `eod` 11/11, `export` 49/49, `syncguard` 5/5,
+  `missedcard` 7/7, `iosshare` 7/7, `swfresh` 7/7.
+
+### Two test bugs found while writing the gate, both of which faked a pass
+
+1. **The stubbed `setDoc` was an empty function.** `bkRestore` writes with
+   `setDoc(doc(db, COL, id), fields)` so a restore keeps each record's original document id and is
+   therefore idempotent. With an empty stub every restored record silently vanished — while the
+   summary still reported restoring them. The check was measuring the stub, not the app. **Any
+   other harness in this folder with an empty `setDoc` has the same blind spot on any restore-path
+   assertion.**
+2. **The test's backup file used `caretracker-backup`; the real format string is
+   `care-tracker-backup`.** The payload was rejected before a single line of the code under test
+   ran, and five checks failed for a reason that had nothing to do with the code.
+
+Plus one vacuous pass closed: `SKIP-7` ("the offer disappears once used") passed on v54, where the
+offer never existed at all. It now asserts the list was actually applied first.
+
 
 ## v54 — SHIPPED — a saved file says where it went, and a second caregiver can be brought in
 
