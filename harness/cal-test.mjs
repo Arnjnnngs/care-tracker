@@ -838,8 +838,12 @@ async function runRuntimeChecks(suite, browser, url, vp, net) {
     await suite.run('EXPORT-csv-clean@' + vp.name, tag + 'no appointment reaches the CSV, and the CSV is not empty', async () => {
       await page.click('[data-cal-menu-button]');
       await page.click('[data-cal-drawer-item="reports"]');
-      await page.waitForSelector('text=Save spreadsheet', { timeout: 8000 });
-      const csv = await readDownload(page, () => page.click('text=Save spreadsheet'));
+      // The stable data-backup-btn hook, NOT the visible label. These two lines matched on
+      // "Save spreadsheet" and broke the moment v54 renamed the buttons to say what they are FOR --
+      // testing a button that no longer exists, against a screen that still worked perfectly. The
+      // hook exists in the source precisely so a copy change cannot do this.
+      await page.waitForSelector('[data-backup-btn="csv"]', { timeout: 8000 });
+      const csv = await readDownload(page, () => page.click('[data-backup-btn="csv"]'));
       assert(csv.includes('tylenol'), 'the CSV has no medication rows — the check would pass vacuously');
       for (const t of Object.values(FX)) assert(!csv.includes(t), 'an appointment reached the CSV: ' + t);
       assert(!csv.includes('appt-fixture'), 'an apptId reached the CSV');
@@ -854,7 +858,7 @@ async function runRuntimeChecks(suite, browser, url, vp, net) {
     });
 
     await suite.run('EXPORT-report-clean@' + vp.name, tag + 'no appointment reaches the printable oncologist report', async () => {
-      const doc = await readDownload(page, () => page.click('text=Save printable report'));
+      const doc = await readDownload(page, () => page.click('[data-backup-btn="report"]'));
       assert(doc.length > 2000, 'the report is suspiciously short: ' + doc.length + ' chars');
       assert(doc.toLowerCase().includes('tylenol'), 'the report has no medication content — vacuous');
       for (const t of Object.values(FX)) assert(!doc.includes(t), 'an appointment reached the printable report: ' + t);

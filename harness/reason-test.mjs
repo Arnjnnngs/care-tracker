@@ -540,7 +540,9 @@ async function gotoReportsMenu(page) {
   await page.waitForTimeout(200);
   const back = await page.$('button:has-text("Back")');
   if (back) { await tap(page, 'button:has-text("Back")'); await page.waitForTimeout(200); }
-  await page.waitForSelector('button:has-text("Save spreadsheet")', { timeout: 10000 });
+  // Wait on the stable hook, not the label. The two clicks below already used the hook; this wait
+  // did not, so a v54 copy change broke the suite at the door while the app was fine.
+  await page.waitForSelector('[data-backup-btn="csv"]', { timeout: 10000 });
 }
 
 async function openSheetFor(page, key) {
