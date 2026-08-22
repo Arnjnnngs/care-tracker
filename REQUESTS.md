@@ -41,13 +41,12 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
   and it fits wrong or they accidentally add to wrong profile. there needs to be a way to undo or
   capture their live data before input."* Take an automatic snapshot immediately before any restore
   writes, and offer a single Undo afterwards.
-- [ ] **The encryption part** — asked twice. An encrypted backup file another caregiver can open
-  with a key, using the AES-GCM/ECDH layer that already exists. Needs no server and no legal answer,
-  and the same crypto is what live sync would use later, so nothing is wasted.
-- [ ] **In-app logger for errors and improvements** — *"we were also going to build in a logger for
-  errors or improvements."* Somewhere in the app to record a bug or an idea the moment it happens,
-  so it does not depend on remembering to say it in chat. Was queued in ChemoWell's list and never
-  built.
+- [x] **The encryption part** — asked twice. **BUILT: care-tracker v56 and ChemoWell app-v63.**
+  A password switch under the save buttons; the file is AES-256-GCM under a PBKDF2-SHA256 key at
+  310,000 rounds. Fails closed on a wrong password, a tampered byte, a hostile iteration count, and
+  a file that decrypts but is not a backup. See Completed.
+- [x] **In-app logger for errors and improvements** — *"we were also going to build in a logger for
+  errors or improvements."* **BUILT: care-tracker v57 and ChemoWell app-v64.** See Completed.
 - [ ] **ChemoWell hardcoding removal, Phases 1–5** — `HARDCODED_MEDS_PLAN.md`. **LOST ITEM.** He
   said explicitly *"the hardcode needs to not wait to be built"* and it then waited through six
   releases. Called out here rather than quietly rescheduled.
@@ -70,6 +69,24 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
 ---
 
 ## COMPLETED
+
+- [x] **In-app logger for errors and improvements** — asked 2026-08-22. **v57.** A *Report a
+  problem* menu row. The app records its own errors and unhandled rejections without swallowing
+  them; repeats collapse to one counted entry; a full phone does not turn an error into a broken
+  screen; trimming drops the oldest errors first, so a flood cannot evict what the person wrote.
+  Kept in localStorage, never in Firestore — a stack trace is not a medical record and could not be
+  cleaned out of an append-only collection. The file carries version, device and the log, and no
+  dose, temperature, weight, symptom or appointment. `harness/logger-test.mjs` 19/19, falsified at
+  16 red on v55.
+
+- [x] **Password-protected backup files** — asked 2026-08-22, twice. **v56.** The link is already
+  the sharing story for a caregiver trusted with everything; the backup FILE is the one that gets
+  emailed and sits wherever it lands, and it was plain text. Now AES-256-GCM under PBKDF2-SHA256 at
+  310,000 rounds via `crypto.subtle`. Locked files name nothing about their contents until they
+  open, the patient's name is inside the ciphertext and out of the filename, plain files stay at
+  formatVersion 1 so older phones can still read them, and protected files are written at 2 so an
+  older phone says "update first" instead of reporting the backup empty. No recovery path by
+  design. `harness/encbackup-test.mjs` 16/16, falsified at 13 red on v55.
 
 - [x] **ChemoWell backup & restore, destination asked not assumed** — app-v61, 2026-08-22.
 - [x] **Pro stops leading with a feature that does not exist** — app-v60, 2026-08-22.

@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v55 |
+| **Version** | v57 |
 | **Commit** | `PENDING` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `c6d5188cc46c3f31b62be1ea4fd43780` |
-| **sw.js md5** | `da3a82dec7c735eda533257e8981b38b` |
+| **index.html md5** | `12fa116d8c22b29c473efc7d792eff1c` |
+| **sw.js md5** | `33f225f510ae83843faa9c578828aa1a` |
 | **State** | Healthy. Verified by re-clone + md5 + live fetch. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,97 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v57 — BUILT — the app writes down its own errors, and there is a place to add yours
+
+Aaron, 2026-08-22: *"we were also going to build in a logger for errors or improvements. so many
+thing I've said has gotten lost."*
+
+**Why it matters here more than in the beta.** This is a live app used every day by someone who is
+not going to file a bug report. When something goes wrong on her phone it currently reaches nobody:
+there is no crash reporting in this project, and by the time it gets described in chat the detail
+is gone.
+
+**What shipped.** A menu row, **Report a problem**, last in the drawer — it must not sit between two
+rows she taps every day. The screen does three things in the order they are needed: say what
+happened (*Something's wrong* / *An idea* — Aaron asked for **both**, not only crashes), see what
+the app already noticed by itself, and take the lot away as one plain-text file.
+
+**The app's half is automatic.** Passive `error` and `unhandledrejection` listeners. The second
+matters more here than the first: almost every failure in this app happens inside an `await`
+against Firestore, where `window.onerror` never fires at all. Neither handler `preventDefault()`s,
+and the gate asserts a thrown error is **still thrown** — a logger that eats the error hides it
+from the console and from every other tool.
+
+**It is kept in localStorage, never in Firestore.** That collection is her medical record under
+append-only rules; a stack trace is not a medical record and cannot be cleaned up out of it. The
+gate asserts no log entry ever reaches the records collection and that the record count does not
+move while logging.
+
+**The logger must not become the fault.** One error repeating on every render tick is one entry
+with a count, not sixty. The list is capped at 100. A `QuotaExceededError` on a full phone is
+swallowed by the logger rather than turned into a broken screen — the write happens on the error
+path, which is exactly when storage is most likely to be gone.
+
+**Trimming drops the oldest ERRORS first**, and takes what the person wrote last. A straight ring
+buffer let a flood of errors evict her own description of the fault she was reporting, which is the
+half nobody can reconstruct. `LOG-9` pins it at 180 errors and 0 lost reports. (Found by the gate
+on the ChemoWell build of this same feature, before either shipped.)
+
+**The file gives nothing away.** App version, device string, screen size, the errors, and what was
+typed — and **no dose, temperature, weight, symptom or appointment**, and not the patient's name.
+The gate seeds a distinctive symptom note and searches the produced file for it. The file states
+what it excludes in its own header, so the promise can be checked by opening it.
+
+**Gate:** `harness/logger-test.mjs` — 19/19, **falsified against v55 at 16 red**. Regression:
+encbackup 16/16, share 9/9, eod 11/11, para 15/15, swfresh 7/7, medskip 10/10, missedcard 7/7.
+Screenshots at 375px and 320px in `outputs/v56-v57-shots/`, no horizontal overflow at either.
+
+---
+
+## v56 — BUILT — a backup file can be protected with a password
+
+Aaron, 2026-08-22: *"build the encryption part."* Asked twice.
+
+**Why the FILE and not the link.** This app has no login: every device that opens the URL reads
+and writes the same live records, so the link is the password and that is the sharing story for a
+caregiver trusted with everything. The backup **file** is the other story — the one that gets
+emailed, dropped into a shared folder, handed to a relative — and until now every copy of it was a
+complete medical record in plain text, sitting wherever it was sent.
+
+**What shipped.** A switch under the three save buttons, off by default. On, the file is
+**AES-256-GCM** under a key derived from a password she chooses with **PBKDF2-SHA256 at 310,000
+rounds**, through the browser's own `crypto.subtle` — no library, no server. Opening one asks for
+the password first and names **nothing** about the contents until it opens, because a manifest on
+the locked screen leaks exactly what the password is protecting. The patient's name lives inside
+the ciphertext and the file is called `backup-protected-<date>.json`, since putting her name in the
+filename of a file meant to be emailed hands back the thing the encryption was for.
+
+**It fails closed, in each direction the gate can reach.** A wrong password writes nothing (the
+document ids are compared before and after). One flipped byte of ciphertext is refused rather than
+half-restored, because GCM authenticates. An iteration count read out of a **file** is bounded
+rather than trusted — a hostile `900000000` is refused in milliseconds instead of locking the phone
+for minutes. And a file that decrypts perfectly but is not a backup is still refused: decrypting
+proves who wrote it, not what it is.
+
+**Version numbering is split so an older phone says the right thing.** Plain files stay at
+`formatVersion: 1`, so a phone still on v55 can read a backup made here. Protected files are
+written at **2**, which makes v55 report *"made by a newer version — update the app first"* instead
+of opening an envelope it cannot read and reporting the backup as **empty**.
+
+**No recovery path, deliberately.** The password is never stored, never transmitted, and not
+derivable from the file — the gate sweeps `localStorage` and `sessionStorage` to prove it — and it
+is cleared from memory once the file exists. That is the property that makes the file safe to send,
+and it is why the screen asks for it twice and says to write it down and send it by a different
+route than the backup.
+
+**Gate:** `harness/encbackup-test.mjs` — 16/16, **falsified against v55 at 13 red**. All three
+gstatic Firebase modules stubbed, service worker blocked, catch-all abort; nothing in this suite
+can reach the real project. Regression: share 9/9, eod 11/11, para 15/15, swfresh 7/7,
+medskip 10/10, export 49/49, missedcard 7/7. `cal-test` 68/70 and `tour-test` 65/68 — the misses in
+both are `FILE-*` checks pinned to v43.3 and to a scaffold base, pre-existing and unrelated.
 
 ---
 

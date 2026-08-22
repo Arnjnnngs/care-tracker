@@ -9,7 +9,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** August 16, 2026
-> **Current version:** v43.3
+> **Current version:** v57
 
 ---
 

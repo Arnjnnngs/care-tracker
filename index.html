@@ -982,11 +982,11 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v55';
+const APP_VERSION = 'v57';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, bkProtect: false, bkPw: '', bkPw2: '', bkLocked: null, bkUnlockPw: '', reportKind: 'problem', reportDraft: '', reportNotice: null, reportBusy: false, reportShowAll: false, reportConfirmClear: false, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -1921,6 +1921,100 @@ function appIcon(name, size, style) {
   return h('span', { innerHTML: svgIcon(name, size), style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...(style || {}) } });
 }
 
+// =================================================================================================
+// THE LOG (v57) — what went wrong, and what should be better
+// Aaron: "we were also going to build in a logger for errors or improvements."
+// This is a live medical app used every day by someone who is not going to file a bug report. When
+// something goes wrong on her phone it currently reaches nobody: there is no crash reporting here,
+// and by the time it is described in chat the detail is gone. So the app writes down its own
+// failures as they happen, and gives whoever is holding the phone a place to add theirs, and one
+// button that turns the lot into a file that can be sent.
+// It is kept in localStorage, NOT in Firestore. Firestore is her medical record under append-only
+// rules; a stack trace is not a medical record and does not belong in it, and a logger that writes
+// to the same collection on every error is a logger that can fill it.
+// =================================================================================================
+const CT_LOG_KEY = 'caretracker-log-v1';
+const CT_LOG_MAX = 100;
+const CT_LOG_MAX_TEXT = 2000;
+const CT_LOG_DEDUPE_MS = 60000;
+function ctLogRead() {
+  try {
+    const raw = localStorage.getItem(CT_LOG_KEY);
+    if (!raw) return [];
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((e) => e && typeof e === 'object' && !Array.isArray(e)) : [];
+  } catch (e) { return []; }
+}
+// Not a plain ring buffer. A person types a careful description of what went wrong; the fault they
+// are describing then throws on every render tick; and a straight slice(-MAX) evicts their words
+// within seconds, leaving only the machine's account of an event that already had a human one. So
+// trimming drops the OLDEST ERRORS first and takes what the person wrote last.
+function ctLogTrim(list) {
+  if (list.length <= CT_LOG_MAX) return list;
+  const keptMine = list.filter((e) => e.kind !== 'error').slice(-CT_LOG_MAX);
+  const room = Math.max(0, CT_LOG_MAX - keptMine.length);
+  const keptErrs = list.filter((e) => e.kind === 'error').slice(-room);
+  // Identity, not ids: two entries made in the same millisecond could collide on a generated id,
+  // and a membership test that drops the wrong one is silent.
+  const keep = new Set(keptMine.concat(keptErrs));
+  return list.filter((e) => keep.has(e));
+}
+function ctLogWrite(list) {
+  try { localStorage.setItem(CT_LOG_KEY, JSON.stringify(ctLogTrim(list))); return true; }
+  catch (e) { return false; }
+}
+function ctLogClear() { try { localStorage.removeItem(CT_LOG_KEY); } catch (e) {} }
+// Every path is wrapped. A logger that throws while recording a fault turns one broken screen into
+// a broken app, on a phone somebody is relying on to tell them when the next dose is due.
+function ctLogAdd(kind, text, where) {
+  try {
+    const now = Date.now();
+    const t = String(text == null ? '' : text).slice(0, CT_LOG_MAX_TEXT);
+    if (!t) return null;
+    const w = String(where == null ? '' : where).slice(0, 200);
+    const list = ctLogRead();
+    if (kind === 'error') {
+      for (let i = list.length - 1; i >= 0 && i >= list.length - 12; i--) {
+        const e = list[i];
+        if (e.kind === 'error' && e.text === t && e.where === w && (now - (Number(e.ts) || 0)) < CT_LOG_DEDUPE_MS) {
+          e.count = (Number(e.count) || 1) + 1;
+          e.lastTs = now;
+          ctLogWrite(list);
+          return e;
+        }
+      }
+    }
+    const entry = { id: 'log_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+                    kind: kind, text: t, where: w, ts: now, count: 1, app: APP_VERSION };
+    list.push(entry);
+    ctLogWrite(list);
+    return entry;
+  } catch (e) { return null; }
+}
+// Passive listeners: neither preventDefault()s nor swallows anything, so the browser still reports
+// the error exactly as it would have. unhandledrejection matters more than error here -- almost
+// every failure in this app happens inside an await against Firestore, where window.onerror never
+// fires at all.
+function ctInstallErrorLog() {
+  try {
+    window.addEventListener('error', (ev) => {
+      try {
+        const msg = (ev && ev.message) ? ev.message : 'Unknown error';
+        const at = (ev && ev.filename) ? ((ev.filename.split('/').pop() || '') + ':' + (ev.lineno || 0)) : '';
+        ctLogAdd('error', msg + (ev && ev.error && ev.error.stack ? ('\n' + String(ev.error.stack).split('\n').slice(0, 4).join('\n')) : ''), at || ('screen: ' + state.view));
+      } catch (e) {}
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      try {
+        const r = ev && ev.reason;
+        const msg = (r && r.message) ? r.message : String(r);
+        ctLogAdd('error', 'Unfinished background task: ' + msg + ((r && r.stack) ? ('\n' + String(r.stack).split('\n').slice(0, 4).join('\n')) : ''), 'screen: ' + state.view);
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+ctInstallErrorLog();
+
 function navigateTo(view) {
   const next = { view, reportsView: view === 'reports' ? null : state.reportsView, medEditor: view === 'meds' ? state.medEditor : null, confirmDeleteMed: null };
   setState(next);
@@ -2041,6 +2135,7 @@ function renderContent(now, mg, pct, tyColor, ceiling) {
   if (state.view === 'inpatient') return renderInPatient(now);
   if (state.view === 'symptoms') return renderSymptoms(now);
   if (state.view === 'calendar') return renderCalendarView(now);
+  if (state.view === 'report') return renderReportView(now);
   return [...renderToday(now, mg, pct, tyColor, ceiling)];
 }
 
@@ -3619,7 +3714,7 @@ function renderSaveRecordsCard(now) {
         // made at the button, so the button is where the answer belongs. The report has always been
         // delivered through the share sheet as a self-contained .html -- it could always be sent to
         // another caregiver, and nothing on screen said so.
-        btn('backup', 'Backup — to restore', downloadBackupFile, true, emptyBackup),
+        btn('backup', state.bkProtect ? 'Backup — protected' : 'Backup — to restore', downloadBackupFile, true, emptyBackup || !!state.bkLocked),
         btn('csv', 'Spreadsheet — for data', downloadEntriesCSV, false),
         btn('report', 'Report — to send or print', openPrintReport, false)
       ),
@@ -3630,6 +3725,7 @@ function renderSaveRecordsCard(now) {
       h('div', { style: { fontSize: '11.5px', color: '#6E5261', marginTop: '10px', lineHeight: '1.45', maxWidth: '52ch' } },
         emptyBackup ? "Once you start logging, you'll be able to save or print your records here."
               : 'The backup file is the only one of these that can be put back. It holds everything — doses, temperatures, weights, symptoms, treatment dates and appointments. The spreadsheet and the printable report are for reading and for handing to a doctor; neither one can be loaded back into the app.'),
+      renderBackupProtectRow(),
       renderShareRow(),
       renderRestoreRow()
     )
@@ -3689,6 +3785,68 @@ async function shareTrackerLink() {
   }
 }
 
+// The password switch, under the three save buttons it changes the behaviour of. Hidden while a
+// file is waiting to be unlocked -- one job on screen at a time, and the Backup button is disabled
+// alongside it, because a switch that is off screen must not still be governing what that button
+// produces.
+function renderBackupProtectRow() {
+  if (state.bkLocked) return null;
+  const on = !!state.bkProtect;
+  const pw = String(state.bkPw || '');
+  const pw2 = String(state.bkPw2 || '');
+  const short = on && pw.length > 0 && pw.length < BK_MIN_PASSWORD;
+  const mismatch = on && pw2.length > 0 && pw !== pw2;
+  const field = (id, value, placeholder, onInput) => h('input', {
+    id: id, type: 'password', autocomplete: 'new-password', value: value, placeholder: placeholder, onInput: onInput,
+    style: { width: '100%', minHeight: '46px', border: '1px solid rgba(212,104,138,0.28)', borderRadius: '12px', padding: '0 12px', fontSize: '16px', background: 'rgba(255,255,255,0.82)', color: '#342530' }
+  });
+  return h('div', { 'data-bk-protect': on ? 'on' : 'off', style: { marginTop: '14px', paddingTop: '13px', borderTop: '1px solid rgba(212,104,138,0.16)' } },
+    h('button', { 'data-bk-protect-toggle': 'true', type: 'button', role: 'switch', 'aria-checked': on ? 'true' : 'false',
+      onClick: () => setState({ bkProtect: !on, bkPw: '', bkPw2: '', backupNotice: null }),
+      style: { width: '100%', display: 'flex', alignItems: 'center', gap: '11px', textAlign: 'left', minHeight: '44px', background: 'transparent' } },
+      h('span', { style: { flexShrink: '0', width: '44px', height: '26px', borderRadius: '99px', padding: '3px', display: 'flex', alignItems: 'center', justifyContent: on ? 'flex-end' : 'flex-start', background: on ? '#AA5375' : 'rgba(212,104,138,0.28)' } },
+        h('span', { style: { width: '20px', height: '20px', borderRadius: '50%', background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.22)' } })),
+      h('span', { style: { flex: '1', minWidth: '0', fontSize: '13px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'Protect the backup file with a password')
+    ),
+    h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '2px', maxWidth: '52ch' } },
+      'Turn this on before emailing the backup or putting it in a shared folder. Without it, anyone who opens the file can read every dose, temperature, weight and appointment in it.'),
+    on ? h('div', { style: { marginTop: '10px', maxWidth: '470px' } },
+      field('bk-pw', pw, 'Password (' + BK_MIN_PASSWORD + '+ characters)', (e) => setState({ bkPw: e.target.value, backupNotice: null })),
+      h('div', { style: { height: '8px' } }),
+      field('bk-pw2', pw2, 'Type it again', (e) => setState({ bkPw2: e.target.value, backupNotice: null })),
+      (short || mismatch) ? h('div', { 'data-bk-pw-hint': 'true', style: { fontSize: '11.5px', fontWeight: '700', color: '#9A3B33', marginTop: '6px' } },
+        short ? ('A little longer — ' + BK_MIN_PASSWORD + ' characters or more.') : 'The two do not match yet.') : null,
+      h('div', { style: { fontSize: '11.5px', color: '#7D4B46', background: 'rgba(192,69,59,0.08)', border: '1px solid rgba(192,69,59,0.28)', borderRadius: '12px', padding: '10px 12px', marginTop: '9px', lineHeight: '1.5' } },
+        'Write this password down somewhere separate from the file, and give it to the other caregiver by text or in person — not in the same email as the backup. If it is lost the file cannot be opened again by anyone, including us.')
+    ) : null
+  );
+}
+
+// Shown when the chosen file turned out to be protected. Nothing about its contents can be named
+// here -- not the patient, not the record count -- because none of it is readable yet.
+function renderBackupUnlock() {
+  const lock = state.bkLocked;
+  if (!lock) return null;
+  const busy = !!state.restoring;
+  const made = lock.createdAt ? new Date(lock.createdAt).toLocaleDateString() : 'an unknown date';
+  return h('div', { 'data-bk-unlock': 'true', style: { marginTop: '11px', background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(212,104,138,0.32)', borderRadius: '14px', padding: '13px 14px', maxWidth: '470px' } },
+    h('div', { style: { fontSize: '13.5px', fontWeight: '800', color: '#342530' } }, 'This backup is password protected'),
+    h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '3px' } },
+      'Saved ' + made + '. Type the password the person who made it gave you. Nothing on this phone is changed until it opens.'),
+    h('input', { id: 'bk-unlock-pw', type: 'password', autocomplete: 'current-password', value: String(state.bkUnlockPw || ''), placeholder: 'Password',
+      onInput: (e) => setState({ bkUnlockPw: e.target.value, backupNotice: null }),
+      onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); bkUnlock(); } },
+      style: { width: '100%', marginTop: '10px', minHeight: '46px', border: '1px solid rgba(212,104,138,0.28)', borderRadius: '12px', padding: '0 12px', fontSize: '16px', background: 'rgba(255,255,255,0.82)', color: '#342530' } }),
+    h('div', { style: { display: 'flex', gap: '8px', marginTop: '11px' } },
+      h('button', Object.assign({ 'data-bk-unlock-go': 'true', type: 'button', onClick: bkUnlock,
+        style: { flex: '1', minHeight: '46px', borderRadius: '12px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '800' } },
+        busy ? { disabled: 'disabled' } : {}), busy ? 'Opening…' : 'Open backup'),
+      h('button', { 'data-bk-unlock-cancel': 'true', type: 'button', onClick: () => setState({ bkLocked: null, bkUnlockPw: '', backupNotice: null }),
+        style: { flexShrink: '0', minHeight: '46px', padding: '0 16px', borderRadius: '12px', color: '#7D6974', fontSize: '14px', fontWeight: '700', background: 'rgba(255,255,255,0.6)' } }, 'Cancel')
+    )
+  );
+}
+
 // Put-a-backup-back. Its own row under a rule, not a fourth button in the save row: saving is
 // routine and restoring is not, and a restore control sitting in the same row as the one she taps
 // every week is a control she will eventually tap by accident.
@@ -3710,6 +3868,7 @@ function renderRestoreRow() {
     }, busy ? { disabled: 'disabled' } : {}),
       appIcon('bkRestore', 17),
       state.restoring ? 'Reading the file…' : 'Restore from a backup file'),
+    renderBackupUnlock(),
     // A failure gets role="alert" because she has to know. A success does NOT get a live-region
     // role: the toast already announces the same event, and two polite live regions firing on one
     // tap makes a screen reader read the whole thing twice. This panel is the persistent record of
@@ -3966,7 +4125,10 @@ const CAL_DRAWER_ITEMS = [
   { view: 'meds', label: 'Medications', icon: 'pill', blurb: 'The medication list' },
   { view: 'reports', label: 'Reports', icon: 'chart', blurb: 'History, charts, save a copy' },
   { view: 'inpatient', label: 'In-Patient', icon: 'hospital', blurb: 'Hospital stays' },
-  { view: 'symptoms', label: 'Symptoms', icon: 'notes', blurb: 'How she is feeling' }
+  { view: 'symptoms', label: 'Symptoms', icon: 'notes', blurb: 'How she is feeling' },
+  // Last in the menu on purpose: it is the one row nobody is looking for until something is wrong,
+  // and it must not sit between two she taps every day.
+  { view: 'report', label: 'Report a problem', icon: 'tourHelp', blurb: 'Errors & ideas for the app' }
 ];
 
 function calDrawerGo(view) {
@@ -4864,7 +5026,102 @@ async function openPrintReport() {
 // =================================================================================================
 
 const BK_FORMAT = 'care-tracker-backup';
-const BK_FORMAT_VERSION = 1;
+// Two numbers, not one. A PLAIN file is still written at 1, so a phone running an older build can
+// still read a backup made here. An ENCRYPTED file is written at 2, which makes an older build say
+// "made by a newer version -- update first" rather than reading zero records out of an envelope it
+// cannot open and reporting the backup as empty. FORMAT_VERSION is the highest this build reads.
+const BK_PLAIN_VERSION = 1;
+const BK_ENC_VERSION = 2;
+const BK_FORMAT_VERSION = 2;
+
+// =================================================================================================
+// PASSWORD-PROTECTED BACKUP FILES (v56)
+// Aaron: "build the encryption part."
+// A backup file is the one artefact this app produces that leaves the phone. It gets emailed, put
+// in a shared folder, handed to the second caregiver -- and in plaintext it is a complete medical
+// record, readable by whoever ends up holding it. This wraps the whole payload in AES-256-GCM under
+// a key derived from a password the person chooses, with PBKDF2-SHA256, through the browser's own
+// crypto.subtle. No library, no server, nothing to sign up for.
+// There is deliberately NO recovery path: the password is never stored, never transmitted, and not
+// derivable from the file. That property is what makes the file safe to send, and it is also why
+// the screen asks for it twice and says to write it down.
+// =================================================================================================
+const BK_KDF = 'PBKDF2-SHA256';
+const BK_KDF_ITERATIONS = 310000;
+const BK_KDF_MIN_ITERATIONS = 100000;
+const BK_KDF_MAX_ITERATIONS = 2000000;
+const BK_MIN_PASSWORD = 8;
+function bkB64FromBytes(bytes) {
+  let bin = '';
+  const arr = new Uint8Array(bytes);
+  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+  return btoa(bin);
+}
+function bkBytesFromB64(b64) {
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+async function bkDeriveFileKey(password, saltBytes, iterations) {
+  const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(password)), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: saltBytes, iterations: iterations, hash: 'SHA-256' },
+    baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+  );
+}
+// format / formatVersion / createdAt stay in the CLEAR so a build that cannot open the file still
+// recognises WHAT it is and says so. Everything that identifies the patient -- her name included --
+// is inside the ciphertext, which is why the saved filename drops it too.
+async function bkEncryptPayload(payload, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await bkDeriveFileKey(password, salt, BK_KDF_ITERATIONS);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(payload)));
+  return {
+    format: BK_FORMAT,
+    formatVersion: BK_ENC_VERSION,
+    app: APP_VERSION,
+    createdAt: payload.createdAt,
+    encrypted: true,
+    kdf: BK_KDF,
+    iterations: BK_KDF_ITERATIONS,
+    salt: bkB64FromBytes(salt),
+    cipher: 'AES-GCM',
+    blob: { ciphertext: bkB64FromBytes(ciphertext), iv: bkB64FromBytes(iv) }
+  };
+}
+function bkIsEncrypted(parsed) {
+  return !!(parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.encrypted === true);
+}
+// Reports 'bad-password' for anything that fails to open under the supplied password: from her side
+// a mistyped password and a truncated download are the same event, and calling a file damaged when
+// she simply mistyped sends her hunting a problem that is not there. The two cases retyping can
+// never fix -- an unreadable envelope, and a cipher this build does not know -- are separate, so
+// the advice can differ.
+async function bkDecryptEnvelope(env, password) {
+  if (!bkIsEncrypted(env)) throw new Error('not-encrypted');
+  if (env.kdf !== BK_KDF || env.cipher !== 'AES-GCM') throw new Error('unsupported-cipher');
+  const iters = Number(env.iterations);
+  // An iteration count read out of a FILE is an attacker-controlled denial-of-service knob: two
+  // billion rounds locks the phone for minutes. Bounded, not trusted.
+  if (!isFinite(iters) || iters < BK_KDF_MIN_ITERATIONS || iters > BK_KDF_MAX_ITERATIONS) throw new Error('unsupported-cipher');
+  if (typeof env.salt !== 'string' || !env.blob || typeof env.blob !== 'object' || Array.isArray(env.blob)) throw new Error('damaged');
+  if (typeof env.blob.ciphertext !== 'string' || typeof env.blob.iv !== 'string') throw new Error('damaged');
+  let saltBytes = null;
+  try { saltBytes = bkBytesFromB64(env.salt); } catch (e) { throw new Error('damaged'); }
+  if (saltBytes.length < 8) throw new Error('damaged');
+  let obj = null;
+  try {
+    const key = await bkDeriveFileKey(password, saltBytes, iters);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bkBytesFromB64(env.blob.iv) }, key, bkBytesFromB64(env.blob.ciphertext));
+    obj = JSON.parse(new TextDecoder().decode(plain));
+  } catch (e) { throw new Error('bad-password'); }
+  // GCM has already proved the ciphertext was produced under this exact key. The plaintext still
+  // has to be a BACKUP rather than merely well-formed JSON before it goes near Firestore.
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) || obj.format !== BK_FORMAT) throw new Error('damaged');
+  return obj;
+}
 // A guard on the file picker, not on the export. Whole-of-history for this patient is a few
 // hundred kB; anything past 40 MB is somebody having selected a video, and JSON.parse on it would
 // lock the phone up before it failed.
@@ -4941,7 +5198,7 @@ async function bkCollect() {
 function bkBuildPayload(bundle, atMs) {
   return bkCanonical({
     format: BK_FORMAT,
-    formatVersion: BK_FORMAT_VERSION,
+    formatVersion: BK_PLAIN_VERSION,
     app: APP_VERSION,
     patient: String(CONFIG.patientName || ''),
     createdAt: atMs,
@@ -4958,6 +5215,18 @@ function bkBuildPayload(bundle, atMs) {
 
 async function downloadBackupFile() {
   if (state.exporting || state.restoring) return;
+  const protect = !!state.bkProtect;
+  const pw = String(state.bkPw || '');
+  if (protect) {
+    if (pw.length < BK_MIN_PASSWORD) {
+      setState({ backupNotice: { kind: 'bad', message: 'Choose a password of at least ' + BK_MIN_PASSWORD + ' characters, or switch the password off to save this file unprotected.' } });
+      return;
+    }
+    if (pw !== String(state.bkPw2 || '')) {
+      setState({ backupNotice: { kind: 'bad', message: 'The two passwords are not the same. Nothing was saved — type it again in both boxes.' } });
+      return;
+    }
+  }
   setState({ exporting: 'backup', backupNotice: null });
   try {
     await yieldFrame();
@@ -4967,8 +5236,18 @@ async function downloadBackupFile() {
       setToast('Nothing to back up yet.');
       return;
     }
-    const text = JSON.stringify(bkBuildPayload(bundle, simNow()), null, 2);
-    const bkName = exportFilename('backup', 'json');
+    const payload = bkBuildPayload(bundle, simNow());
+    let text = '';
+    let bkName = exportFilename('backup', 'json');
+    if (protect) {
+      // A protected file is meant to be sent somewhere. Putting the patient's name in the filename
+      // would hand back in the clear the exact thing the encryption is for.
+      const d = new Date(simNow());
+      bkName = 'backup-protected-' + d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.json';
+      text = JSON.stringify(await bkEncryptPayload(payload, pw), null, 2);
+    } else {
+      text = JSON.stringify(payload, null, 2);
+    }
     const bkRes = await deliverFile(new Blob([text], { type: 'application/json' }), bkName);
     const nAppt = bundle.appointments.length;
     // deliverFile() knows which route it took; this used to throw that away and then tell every
@@ -4987,10 +5266,16 @@ async function downloadBackupFile() {
         kind: 'ok',
         message: 'Backup saved — ' + n + ' record' + (n === 1 ? '' : 's') +
           (nAppt ? ', including ' + nAppt + ' appointment record' + (nAppt === 1 ? '' : 's') : '') +
-          '. ' + where + ' Load it back here once to be sure it opens.'
+          '. ' + where +
+          (protect
+            ? ' It is protected with your password — whoever opens it will need that password, and nobody can reset it, so write it down before you send the file.'
+            : ' Load it back here once to be sure it opens.')
       }
     });
     setToast(n + ' record' + (n === 1 ? '' : 's') + ' saved. ' + where);
+    // The password is not kept once the file exists. Retyping it for the next backup costs less
+    // than leaving it in memory behind a screen she has walked away from.
+    if (protect) setState({ bkPw: '', bkPw2: '' });
   } catch (err) {
     // The raw message is a browser string ("The operation is insecure.") that reads like the app
     // broke in a way that might have damaged her records. It goes to the console.
@@ -5183,8 +5468,32 @@ function bkEnsureFileInput() {
   return el;
 }
 
+async function bkUnlock() {
+  const lock = state.bkLocked;
+  if (!lock || state.restoring || state.exporting) return;
+  const pw = String(state.bkUnlockPw || '');
+  if (!pw) { setState({ backupNotice: { kind: 'bad', message: 'Type the password this file was protected with.' } }); return; }
+  setState({ restoring: true, backupNotice: null });
+  let payload = null;
+  try {
+    payload = await bkDecryptEnvelope(lock.env, pw);
+  } catch (err) {
+    const m = (err && err.message) || '';
+    setState({ restoring: false, backupNotice: { kind: 'bad', message:
+      m === 'unsupported-cipher'
+        ? 'This protected backup was made by a newer version of CareTracker than the one on this phone. Update the app first — this version cannot open it.'
+        : (m === 'damaged'
+          ? 'That file is damaged and cannot be opened, even with the right password. Use another copy of the backup if you have one. Nothing was changed.'
+          : "That password did not open the file. Nothing was changed — check for a capital letter or a space at the end, and try again.") } });
+    return;
+  }
+  setState({ bkLocked: null, bkUnlockPw: '' });
+  await bkApplyParsed(payload);
+}
+
 function bkPickFile() {
   if (state.restoring || state.exporting) return;
+  setState({ backupNotice: null, bkLocked: null, bkUnlockPw: '' });
   try {
     bkEnsureFileInput().click();
   } catch (err) {
@@ -5216,6 +5525,25 @@ async function bkImportFile(file) {
       setState({ backupNotice: { kind: 'bad', message: "That doesn't look like a CareTracker backup. Choose the file whose name ends in .json — the spreadsheet and the printable report can't be loaded back." } });
       return;
     }
+    // A protected file cannot be inspected at all until it opens, so everything below has to wait
+    // behind the password rather than running against an envelope it cannot read.
+    if (bkIsEncrypted(parsed)) {
+      setState({ bkLocked: { env: parsed, createdAt: Number(parsed.createdAt) || 0 }, bkUnlockPw: '' });
+      return;
+    }
+    await bkApplyParsed(parsed);
+  } catch (err) {
+    console.error('[restore]', err);
+    setState({ backupNotice: { kind: 'bad', message: "Something went wrong loading that file. Nothing was removed. Please try again." } });
+  } finally {
+    setState({ restoring: false });
+  }
+}
+
+// Everything from "we have a parsed backup object" onward, shared by the plain path and by the one
+// that had to be decrypted first.
+async function bkApplyParsed(parsed) {
+  try {
     let bundle = null;
     try {
       bundle = bkReadIncoming(parsed);
@@ -5546,6 +5874,172 @@ function symptomRow(e) {
       )
     )
   );
+}
+
+// ------------------------------------------------------------------------------------------------
+// REPORT A PROBLEM (v57) — the log, and the person's side of it.
+// Three things in the order they are needed: say what happened, see that the app already noticed
+// something, take the lot away as a file. There is no "send" button that silently posts anywhere,
+// because there is nowhere to post to and a button that pretends otherwise is worse than none.
+// ------------------------------------------------------------------------------------------------
+const CT_REPORT_KINDS = [
+  { key: 'problem', label: "Something's wrong", hint: 'What were you doing, and what happened instead?' },
+  { key: 'idea', label: 'An idea', hint: 'What would make this easier to use?' }
+];
+function ctReportKind() { return state.reportKind === 'idea' ? 'idea' : 'problem'; }
+function ctSubmitReport() {
+  const text = String(state.reportDraft || '').trim();
+  if (!text) { setToast('Type what happened first.'); return; }
+  const entry = ctLogAdd(ctReportKind(), text, 'screen: report');
+  if (!entry) {
+    setState({ reportNotice: { kind: 'bad', message: 'There is no room left on this phone to save it, so nothing was written down. Free up some space and try again.' } });
+    return;
+  }
+  setState({ reportDraft: '', reportNotice: { kind: 'ok', message: 'Saved on this phone. It stays here until you send the file — nothing was uploaded anywhere, and none of her records were touched.' } });
+  setToast('Written down.');
+}
+function ctLogEntryLabel(kind) {
+  if (kind === 'error') return 'The app noticed';
+  if (kind === 'idea') return 'Your idea';
+  return 'You reported';
+}
+// Plain text rather than JSON on purpose: the person sending it, and whoever reads it, should both
+// be able to see what is in it before it goes anywhere.
+function ctBuildReportFile() {
+  const list = ctLogRead().slice().reverse();
+  const lines = [];
+  lines.push('CareTracker report');
+  lines.push('App version: ' + APP_VERSION);
+  lines.push('Made: ' + new Date(simNow()).toLocaleString());
+  lines.push('Device: ' + (navigator.userAgent || 'unknown'));
+  lines.push('Screen: ' + (window.innerWidth || 0) + 'x' + (window.innerHeight || 0));
+  lines.push('Entries: ' + list.length);
+  lines.push('');
+  lines.push('This file holds what you typed and the errors the app recorded. It does NOT');
+  lines.push('include any logged dose, temperature, weight, symptom or appointment, and it');
+  lines.push('does not name the patient.');
+  lines.push('------------------------------------------------------------');
+  if (!list.length) lines.push('(nothing recorded)');
+  list.forEach((e, i) => {
+    lines.push('');
+    lines.push('#' + (i + 1) + '  ' + ctLogEntryLabel(e.kind).toUpperCase() +
+      '  ' + new Date(Number(e.ts) || 0).toLocaleString() +
+      ((Number(e.count) || 1) > 1 ? ('  (x' + e.count + ')') : '') +
+      (e.app ? ('  [' + e.app + ']') : ''));
+    if (e.where) lines.push('   where: ' + e.where);
+    String(e.text || '').split('\n').forEach((ln) => lines.push('   ' + ln));
+  });
+  lines.push('');
+  return lines.join('\n');
+}
+async function ctSaveReportFile() {
+  if (state.reportBusy) return;
+  const list = ctLogRead();
+  if (!list.length) { setToast('Nothing to send yet.'); return; }
+  setState({ reportBusy: true });
+  try {
+    const d = new Date(simNow());
+    const name = 'caretracker-report-' + d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.txt';
+    const res = await deliverFile(new Blob([ctBuildReportFile()], { type: 'text/plain;charset=utf-8' }), name);
+    if (res && res.cancelled) { setState({ reportNotice: { kind: 'bad', message: 'Cancelled — nothing was sent.' } }); return; }
+    setState({ reportNotice: { kind: 'ok', message: (res && res.method === 'share')
+      ? 'Choose where to send it in the sheet that just opened.'
+      : ('The report is in your Downloads folder, named ' + name + '. Attach it to an email or a message to send it.') } });
+  } catch (err) {
+    console.error('[report:file]', err);
+    setState({ reportNotice: { kind: 'bad', message: "Couldn't make the report file. Nothing was changed — please try again." } });
+  } finally {
+    setState({ reportBusy: false });
+  }
+}
+
+function renderReportView(now) {
+  const card = { background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '18px', padding: '14px', marginTop: '12px' };
+  const list = ctLogRead().slice().reverse();
+  const errors = list.filter((e) => e.kind === 'error');
+  const mine = list.filter((e) => e.kind !== 'error');
+  const kind = ctReportKind();
+  const active = CT_REPORT_KINDS.filter((k) => k.key === kind)[0];
+  const showAll = !!state.reportShowAll;
+  const shownErrors = showAll ? errors : errors.slice(0, 3);
+  const label = (t) => h('div', { style: { fontSize: '13px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, t);
+  const sub = (t) => h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '3px', maxWidth: '52ch' } }, t);
+
+  const entryRow = (e, i) => h('div', { 'data-log-entry': e.kind, style: { borderTop: i > 0 ? '1px solid rgba(212,104,138,0.10)' : 'none', padding: '11px 12px' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'baseline' } },
+      h('span', { style: { fontSize: '11px', fontWeight: '800', letterSpacing: '0.05em', textTransform: 'uppercase', color: e.kind === 'error' ? '#9A3B33' : '#0C7F57' } },
+        ctLogEntryLabel(e.kind) + ((Number(e.count) || 1) > 1 ? (' · ' + e.count + ' times') : '')),
+      h('span', { style: { fontSize: '11px', fontWeight: '700', color: '#7D6974', flexShrink: '0' } },
+        new Date(Number(e.ts) || 0).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))),
+    h('div', { style: { fontSize: '12.5px', color: '#342530', marginTop: '4px', lineHeight: '1.45', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: e.kind === 'error' ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : 'inherit' } },
+      String(e.text || '').slice(0, (e.kind === 'error' && !showAll) ? 220 : CT_LOG_MAX_TEXT)),
+    e.where ? h('div', { style: { fontSize: '11px', color: '#8A6479', marginTop: '3px', fontWeight: '700' } }, e.where) : null
+  );
+
+  return [
+    h('section', null,
+      h('div', { style: { fontSize: '19px', fontWeight: '800', letterSpacing: '-0.02em', color: '#342530' } }, 'Errors and ideas'),
+      h('div', { style: { fontSize: '12.5px', color: '#7D6974', marginTop: '3px', lineHeight: '1.45', maxWidth: '52ch' } },
+        'Everything here stays on this phone until you choose to send it. The app also writes down its own errors as they happen, so a fault you saw once is still described accurately days later. None of her logged records are involved.')
+    ),
+
+    h('section', { style: card },
+      h('div', { style: { display: 'flex', gap: '8px' } },
+        ...CT_REPORT_KINDS.map((k) => {
+          const on = k.key === kind;
+          return h('button', { 'data-report-kind': k.key, type: 'button', onClick: () => setState({ reportKind: k.key, reportNotice: null }),
+            style: { flex: '1', minHeight: '46px', padding: '0 10px', borderRadius: '12px', fontSize: '13.5px', fontWeight: '800', lineHeight: '1.25',
+              background: on ? '#AA5375' : 'rgba(255,255,255,0.72)', color: on ? '#FFFFFF' : '#8E3D61',
+              border: on ? '1px solid #AA5375' : '1px solid rgba(212,104,138,0.32)' } }, k.label);
+        })
+      ),
+      sub(active.hint),
+      // fontFamily is explicit: a <textarea> otherwise renders in the browser's monospace face,
+      // which reads as broken next to every other control in this app.
+      h('textarea', { id: 'report-draft', value: String(state.reportDraft || ''), rows: '5', placeholder: 'Type here…',
+        onInput: (e) => { state.reportDraft = e.target.value; },
+        style: { width: '100%', marginTop: '8px', minHeight: '110px', border: '1px solid rgba(212,104,138,0.28)', borderRadius: '12px', padding: '11px', fontFamily: 'inherit', fontSize: '16px', lineHeight: '1.45', background: 'rgba(255,255,255,0.82)', color: '#342530', resize: 'vertical' } }),
+      h('button', { 'data-report-save': 'true', type: 'button', onClick: ctSubmitReport,
+        style: { width: '100%', minHeight: '46px', marginTop: '9px', borderRadius: '12px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Write it down'),
+      state.reportNotice ? h('div', Object.assign({ 'data-report-notice': 'true', 'data-report-notice-kind': state.reportNotice.kind,
+        style: bkNoticeStyle(state.reportNotice.kind) }, state.reportNotice.kind === 'bad' ? { role: 'alert' } : {}), state.reportNotice.message) : null
+    ),
+
+    h('section', { style: card },
+      label('What the app noticed on its own'),
+      sub(errors.length
+        ? ('The newest ' + (errors.length === 1 ? 'error is' : errors.length + ' errors are') + ' listed below. They are technical on purpose — they are for whoever fixes it, not for you to act on.')
+        : 'Nothing so far. If the app hits an error it will appear here by itself, with the time and the screen it happened on.'),
+      errors.length ? h('div', { 'data-log-errors': String(errors.length), style: { marginTop: '10px', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(212,104,138,0.18)', background: 'rgba(255,255,255,0.5)' } },
+        ...shownErrors.map(entryRow)) : null,
+      (errors.length > 3) ? h('button', { 'data-log-more': 'true', type: 'button', onClick: () => setState({ reportShowAll: !showAll }),
+        style: { minHeight: '44px', marginTop: '8px', padding: '0 14px', borderRadius: '12px', background: 'transparent', color: '#8E3D61', fontSize: '13px', fontWeight: '800' } },
+        showAll ? 'Show fewer' : ('Show all ' + errors.length)) : null
+    ),
+
+    mine.length ? h('section', { style: card },
+      label('What you have written down'),
+      h('div', { 'data-log-mine': String(mine.length), style: { marginTop: '10px', borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(212,104,138,0.18)', background: 'rgba(255,255,255,0.5)' } },
+        ...mine.map(entryRow))
+    ) : null,
+
+    h('section', { style: card },
+      label('Send it'),
+      sub('This saves one text file holding what you typed and the errors above — and nothing else. No dose, temperature, weight, symptom or appointment is in it, and it does not name the patient.'),
+      h('div', { style: { display: 'flex', gap: '9px', marginTop: '10px', flexWrap: 'wrap' } },
+        h('button', Object.assign({ 'data-report-file': 'true', type: 'button', onClick: ctSaveReportFile,
+          style: { minHeight: '46px', padding: '0 16px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } },
+          state.reportBusy ? { disabled: 'disabled' } : {}), state.reportBusy ? 'Saving…' : 'Save report file'),
+        list.length ? h('button', { 'data-report-clear': 'true', type: 'button',
+          onClick: () => {
+            if (state.reportConfirmClear) { ctLogClear(); setState({ reportConfirmClear: false, reportShowAll: false, reportNotice: { kind: 'ok', message: 'The list is empty again.' } }); return; }
+            setState({ reportConfirmClear: true });
+          },
+          style: { minHeight: '46px', padding: '0 16px', borderRadius: '13px', background: 'rgba(255,255,255,0.72)', border: '1px solid ' + (state.reportConfirmClear ? 'rgba(192,69,59,0.55)' : 'rgba(212,104,138,0.32)'), color: state.reportConfirmClear ? '#9A3B33' : '#7D6974', fontSize: '14px', fontWeight: '800' } },
+          state.reportConfirmClear ? 'Tap again to erase' : 'Clear the list') : null
+      )
+    )
+  ];
 }
 
 function renderSymptoms(now) {
