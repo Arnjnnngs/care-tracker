@@ -70,7 +70,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `e98621ce7491a9253c87d24f8a276362` |
 | **sw.js md5** | `04bf07ea6814559fc3edf2f345de08b5` |
-| **State** | Healthy. v57 verified 2026-08-22 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v57`. |
+| **State** | Healthy. v58 verified 2026-08-24 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v58`. |
 
 Shipped in the v43.x line, all live and verified:
 - v43.1 (`fc2c345`) — export buttons fixed (they were dead: the `h()` null-attribute trap)
