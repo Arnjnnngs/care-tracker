@@ -70,7 +70,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `5a91f896c763a6111f93a4d4af9ba413` |
 | **sw.js md5** | `1b05c32f379ecadab6efeed6e09d75bc` |
-| **State** | Healthy. v58 verified 2026-08-24 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v58`. |
+| **State** | Healthy. v59 verified 2026-08-24 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v59`. |
 
 Shipped in the v43.x line, all live and verified:
 - v43.1 (`fc2c345`) — export buttons fixed (they were dead: the `h()` null-attribute trap)
@@ -88,7 +88,7 @@ Shipped in the v43.x line, all live and verified:
 
 ---
 
-## v59 — BUILT, NOT YET DEPLOYED — one spelling for "liter"
+## v59 — SHIPPED — one spelling for "liter"
 
 Aaron, 2026-08-24: *"for the para.. is it supposed to be 'Litres' or Liters?"*
 
@@ -106,11 +106,14 @@ a reading is stored as `{ temp: 98.6, dose: '98.6 °F' }`, the unit only in a di
 today would re-read every historical reading in the new unit. ChemoWell's per-entry tagging lands
 first. Logged in REQUESTS.md, not built.
 
-**Deploy status.** Built and gated 2026-08-24; NOT on GitHub, NOT live. The browser extension is
-this session's only write path and has been unreachable since the laptop slept. This change set has
-now been rebuilt from origin **twice** after sandbox rollbacks, both times byte-identical
-(`index.html` md5 `5a91f896c763a6111f93a4d4af9ba413`) — which is the useful proof that the recipe
-is mechanical, and the reason Rule 0 exists.
+**Deploy history, worth keeping.** This release was built and gated three times before it landed.
+The browser extension — this session's only write path — went unreachable when the laptop slept,
+and the sandbox then rolled back **twice** while it was pending, destroying the working copy both
+times. Each rebuild from origin came out byte-identical (`index.html` md5
+`5a91f896c763a6111f93a4d4af9ba413`), which is the useful proof that the recipe was mechanical
+rather than reconstructed from memory. Shipped once Chrome reconnected. This is exactly the window
+Rule 0 exists to close, and the argument for connecting these repos to a session that can push
+natively.
 
 **Regression:** para 16/16, settings 11/11, logger 19/19.
 
