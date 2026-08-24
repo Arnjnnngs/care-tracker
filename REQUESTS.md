@@ -70,6 +70,13 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
 
 ## COMPLETED
 
+- [x] **Backup does not belong under Reports; there is no Settings tab** — asked 2026-08-24:
+  *"all the backup stuff shouldn't live under reports. it should be under settings. and i don't
+  even see a settings tab anymore in caretracker."* **v58.** Built the Settings screen this app has
+  never had and moved the backup, its password switch, restore and the share control into it.
+  Reports keeps the spreadsheet and the printable record and now says where the backup went, with a
+  one-tap route. `harness/settings-test.mjs` 11/11, falsified at 8 red on v57.
+
 - [x] **In-app logger for errors and improvements** — asked 2026-08-22. **v57.** A *Report a
   problem* menu row. The app records its own errors and unhandled rejections without swallowing
   them; repeats collapse to one counted entry; a full phone does not turn an error into a broken

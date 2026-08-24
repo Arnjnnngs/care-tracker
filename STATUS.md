@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v57 |
+| **Version** | v58 |
 | **Commit** | `f6befa5183d6` (local; GitHub mints its own on a web upload) |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `12fa116d8c22b29c473efc7d792eff1c` |
-| **sw.js md5** | `33f225f510ae83843faa9c578828aa1a` |
+| **index.html md5** | `e98621ce7491a9253c87d24f8a276362` |
+| **sw.js md5** | `04bf07ea6814559fc3edf2f345de08b5` |
 | **State** | Healthy. v57 verified 2026-08-22 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v57`. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,52 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v58 — BUILT — Settings exists, and the backup lives in it
+
+Aaron, 2026-08-22: *"all the backup stuff shouldn't live under reports. it should be under
+settings. and i don't even see a settings tab anymore in caretracker."*
+
+**He was right twice.** There has never been a Settings screen in this app. The backup landed under
+Reports in v43.1 because that is where "save a copy" was built, not because it belonged there — and
+by v57 that one card had grown to hold the backup, a password switch, a restore control, a share
+warning and two doctor-facing exports.
+
+**The split.** Reports keeps the two **documents** — the spreadsheet and the printable record — both
+of which exist to be read or handed to a doctor and neither of which can be loaded back. Settings
+gets everything that **manages the data**: the backup, its password, putting one back, and sharing
+this tracker with another caregiver. It also carries a route to *Report a problem* and an About
+block naming the build and stating plainly that, with no sign-in, the address itself is what grants
+access.
+
+**One card, two homes.** `renderSaveRecordsCard(now, mode)` renders both, so the counts, the button
+helper and the disabled treatment cannot drift apart between the screens.
+
+**The half that actually matters.** Someone who has tapped that backup button every week for months
+will go to Reports looking for it. Reports now carries *"Looking for the backup? It moved to
+Settings"* with a one-tap route there. A move without that is a disappearance, and the thing that
+disappeared is the only copy of a cancer patient's record. `SET-8` and `SET-9` exist for exactly
+that and fail if the pointer or its button is ever removed.
+
+**Drawer only, deliberately:** `renderBottomNav` hardcodes a five-column grid and a sixth tab
+silently overflows it. Calendar has lived in the drawer for the same reason.
+
+**Gate:** `harness/settings-test.mjs` — 11/11, **falsified against v57 at 8 red**.
+
+**Four suites needed fixing, and one of them found a rule this project already had.**
+`encbackup`, `share`, `medskip` and `export` all navigated to Reports for controls that had moved —
+test-side, not product. But `logger-test` failed because it pinned the literal `'v57'`, which is the
+exact anti-pattern in CLAUDE.md Rule 5 (*"never pin version literals — three patches and several
+suites broke on every legitimate release because of this"*). It was written yesterday and broke on
+the very next release. It now reads `APP_VERSION` out of the file under test.
+Also fixed a latent bug in `medskip-test`: it fetched the restore button and never clicked it, so
+the file input it needed only existed because an earlier step happened to have opened the picker.
+
+**Regression:** settings 11/11, encbackup 16/16, logger 19/19, share 9/9, export 49/49, eod 11/11,
+para 15/15, swfresh 7/7, medskip 10/10, missedcard 7/7. Screenshots at 375px and 320px in
+`outputs/v58-shots/`, no horizontal overflow at either.
 
 ---
 

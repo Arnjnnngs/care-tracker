@@ -982,7 +982,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v58';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -2135,6 +2135,7 @@ function renderContent(now, mg, pct, tyColor, ceiling) {
   if (state.view === 'inpatient') return renderInPatient(now);
   if (state.view === 'symptoms') return renderSymptoms(now);
   if (state.view === 'calendar') return renderCalendarView(now);
+  if (state.view === 'settings') return renderSettings(now);
   if (state.view === 'report') return renderReportView(now);
   return [...renderToday(now, mg, pct, tyColor, ceiling)];
 }
@@ -3632,7 +3633,13 @@ function renderReportsMenu(now) {
 // It sits ABOVE the five browse buttons because it is the only ACTION on this screen and actions
 // lead. Below them it was 3-22% visible above the fixed nav on every phone size -- the flagship
 // feature of the release, effectively hidden.
-function renderSaveRecordsCard(now) {
+// One card, two homes. Aaron, 2026-08-22: "all the backup stuff shouldn't live under reports. it
+// should be under settings." Reports keeps the two DOCUMENTS -- the spreadsheet and the printable
+// record -- because both exist to be read or handed to a doctor. Settings gets the things that
+// manage the data itself: the backup, its password, and putting one back. Same card, same button
+// helper, same counts; only which controls it shows differs, so the two cannot drift apart.
+function renderSaveRecordsCard(now, mode) {
+  const forSettings = mode === 'settings';
   const nLogged = allExportEntries().length;
   // "Last logged" must mean the last thing she LOGGED. Two ways this went wrong when it read every
   // entry's raw timestamp: allExportEntries() includes state.chemoDates, whose ts for a SCHEDULED
@@ -3694,12 +3701,14 @@ function renderSaveRecordsCard(now) {
       ) : label);
   };
   return h('section', { style: { marginTop: '2px' } },
-    h('div', { style: { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
+    h('div', { 'data-records-card': forSettings ? 'settings' : 'reports', style: { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
       h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '13px' } },
-        h('span', { style: { width: '44px', height: '44px', borderRadius: '14px', marginTop: '1px', background: 'rgba(170,83,117,0.12)', color: '#AA5375', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } }, appIcon('download', 22)),
+        h('span', { style: { width: '44px', height: '44px', borderRadius: '14px', marginTop: '1px', background: 'rgba(170,83,117,0.12)', color: '#AA5375', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } }, appIcon(forSettings ? 'bkRestore' : 'download', 22)),
         h('span', { style: { display: 'block', flex: '1', minWidth: '0' } },
-          h('h2', { style: { fontSize: '16px', fontWeight: '800', letterSpacing: '-0.015em', color: '#342530', margin: '0' } }, 'Save a copy of your records'),
-          h('span', { style: { display: 'block', fontSize: '12px', color: '#6E5261', lineHeight: '1.35', marginTop: '2px', maxWidth: '52ch' } }, "Everything you've logged — doses, temperatures, weights, symptoms, treatment dates and appointments. The files save to this phone. Nothing is sent anywhere."),
+          h('h2', { style: { fontSize: '16px', fontWeight: '800', letterSpacing: '-0.015em', color: '#342530', margin: '0' } }, forSettings ? 'Backup & restore' : 'Save a copy of your records'),
+          h('span', { style: { display: 'block', fontSize: '12px', color: '#6E5261', lineHeight: '1.35', marginTop: '2px', maxWidth: '52ch' } }, forSettings
+            ? 'A backup holds everything — doses, temperatures, weights, symptoms, treatment dates and appointments. It is the only file that can be loaded back, and the only way onto a new phone.'
+            : "Everything you've logged, as a spreadsheet or a printable record. The files save to this phone. Nothing is sent anywhere."),
           h('span', { className: 'mono', style: { display: 'block', fontSize: '10.5px', color: '#8E3D61', fontWeight: '700', marginTop: '5px' } },
             emptyBackup ? 'Nothing saved yet' : [
               nLogged ? (nLogged + ' entr' + (nLogged === 1 ? 'y' : 'ies')) : '',
@@ -3714,22 +3723,99 @@ function renderSaveRecordsCard(now) {
         // made at the button, so the button is where the answer belongs. The report has always been
         // delivered through the share sheet as a self-contained .html -- it could always be sent to
         // another caregiver, and nothing on screen said so.
-        btn('backup', state.bkProtect ? 'Backup — protected' : 'Backup — to restore', downloadBackupFile, true, emptyBackup || !!state.bkLocked),
-        btn('csv', 'Spreadsheet — for data', downloadEntriesCSV, false),
-        btn('report', 'Report — to send or print', openPrintReport, false)
+        forSettings ? btn('backup', state.bkProtect ? 'Save protected backup' : 'Save backup file', downloadBackupFile, true, emptyBackup || !!state.bkLocked) : null,
+        forSettings ? null : btn('csv', 'Spreadsheet — for data', downloadEntriesCSV, false),
+        forSettings ? null : btn('report', 'Report — to send or print', openPrintReport, false)
       ),
       // The card used to say "Keep the spreadsheet as your backup." It is not one and never was:
       // a CSV cannot be loaded back into this app, it has no document ids, and it deliberately
       // omits appointments. Telling her the wrong file is her backup is worse than telling her
       // nothing, because it stops her looking for the right one.
       h('div', { style: { fontSize: '11.5px', color: '#6E5261', marginTop: '10px', lineHeight: '1.45', maxWidth: '52ch' } },
-        emptyBackup ? "Once you start logging, you'll be able to save or print your records here."
-              : 'The backup file is the only one of these that can be put back. It holds everything — doses, temperatures, weights, symptoms, treatment dates and appointments. The spreadsheet and the printable report are for reading and for handing to a doctor; neither one can be loaded back into the app.'),
-      renderBackupProtectRow(),
-      renderShareRow(),
-      renderRestoreRow()
+        forSettings
+          ? (emptyBackup
+              ? "Once you start logging, you'll be able to save a backup here."
+              : 'Keep it somewhere you will still have it if this phone is lost. Load it back here once, now, to be sure it opens — a backup nobody has ever opened is a guess, not a backup.')
+          : (empty
+              ? "Once you start logging, you'll be able to save or print your records here."
+              : 'Neither of these can be loaded back into the app. The spreadsheet is for working with the numbers and the printable record is for handing to a doctor; the file that can be put back lives in Settings.')),
+      forSettings ? renderBackupProtectRow() : null,
+      forSettings ? renderRestoreRow() : null,
+      forSettings ? null : renderBackupPointerRow()
     )
   );
+}
+
+// Shown in Reports, where the backup button used to be. Someone who has tapped that button every
+// week for months will come here looking for it, and "it moved" with a way through is the whole
+// difference between a move and a disappearance.
+function renderBackupPointerRow() {
+  return h('div', { 'data-backup-pointer': 'true', style: { marginTop: '14px', paddingTop: '13px', borderTop: '1px solid rgba(212,104,138,0.16)' } },
+    h('div', { style: { fontSize: '13px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'Looking for the backup?'),
+    h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '3px', maxWidth: '52ch' } },
+      'It moved to Settings, along with restoring one and sharing this tracker with another caregiver. Nothing about it changed.'),
+    h('button', { 'data-backup-pointer-go': 'true', type: 'button', onClick: () => navigateTo('settings'),
+      style: { marginTop: '10px', minHeight: '46px', padding: '0 16px', borderRadius: '13px', border: '1px solid rgba(212,104,138,0.32)', background: 'rgba(255,255,255,0.72)', color: '#8E3D61', fontSize: '14px', fontWeight: '800' } },
+      'Open Settings')
+  );
+}
+
+// ------------------------------------------------------------------------------------------------
+// SETTINGS (v58)
+// Aaron, 2026-08-22: "all the backup stuff shouldn't live under reports. it should be under
+// settings. and i don't even see a settings tab anymore in caretracker."
+// He was right twice: there has never BEEN a Settings screen in this app, and the backup landed
+// under Reports in v43.1 because that is where "save a copy" was built, not because it belonged
+// there. Reports is for reading; this is for managing the data itself.
+// Drawer only, deliberately: renderBottomNav hardcodes a five-column grid, and a sixth tab
+// silently overflows it. Calendar lives the same way for the same reason.
+// ------------------------------------------------------------------------------------------------
+function renderSettings(now) {
+  const cardStyle = { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
+  const nLog = ctLogRead().length;
+  return [
+    h('section', null,
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', color: '#AA5375' } }, appIcon('bkRestore', 19),
+        h('span', { style: { fontSize: '12px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase' } }, 'Settings')),
+      h('h1', { style: { fontSize: '24px', lineHeight: '1.05', color: '#342530', letterSpacing: '-0.035em', marginTop: '5px' } }, 'Settings'),
+      h('div', { style: { fontSize: '12.5px', color: '#6E5261', marginTop: '5px', lineHeight: '1.45', maxWidth: '52ch' } },
+        'Your backup, who else can see these records, and how to tell us when something is wrong.')
+    ),
+
+    renderSaveRecordsCard(now, 'settings'),
+
+    h('section', { style: { marginTop: '12px' } },
+      h('div', { 'data-settings-share': 'true', style: cardStyle },
+        // renderShareRow draws its own top rule, which is right inside the records card and wrong
+        // as the first thing in a card of its own. Negative margin cancels it rather than forking
+        // the function -- one share warning, one place to edit it.
+        h('div', { style: { marginTop: '-14px', paddingTop: '0' } }, renderShareRow())
+      )
+    ),
+
+    h('section', { style: { marginTop: '12px' } },
+      h('div', { style: cardStyle },
+        h('div', { style: { fontSize: '13px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'Something wrong, or an idea'),
+        h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '3px', maxWidth: '52ch' } },
+          nLog
+            ? ('Write down anything that is not working, or anything that would make this easier. ' + nLog + ' ' + (nLog === 1 ? 'entry is' : 'entries are') + ' saved on this phone, waiting to be sent.')
+            : 'Write down anything that is not working, or anything that would make this easier. The app also records its own errors here as they happen.'),
+        h('button', { 'data-settings-report-go': 'true', type: 'button', onClick: () => navigateTo('report'),
+          style: { marginTop: '10px', minHeight: '46px', padding: '0 16px', borderRadius: '13px', border: '1px solid rgba(212,104,138,0.32)', background: 'rgba(255,255,255,0.72)', color: '#8E3D61', fontSize: '14px', fontWeight: '800' } },
+          'Report a problem')
+      )
+    ),
+
+    h('section', { style: { marginTop: '12px' } },
+      h('div', { 'data-settings-about': 'true', style: cardStyle },
+        h('div', { style: { fontSize: '13px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em' } }, 'About'),
+        h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.5', marginTop: '5px', maxWidth: '52ch' } },
+          'CareTracker ' + APP_VERSION + '. Records sync live between every phone that opens this address — log a dose on one and it appears on the other within seconds. There is no sign-in, so the address itself is what grants access.'),
+        h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.5', marginTop: '8px', maxWidth: '52ch' } },
+          'This app records what was logged. It does not give medical advice, and nothing in it should be used to decide a dose.')
+      )
+    )
+  ];
 }
 
 // Sharing with another caregiver. This app has NO LOGIN: every device that opens the URL reads and
@@ -4126,6 +4212,9 @@ const CAL_DRAWER_ITEMS = [
   { view: 'reports', label: 'Reports', icon: 'chart', blurb: 'History, charts, save a copy' },
   { view: 'inpatient', label: 'In-Patient', icon: 'hospital', blurb: 'Hospital stays' },
   { view: 'symptoms', label: 'Symptoms', icon: 'notes', blurb: 'How she is feeling' },
+  // Settings, which this app has never had: the backup lived under Reports because that is where
+  // "save a copy" was built in v43.1, and there was nowhere else for it to go.
+  { view: 'settings', label: 'Settings', icon: 'bkRestore', blurb: 'Backup, sharing, about' },
   // Last in the menu on purpose: it is the one row nobody is looking for until something is wrong,
   // and it must not sit between two she taps every day.
   { view: 'report', label: 'Report a problem', icon: 'tourHelp', blurb: 'Errors & ideas for the app' }
