@@ -65,11 +65,11 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v58 |
+| **Version** | v59 |
 | **Commit** | `f6befa5183d6` (local; GitHub mints its own on a web upload) |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `e98621ce7491a9253c87d24f8a276362` |
-| **sw.js md5** | `04bf07ea6814559fc3edf2f345de08b5` |
+| **index.html md5** | `5a91f896c763a6111f93a4d4af9ba413` |
+| **sw.js md5** | `1b05c32f379ecadab6efeed6e09d75bc` |
 | **State** | Healthy. v58 verified 2026-08-24 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v58`. |
 
 Shipped in the v43.x line, all live and verified:
@@ -85,6 +85,34 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## v59 — BUILT, NOT YET DEPLOYED — one spelling for "liter"
+
+Aaron, 2026-08-24: *"for the para.. is it supposed to be 'Litres' or Liters?"*
+
+**It was both.** Every identifier used the American spelling — `PARA_MAX_LITERS`, `paraFmtLiters`,
+`e.liters` — while four user-facing strings used the British one, in an app whose patient and
+oncology team are American. Normalised to **liters**; no identifier touched. ChemoWell had the same
+split ten times over, including a Help page. Asserted **by absence against the shipped bytes**, not
+against a screen. `harness/para-test.mjs` 16/16, falsified against v58.
+
+**The units question, answered rather than built.** Paracentesis needs no unit picker — liters is
+the standard unit in every country; the UK spells it differently, it does not measure it
+differently. What IS missing is a units picker in this app at all, and there is a hazard behind it:
+a reading is stored as `{ temp: 98.6, dose: '98.6 °F' }`, the unit only in a display string, while
+`tempFever()` and `tempHigh()` already switch thresholds on `CONFIG.tempUnit`. Exposing a picker
+today would re-read every historical reading in the new unit. ChemoWell's per-entry tagging lands
+first. Logged in REQUESTS.md, not built.
+
+**Deploy status.** Built and gated 2026-08-24; NOT on GitHub, NOT live. The browser extension is
+this session's only write path and has been unreachable since the laptop slept. This change set has
+now been rebuilt from origin **twice** after sandbox rollbacks, both times byte-identical
+(`index.html` md5 `5a91f896c763a6111f93a4d4af9ba413`) — which is the useful proof that the recipe
+is mechanical, and the reason Rule 0 exists.
+
+**Regression:** para 16/16, settings 11/11, logger 19/19.
 
 ---
 

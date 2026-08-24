@@ -37,6 +37,18 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
 
 ### Ready to build
 
+- [ ] **Units picker for CareTracker (°F/°C, lbs/kg) — and the per-entry tagging it depends on.**
+  Raised by Aaron 2026-08-24 while asking about "Litres" vs "Liters". ChemoWell already has this;
+  CareTracker has `CONFIG.tempUnit` with no UI and no weight unit at all. **Order matters:** a
+  reading is stored as `{ temp: 98.6, dose: '98.6 °F' }`, the unit only in a display string, while
+  `tempFever()`/`tempHigh()` already switch thresholds on `CONFIG.tempUnit`. A picker added today
+  would make every historical reading be re-read in the new unit. Port ChemoWell's `entryTempUnit`
+  / `entryWeightIn` tagging FIRST. Own release, own adversarial gate.
+
+- [ ] **Language localisation — DECISION NEEDED, not started.** Both apps are single-file with
+  every string inline; weeks, not a setting. Carries a medical-safety dimension: the copy routing a
+  frightened person to their care team cannot be machine-translated without review.
+
 - [ ] **Undo a restore / snapshot before importing** — 2026-08-22: *"if someone is doing a backup
   and it fits wrong or they accidentally add to wrong profile. there needs to be a way to undo or
   capture their live data before input."* Take an automatic snapshot immediately before any restore
@@ -69,6 +81,10 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
 ---
 
 ## COMPLETED
+
+- [x] **"Litres" or "Liters"** — asked 2026-08-24. **Built as care-tracker v59 / ChemoWell app-v65.**
+  American in every identifier, British in 4 user-facing strings here and 10 there, including a
+  ChemoWell Help page. Normalised to liters, asserted by absence against the shipped bytes.
 
 - [x] **Backup does not belong under Reports; there is no Settings tab** — asked 2026-08-24:
   *"all the backup stuff shouldn't live under reports. it should be under settings. and i don't

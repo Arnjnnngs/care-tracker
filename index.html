@@ -982,7 +982,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v58';
+const APP_VERSION = 'v59';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -3044,7 +3044,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       const pLast = paraLatest();
       const pSub = pLast
         ? ('Last drain ' + fmtInpatientDate(pLast.ts) + ' · ' + paraFmtLiters(pLast.liters) + ' L')
-        : 'Litres drained, recorded separately';
+        : 'Liters drained, recorded separately';
       return h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' } },
           h('div', null,
@@ -3053,7 +3053,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           )
         ),
         h('div', { style: { display: 'flex', gap: '6px', marginTop: '8px' } },
-          h('input', { type: 'number', inputMode: 'decimal', step: '0.1', min: '0', max: String(PARA_MAX_LITERS), placeholder: 'Litres', value: state.paraInput, onInput: (e) => { state.paraInput = e.target.value; }, className: 'mono', style: { flex: '1', minWidth: '0', minHeight: '38px', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '11px', padding: '0 12px', fontSize: '16px', background: 'rgba(255,255,255,0.6)', color: '#3D2B3A' } }),
+          h('input', { type: 'number', inputMode: 'decimal', step: '0.1', min: '0', max: String(PARA_MAX_LITERS), placeholder: 'Liters', value: state.paraInput, onInput: (e) => { state.paraInput = e.target.value; }, className: 'mono', style: { flex: '1', minWidth: '0', minHeight: '38px', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '11px', padding: '0 12px', fontSize: '16px', background: 'rgba(255,255,255,0.6)', color: '#3D2B3A' } }),
           h('button', { onClick: logParacentesis, style: { flexShrink: '0', minHeight: '38px', padding: '0 15px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700' } }, 'Log')
         )
       );
@@ -4109,7 +4109,7 @@ function paraLatest() { const l = paracentesisResolved(); return l.length ? l[0]
 async function logParacentesis() {
   const raw = (state.paraInput || '').trim();
   const v = parseFloat(raw);
-  if (!raw || isNaN(v) || v <= 0 || v > PARA_MAX_LITERS) { setToast('Enter the litres drained (up to ' + PARA_MAX_LITERS + ')'); return; }
+  if (!raw || isNaN(v) || v <= 0 || v > PARA_MAX_LITERS) { setToast('Enter the liters drained (up to ' + PARA_MAX_LITERS + ')'); return; }
   setState({ timeModal: { type: 'para', paraValue: Math.round(v * 10) / 10, timeValue: nowLocalISO() } });
 }
 async function removeParacentesis(paraId) {
@@ -6153,7 +6153,7 @@ function renderParacentesis(now) {
   const list = paracentesisResolved();
   if (!list.length) {
     return [h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } },
-      'No paracentesis procedures logged yet.\nLog the litres drained from the card on Today.')];
+      'No paracentesis procedures logged yet.\nLog the liters drained from the card on Today.')];
   }
   const total = paraTotalLiters(list);
   const avg = total / list.length;
