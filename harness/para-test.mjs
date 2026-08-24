@@ -139,6 +139,17 @@ console.log('\nPARACENTESIS — a standalone record that never moves the weight 
 // ---------- logging ----------
 {
   const b = await boot([]);
+  // Asserted BY ABSENCE against the shipped bytes, not against a screen. Aaron, 2026-08-24:
+  // "for the para.. is it supposed to be 'Litres' or Liters?" It was both -- every identifier used
+  // the American spelling while four user-facing strings used the British one, in an app whose
+  // patient and oncology team are American. A screen check would only cover the screens the suite
+  // happens to visit; this covers every string in the file.
+  await run('PARA-0-one-spelling-only',
+    'no British spelling of "liter" survives anywhere in the shipped file', async () => {
+    const hits = (rawHtml.match(/[Ll]itre/g) || []);
+    assert(hits.length === 0, hits.length + ' occurrence(s) of "litre" are still in the file — the app must not spell it two ways');
+  });
+
   await run('PARA-1-home-card',
     'the Paracentesis card is on Home with its own litres input', async () => {
     const hasCard = await b.page.evaluate(() => {
