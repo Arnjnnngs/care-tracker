@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -85,6 +85,38 @@ Shipped in the v43.x line, all live and verified:
   consulted the medication config at all. Also fixed a latent `Object.prototype`
   fall-through that could print the literal string "Object" as a medication name in the
   printable oncologist report. 34/34 checks. Aaron does NOT need to re-do the deactivation.
+
+---
+
+## 2026-08-24 (evening) — the cloud session, and what it found
+
+**This session can push natively.** Rule 1's "good path" is now proven from inside: `git push` works
+against all three repos, no browser extension, no upload, no md5 round-trip. `add_repo` attached
+`chemowell-app-beta` and `chemowell-beta` mid-session, so all three are reachable from one place for
+the first time.
+
+**What it cannot do: see the live sites.** `arnjnnngs.github.io` is blocked by this environment's
+network egress policy (403 at the CONNECT stage), and the GitHub *Pages* API paths are blocked at the
+proxy too, so neither the deployed bytes nor the Pages build status can be read from here. `git` and
+the GitHub content API work fine; the public web does not. **Live verification still needs a browser
+session or Aaron's phone.** Recorded so nobody re-tests it: curl, WebFetch and the Pages API were all
+tried.
+
+**All 39 browser suites across the three repos were unrunnable.** Every one hardcoded
+`/home/claude/.npm-global/lib/node_modules/playwright` — an absolute path from the retired sandbox.
+In a cloud session they die on `MODULE_NOT_FOUND` before the first assertion. **A gate that cannot
+start is indistinguishable from a gate that passes**, which is the Rule 5 failure mode exactly. All
+39 now resolve playwright from a candidate list. 17 of them are in this repo.
+
+**A ChemoWell safety gate had been red for eight releases.** `V57-1`, which guards the care-team
+disclaimer on the Help search results screen, pinned the sentence verbatim; app-v58 reworded it and
+the gate failed silently through app-v58 to app-v65. The app was never unsafe — the disclaimer and
+the one-tap route to the emergency page are both present. But eight releases shipped past a failing
+safety check because nobody read why it was failing. Fixed in app-v66. **Pinning literals is Rule 5's
+oldest lesson here and it keeps costing.**
+
+**Nothing in this session is live.** All three pushes went to `claude/caretracker-chemowell-updates-k80ydk`,
+not to `main`, so GitHub Pages has not rebuilt anything. Merging is a separate, deliberate step.
 
 ---
 
