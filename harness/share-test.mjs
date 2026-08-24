@@ -114,7 +114,21 @@ async function boot(mode) {
       if(b) b.click(); await new Promise(r=>setTimeout(r,800));
     });
   };
-  return { page, ctx, server, gotoReports, close: async () => { await ctx.close(); server.close(); } };
+  // v58 (Aaron: "all the backup stuff shouldn't live under reports. it should be under settings")
+  // moved the backup button, its password switch and the share control into a new Settings screen.
+  // Settings is a drawer destination, not a bottom-nav tab: renderBottomNav hardcodes a
+  // five-column grid and a sixth item silently overflows it.
+  const gotoSettings = async () => {
+    await page.evaluate(async () => {
+      const m = document.querySelector('[data-cal-menu-button]');
+      if (m) m.click();
+      await new Promise(r => setTimeout(r, 450));
+      const s = document.querySelector('[data-cal-drawer-item="settings"]');
+      if (s) { s.click(); await new Promise(r => setTimeout(r, 900)); }
+      else { const c = document.querySelector('[data-cal-drawer-close]'); if (c) c.click(); await new Promise(r => setTimeout(r, 300)); }
+    });
+  };
+  return { page, ctx, server, gotoReports, gotoSettings, close: async () => { await ctx.close(); server.close(); } };
 }
 
 const tapBackup = async (page) => {
@@ -137,16 +151,25 @@ console.log('\nSAVING AND SHARING — where a file went, and who else can see th
   await b.gotoReports();
 
   await run('SHARE-1-buttons-say-what-they-are-for',
-    'the three buttons name their purpose, not their file format', async () => {
-    const labels = await b.page.evaluate(() =>
+    'every save button names its purpose, not its file format', async () => {
+    const inReports = await b.page.evaluate(() =>
       [...document.querySelectorAll('[data-backup-btn]')].map(x => x.innerText.trim()));
-    assert(labels.length === 3, 'expected three save buttons, got ' + labels.length);
-    assert(labels.some(l => /restore/i.test(l)), 'nothing tells you which file can be put back: ' + brief(labels));
-    assert(labels.some(l => /send/i.test(l)), 'nothing tells you which file can be sent to someone: ' + brief(labels));
+    await b.gotoSettings();
+    const inSettings = await b.page.evaluate(() =>
+      [...document.querySelectorAll('[data-backup-btn]')].map(x => x.innerText.trim()));
+    const all = inReports.concat(inSettings);
+    assert(all.length === 3, 'expected three save buttons across the two screens, got ' + all.length + ': ' + brief(all));
+    // Reports holds the two DOCUMENTS; Settings holds the one file that can be loaded back.
+    assert(inReports.length === 2 && inSettings.length === 1,
+      'the split is wrong — Reports has ' + inReports.length + ' and Settings has ' + inSettings.length + ': ' + brief(all));
+    assert(inSettings.some(l => /backup/i.test(l)), 'nothing in Settings tells you which file can be put back: ' + brief(inSettings));
+    assert(inReports.some(l => /send|print/i.test(l)), 'nothing in Reports tells you which file can be handed to a doctor: ' + brief(inReports));
+    await b.gotoReports();
   });
 
   await run('SHARE-2-download-route-names-the-location',
     'on the download route the message says Downloads and names the file', async () => {
+    await b.gotoSettings();
     await tapBackup(b.page);
     const n = await noticeText(b.page);
     assert(n, 'no confirmation appeared after saving a backup');
@@ -164,6 +187,7 @@ console.log('\nSAVING AND SHARING — where a file went, and who else can see th
   await b.gotoReports();
   await run('SHARE-3-share-route-says-save-to-files',
     'on the share-sheet route the message points at Save to Files instead', async () => {
+    await b.gotoSettings();
     await tapBackup(b.page);
     const n = await noticeText(b.page);
     assert(n, 'no confirmation appeared after saving a backup');

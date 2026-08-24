@@ -61,6 +61,11 @@ export function serverTimestamp(){return Date.now();}
 `;
 
 const rawHtml = fs.readFileSync(APP_FILE, 'utf-8');
+// Read from the file under test, never typed in. Pinning a literal ('v57') is the failure this
+// project has a written rule against: three patches and several suites broke on legitimate
+// releases because of it, and this suite broke on the very next one after it was written.
+const APP_VER = (rawHtml.match(/APP_VERSION\s*=\s*'([^']+)'/) || [])[1];
+if (!APP_VER) { console.error('REFUSING: could not read APP_VERSION out of the file under test.'); process.exit(3); }
 const R = [];
 const assert = (c,m) => { if(!c) throw new Error(m); };
 const brief = (v) => JSON.stringify(v === null ? null : String(v).replace(/\s+/g,' ').slice(0, 240));
@@ -147,7 +152,7 @@ await run('LOG-3-typed-report-is-kept', 'what the person types is written down',
   const l = await logNow();
   assert(l.length === 1, 'expected one entry, got ' + l.length);
   assert(l[0].kind === 'problem' && /decimal point/.test(l[0].text), 'the entry does not hold what was typed: ' + brief(l[0]));
-  assert(l[0].app === 'v57', 'the entry does not record the build it came from: ' + brief(l[0].app));
+  assert(l[0].app === APP_VER, 'the entry records ' + brief(l[0].app) + ' but this build is ' + brief(APP_VER));
   assert(await page.evaluate(() => { const el = document.querySelector('#report-draft'); return !!el && el.value === ''; }),
     'the box was not cleared, so the same report gets filed twice');
 });
@@ -281,7 +286,7 @@ await run('LOG-14-produces-a-file', 'it produces a text file that can be sent', 
 });
 
 await run('LOG-15-file-names-the-build-and-the-device', 'the file says which build and which device it came from', async () => {
-  assert(/App version: v57/.test(report.text), 'no version in the file — a bug report without one is a guess');
+  assert(report.text.indexOf('App version: ' + APP_VER) >= 0, 'the file does not name this build (' + APP_VER + ') — a bug report without a version is a guess');
   assert(/Device: /.test(report.text), 'no device string in the file');
 });
 

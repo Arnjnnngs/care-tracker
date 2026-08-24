@@ -109,8 +109,15 @@ async function boot() {
   }, [at.getTime() - 3600000, PATIENT_MARK]);
   await page.waitForTimeout(1200);
   await page.evaluate(async () => {
-    const b=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('aria-label')||'')==='Reports'||x.textContent.trim()==='Reports');
-    if(b) b.click(); await new Promise(r=>setTimeout(r,900));
+    // v58 moved the backup, its password and the share control out of Reports and into a new
+    // Settings screen (Aaron: "all the backup stuff shouldn't live under reports"). Settings is a
+    // drawer destination, not a bottom-nav tab -- renderBottomNav hardcodes a five-column grid.
+    const m = document.querySelector('[data-cal-menu-button]');
+    if (m) m.click();
+    await new Promise(r => setTimeout(r, 450));
+    const s = document.querySelector('[data-cal-drawer-item="settings"]');
+    if (s) { s.click(); await new Promise(r => setTimeout(r, 900)); }
+    else { const c = document.querySelector('[data-cal-drawer-close]'); if (c) c.click(); await new Promise(r => setTimeout(r, 300)); }
   });
   return { page, ctx, server, close: async () => { await ctx.close(); server.close(); } };
 }

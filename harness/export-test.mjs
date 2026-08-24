@@ -531,6 +531,18 @@ async function newPage(browser, url, net, opts) {
 // user has no access to.
 async function openReports(page) {
   await page.click('nav button[aria-label="Reports"]');
+  await page.waitForSelector('[data-backup-btn="csv"]', { timeout: 10000 });
+}
+
+// v58 (Aaron: "all the backup stuff shouldn't live under reports. it should be under settings")
+// moved the backup button, its password switch, the restore row and the share control into a new
+// Settings screen. Reports keeps the spreadsheet and the printable record -- the two documents that
+// exist to be read or handed to a doctor. Settings is a drawer destination, not a bottom-nav tab:
+// renderBottomNav hardcodes a five-column grid and a sixth item silently overflows it.
+async function openSettings(page) {
+  await page.click('[data-cal-menu-button]');
+  await page.waitForSelector('[data-cal-drawer]', { timeout: 10000 });
+  await page.click('[data-cal-drawer-item="settings"]');
   await page.waitForSelector('[data-backup-restore-row]', { timeout: 10000 });
 }
 
@@ -643,12 +655,15 @@ async function runLiveChecks(suite, browser, url, net) {
   // -------------------------------------------------------------------------------------------
   const A = await newPage(browser, url, net);
   const page = A.page;
-  await openReports(page);
+  await openSettings(page);
 
-  // 1. The three files, downloaded, in one session, from one fixture.
+  // 1. The three files, downloaded, in one session, from one fixture -- now from the two screens
+  // they live on, which is itself a check that the split did not lose one of them.
   const backup1 = await grabDownload(page, () => page.click('[data-backup-btn="backup"]'));
+  await openReports(page);
   const csv = await grabDownload(page, () => page.click('[data-backup-btn="csv"]'));
   const report = await grabDownload(page, () => page.click('[data-backup-btn="report"]'));
+  await openSettings(page);
 
   const backupText = backup1.buf.toString('utf-8');
   const csvText = csv.buf.toString('utf-8');
@@ -789,6 +804,7 @@ async function runLiveChecks(suite, browser, url, net) {
     assert(/Restored \d+ record/.test(msg), 'restore did not report records: ' + msg);
     assert(/Nothing was removed/.test(msg), 'the restore notice does not say nothing was removed: ' + msg);
 
+    await openSettings(page);
     const backup2 = await grabDownload(page, () => page.click('[data-backup-btn="backup"]'));
     fs.writeFileSync(path.join(TMP, 'backup-2.json'), backup2.buf);
     const a = md5(backup1.buf), b = md5(backup2.buf);
@@ -889,21 +905,27 @@ async function runLiveChecks(suite, browser, url, net) {
     assert(after === before, 'a newer-format file was partially imported: ' + before + ' -> ' + after);
   });
 
-  await suite.run('COPY-spreadsheet-not-a-backup', 'the card does not call the spreadsheet a backup', async () => {
+  await suite.run('COPY-spreadsheet-not-a-backup', 'neither card calls the spreadsheet a backup, and Reports says where the backup went', async () => {
+    await openSettings(page);
     const text = await page.textContent('[data-backup-restore-row]');
-    const card = await page.evaluate(() => {
-      const el = document.querySelector('[data-backup-restore-row]');
-      return el && el.parentElement ? el.parentElement.innerText : '';
-    });
-    assert(!/spreadsheet as your backup/i.test(card), 'the card still calls the spreadsheet a backup');
-    assert(/only one of these that can be put back/i.test(card), 'the card does not say which file is restorable');
-    assert(/neither one can be loaded back/i.test(card), 'the card does not say the other two cannot be restored');
+    const settingsCard = await page.evaluate(() => (document.querySelector('[data-records-card="settings"]') || {}).innerText || '');
+    assert(!/spreadsheet as your backup/i.test(settingsCard), 'the Settings card still calls the spreadsheet a backup');
+    assert(/only file that can be loaded back/i.test(settingsCard), 'the Settings card does not say this is the file that can be restored');
     assert(/nothing is deleted/i.test(text), 'the restore row does not promise nothing is deleted');
-    assert(/appointments/i.test(card), 'the card still lists what is saved without mentioning appointments');
-    assert(!/The file saves to this phone/.test(card), 'the card still says "the file" when it offers three');
+    assert(/appointments/i.test(settingsCard), 'the Settings card lists what is saved without mentioning appointments');
     // Two live appointments in the fixture: the superseded version and the tombstoned one are
     // correctly not counted on screen, even though all four documents are in the backup.
-    assert(/2 appointments/.test(card), 'the counter line does not count the appointments the backup holds: ' + card.slice(0, 400));
+    assert(/2 appointments/.test(settingsCard), 'the counter line does not count the appointments the backup holds: ' + settingsCard.slice(0, 400));
+
+    await openReports(page);
+    const reportsCard = await page.evaluate(() => (document.querySelector('[data-records-card="reports"]') || {}).innerText || '');
+    assert(!/spreadsheet as your backup/i.test(reportsCard), 'the Reports card still calls the spreadsheet a backup');
+    assert(/cannot be loaded back|can be put back lives in Settings/i.test(reportsCard),
+      'the Reports card does not say these two cannot be restored: ' + reportsCard.slice(0, 400));
+    // The move must not read as a disappearance to someone who has tapped that button for months.
+    const pointer = await page.evaluate(() => (document.querySelector('[data-backup-pointer]') || {}).innerText || '');
+    assert(/settings/i.test(pointer), 'Reports does not say where the backup went: ' + JSON.stringify(pointer.slice(0, 200)));
+    await openSettings(page);
   });
 
   await suite.run('UI-restore-button-live', 'the restore button is enabled and is a real 44px target', async () => {
@@ -957,8 +979,7 @@ async function runLiveChecks(suite, browser, url, net) {
     assert(tagged, 'the file input is not in the DOM (it is created on first use — was the button tapped?)');
     await page.click('nav button[aria-label="Home"]');
     await page.waitForTimeout(60);
-    await page.click('nav button[aria-label="Reports"]');
-    await page.waitForSelector('[data-backup-restore-row]', { timeout: 10000 });
+    await openSettings(page);
     const state = await page.evaluate(() => {
       const el = document.querySelector('[data-backup-file-input]');
       if (!el) return 'input destroyed by render()';
@@ -983,7 +1004,7 @@ async function runLiveChecks(suite, browser, url, net) {
     prefs: null
   };
   const B = await newPage(browser, url, net, { fixture: fxAppts, medConfig: null });
-  await openReports(B.page);
+  await openSettings(B.page);
 
   await suite.run('BACKUP-enabled-with-only-appointments', 'a phone holding only appointments can still save a backup', async () => {
     const r = await B.page.evaluate(() => {
@@ -1003,7 +1024,7 @@ async function runLiveChecks(suite, browser, url, net) {
   // Session C — an EMPTY phone: restore must work with nothing logged
   // -------------------------------------------------------------------------------------------
   const C = await newPage(browser, url, net, { fixture: { entries: [], prefs: null }, medConfig: null });
-  await openReports(C.page);
+  await openSettings(C.page);
 
   await suite.run('RESTORE-enabled-when-empty', 'the restore control works on a phone with nothing on it', async () => {
     const r = await C.page.evaluate(() => {
@@ -1024,6 +1045,9 @@ async function runLiveChecks(suite, browser, url, net) {
     // Proven from the bytes of the printable record, not from an internal field: this is the
     // document that goes to an oncologist, and the failure mode being guarded against is it
     // reading "Medication (removed)" where a drug name belongs.
+    // The printable record is a Reports document, and after the restore above the page is sitting
+    // in Settings.
+    await openReports(C.page);
     const rep = await grabDownload(C.page, () => C.page.click('[data-backup-btn="report"]'));
     const text = rep.buf.toString('utf-8');
     fs.writeFileSync(path.join(TMP, 'report-after-restore.html'), rep.buf);
