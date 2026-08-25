@@ -66,6 +66,15 @@ try:
             notes.append("ACTIVE: the two scheduled tasks must be ENABLED, or nobody is watching.")
         else:
             notes.append("IDLE: correct only if no work is in progress.")
+    # The KEY that explains the flag must define both states, once each. It said IDLE twice and
+    # never defined ACTIVE for a week -- so the one document explaining when Aaron gets notified
+    # contradicted itself, and nothing caught it. A flag whose meaning is ambiguous is a flag that
+    # gets set wrong.
+    for state in ("ACTIVE", "IDLE"):
+        n = len(re.findall(r"^- \*\*`DISPATCH: %s`\*\*" % state, st, re.M))
+        if n != 1:
+            blockers.append("STATUS.md's dispatch key defines `DISPATCH: %s` %d time(s), expected "
+                            "exactly 1 — the flag's own definition is unreadable." % (state, n))
     live = re.search(r"\*\*Version\*\*\s*\|\s*(v[\d.]+)", st)
     if live and v and live.group(1) != v.group(1):
         warnings.append("STATUS.md says live is %s but the build here is %s — update STATUS.md "

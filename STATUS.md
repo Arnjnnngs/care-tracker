@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -14,8 +14,12 @@ to be notified when nothing is being worked on.
 
 - **`DISPATCH: IDLE`** — no active build. Dispatch must report NOTHING and send no
   notification. Silence is the correct outcome.
-- **`DISPATCH: IDLE`** — a build is genuinely in progress. Dispatch reports every 30 min
+- **`DISPATCH: ACTIVE`** — a build is genuinely in progress. Dispatch reports every 30 min
   and raises a stall warning if the newest commit is more than 90 minutes old.
+  *(This line read `IDLE` from 2026-08-17 until 2026-08-24 — so the file defining the flag said
+  `IDLE` meant BOTH "stay silent" and "a build is running", and never defined `ACTIVE` at all.
+  Found by the Project Manager gate. `pm.py` now fails on it, because a definition nobody can
+  read is how the flag gets set wrong in the first place.)*
 
 There are two independent layers, and BOTH must be switched on for Aaron to hear anything:
 
