@@ -84,12 +84,42 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v59 |
-| **Commit** | `f6befa5183d6` (local; GitHub mints its own on a web upload) |
+| **Version** | v60 — **BUILT, NOT DEPLOYED.** v59 is what is live on her phone. |
+| **Commit** | on branch `claude/caretracker-chemowell-updates-k80ydk`, not on `main` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `5a91f896c763a6111f93a4d4af9ba413` |
-| **sw.js md5** | `1b05c32f379ecadab6efeed6e09d75bc` |
-| **State** | Healthy. v59 verified 2026-08-24 by fresh clone + md5 on index.html and sw.js, and by fetching the deployed sw.js, which reports `caretracker-v59`. |
+| **index.html md5** | `aed5e82d34f3b4db89bf980507cb415d` |
+| **sw.js md5** | `3e7516905e996b75ae623b71f3f84045` |
+| **State** | v59 healthy and live, verified 2026-08-24. v60 is built and gated but NOT pushed to `main` — care-tracker needs Aaron's explicit go-ahead, and this change touches dose logic. |
+
+## v60 — BUILT, NOT DEPLOYED — the in-patient and chemo-day rebuild
+
+Aaron reported on 2026-08-26 that ending a hospital stay produced a wall of missed doses. It was
+three separate defects, and the in-patient logic was only part of it.
+
+**Every entry in that banner was Dexamethasone, twice a day, from 4 Aug onward.** `chemoOnly` — the
+flag marking it as taken only around chemo — was added to `DEFAULT_MEDS` *after* her device saved
+its medication list, and nothing backfills a new property onto an existing saved med. So a
+chemo-only steroid was tracked as an everyday medication against a hardcoded 8 AM / 2 PM schedule.
+
+**Independently, the wrong chemo date was being used for every historical day.** `chemoOffsetFor()`
+measured from the most recently *entered* chemo date, not the one nearest the day in question. Her
+4 Aug is one day after the 3 Aug treatment — which expects a Morning dose only, and she logged one
+at 10:30. It measured as 20 days out. Both fixes independently remove that first banner line.
+
+**And the half-day stay had no correct answer.** Suppression was all-or-nothing per calendar day,
+and every med card became an unloggable "In-Patient (Restricted)" tile for the whole stay. Aaron:
+*"they gave the Dex during the morning, but in the evening I had to end in patient bc I couldn't
+enter the Dex for the evening."* Leave the stay open and the evening dose is invisible; end it early
+and the hospital's morning doses get flagged missed. The app required a false record either way.
+
+Now: suppression is decided per dose window (the hospital's if she was admitted when it opened), and
+medications stay fully loggable throughout a stay.
+
+**Gates:** `inpatient-window-test` 10/10, `medflag-backfill-test` 9/9, `chemo-offset-test` 9/9 —
+all three falsified against the pre-fix code. The chemo suite uses her real chemo dates and asserts
+the exact banner line from her screenshot is gone.
+
+---
 
 Shipped in the v43.x line, all live and verified:
 - v43.1 (`fc2c345`) — export buttons fixed (they were dead: the `h()` null-attribute trap)

@@ -259,6 +259,38 @@ function migrateSenokotV37(med) {
 // whose id isn't already present in the saved list AND isn't archived (deliberately deleted) gets
 // appended, in DEFAULT_MEDS order at the end; existing customizations for meds already present are
 // left untouched.
+// BACKFILL PROPERTIES THAT A DEVICE'S SAVED LIST NEVER KNEW ABOUT.
+//
+// This is the root cause of the three weeks of false Dexamethasone alerts Aaron reported on
+// 2026-08-26: the banner listed a missed Morning and Afternoon dose EVERY DAY from Aug 4 onward.
+//
+// `chemoOnly` marks a medication as only expected around a chemo date. It was added to DEFAULT_MEDS
+// AFTER her device had already saved its own medication list. mergeMissingDefaultMeds() below adds
+// missing MEDICATIONS but never missing PROPERTIES, and normalizeMedication() then reads
+// `!!original.chemoOnly` -- turning "this device has never heard of this setting" into a definite
+// `false`, permanently. So Dexamethasone, a steroid taken only around chemo, was tracked as an
+// everyday medication, and because its id is special-cased in the dose logic it was handed a
+// hardcoded 8 AM / 2 PM schedule to be missed against. Twice a day, for three weeks.
+//
+// Any behaviour flag added to DEFAULT_MEDS after a device saved its list has the same fate. This
+// closes the whole class, not just chemoOnly.
+//
+// ABSENT ONLY, and that distinction is the entire safety of this function. A key the saved
+// medication does not have at all means "never seen"; take the default. A key it HAS -- even set to
+// false, even set to something the default disagrees with -- is the user's own choice and is left
+// exactly alone. Runs BEFORE normalizeMedication(), because normalizing is what destroys the
+// difference between absent and false.
+function backfillDefaultMedFlags(raw) {
+  if (!raw || !raw.id) return raw;
+  const def = DEFAULT_MEDS.find(d => d.id === raw.id);
+  if (!def) return raw; // a medication the user added themselves has no defaults to inherit
+  const out = { ...raw };
+  Object.keys(def).forEach(k => {
+    if (!Object.prototype.hasOwnProperty.call(raw, k)) out[k] = deepCopyMeds([def])[0][k];
+  });
+  return out;
+}
+
 function mergeMissingDefaultMeds(meds, archivedMeds) {
   const known = new Set(meds.map(m => m.id));
   const archivedIds = new Set(Object.keys(archivedMeds || {}));
@@ -274,7 +306,7 @@ function loadMedicationConfig() {
     const saved = JSON.parse(localStorage.getItem(MED_CONFIG_STORAGE_KEY));
     if (!saved || !Array.isArray(saved.meds) || !saved.meds.length) return fallback;
     const archivedMeds = normalizeArchivedMeds(saved.archivedMeds);
-    const meds = mergeMissingDefaultMeds(saved.meds.map(normalizeMedication).map(migrateSenokotV37), archivedMeds);
+    const meds = mergeMissingDefaultMeds(saved.meds.map(backfillDefaultMedFlags).map(normalizeMedication).map(migrateSenokotV37), archivedMeds);
     return { meds, archivedMeds };
   } catch (error) {
     console.warn('Medication configuration could not be loaded:', error);
@@ -499,7 +531,7 @@ function medsyncAdopt(cfg, json) {
   // release ever reaches a phone that already has a saved list. Both phones run the same merge over
   // the same shared string, so they still land on the same list; medsyncAppliedJson holds the
   // SHARED string, not the merged one, so the difference cannot start an adopt loop.
-  const meds = mergeMissingDefaultMeds(cfg.meds.map(normalizeMedication).map(migrateSenokotV37), archivedMeds);
+  const meds = mergeMissingDefaultMeds(cfg.meds.map(backfillDefaultMedFlags).map(normalizeMedication).map(migrateSenokotV37), archivedMeds);
   medsyncCacheLocal(meds, archivedMeds);
   medsyncAppliedJson = json;
   return { meds: meds, archivedMeds: archivedMeds };
@@ -982,7 +1014,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v59';
+const APP_VERSION = 'v60';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
@@ -1141,10 +1173,37 @@ function nextChemoTs() {
   const latest = state.chemoDates.reduce((a, b) => (((a.loggedAt || 0) > (b.loggedAt || 0)) ? a : b));
   return latest.ts > 0 ? latest.ts : null;
 }
+// Every chemo date on record, one per calendar day, oldest first.
+// Deduplicated because duplicates happen: her record carries TWO chemo_date entries for 2026-08-24.
+// Two entries for the same day must never mean two treatments.
+function chemoDayList() {
+  const seen = new Set();
+  return (state.chemoDates || [])
+    .filter(e => e && e.ts > 0)
+    .map(e => dayStart(e.ts))
+    .filter(d => { if (seen.has(d)) return false; seen.add(d); return true; })
+    .sort((a, b) => a - b);
+}
+// THE CHEMO DATE RELEVANT TO *THIS* DAY -- the nearest one, in either direction.
+//
+// This used to call nextChemoTs(), which despite its name returns the most recently ENTERED chemo
+// date, not the one nearest the day being asked about. Every chemo-relative decision in the app --
+// whether Dexamethasone is expected, whether Zofran is blocked, which Dexamethasone windows exist --
+// was therefore measured from whatever date happened to be typed in last, for EVERY day in history.
+// Log a past treatment after a future one and the whole timeline shifts underneath you.
+//
+// Her record shows the cost. Chemo on 2026-08-03; the most recently entered date was 2026-08-24. So
+// 4 Aug measured as 20 days from chemo instead of 1 day after it -- and a day-after-chemo day
+// expects ONLY a Morning dose (dexWindowsForOffset(1)), which is exactly the one she logged at
+// 10:30. Measured correctly there is no missed dose there at all; measured from the wrong date the
+// app invented an Afternoon one, and that is the first line of the banner she was looking at.
 function chemoOffsetFor(dayTs) {
-  const c = nextChemoTs();
-  if (c === null) return null;
-  return Math.round((dayStart(dayTs) - dayStart(c)) / 86400000);
+  const days = chemoDayList();
+  if (!days.length) return null;
+  const d0 = dayStart(dayTs);
+  let best = days[0];
+  for (const d of days) if (Math.abs(d - d0) < Math.abs(best - d0)) best = d;
+  return Math.round((d0 - best) / 86400000);
 }
 function dexActiveOn(dayTs) { const o = chemoOffsetFor(dayTs); return o !== null && o >= -1 && o <= 1; }
 // Zofran is blocked for 3 days: chemo day itself plus the 2 days after (e.g. chemo Thursday ->
@@ -1825,7 +1884,7 @@ function inpatientCoversMoment(ts) {
 async function logInpatientStart() {
   if (isInpatientActiveNow()) return;
   await addEntryDB({ medId: 'inpatient_start', dose: null, mg: 0, ts: simNow() });
-  setToast('In-Patient started — meds now show as Restricted');
+  setToast('In-Patient started — hospital doses will not be flagged missed');
 }
 async function logInpatientEnd() {
   if (!isInpatientActiveNow()) return;
@@ -2109,23 +2168,24 @@ function renderBottomNav() {
 // of scattering them across the individual Quick Log cards. Used for the Protonix-linked meds
 // (Buspirone/Paroxetine in the morning, Iron/Compazine in the evening).
 function renderGroupedMedsCard(title, meds, now) {
-  const inpatientNow = isInpatientActiveNow();
   const dueMeds = meds.filter(m => { const s = status(m); return !s.locked; });
   return h('section', null,
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' } },
       h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, title),
-      (dueMeds.length >= 2 && !inpatientNow) ? h('button', { onClick: () => setState({ timeModal: { type: 'multi', medIds: dueMeds.map(m => m.id), timeValue: nowLocalISO() } }), style: { minHeight: '40px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Take all (' + dueMeds.length + ')') : null
+      // 'Take all' was hidden during a stay for the same reason the cards were replaced, and it
+      // is restored for the same reason they were: a caregiver home for the evening on a half-day
+      // stay needs it most, not least.
+      (dueMeds.length >= 2) ? h('button', { onClick: () => setState({ timeModal: { type: 'multi', medIds: dueMeds.map(m => m.id), timeValue: nowLocalISO() } }), style: { minHeight: '40px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Take all (' + dueMeds.length + ')') : null
     ),
     h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', overflow: 'hidden', marginTop: '11px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       ...meds.map((med, i) => {
-        if (inpatientNow) {
-          return h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 15px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },
-            h('div', { style: { flex: '1', minWidth: '0' } },
-              h('div', { style: { fontSize: '15.5px', fontWeight: '800', letterSpacing: '-0.01em', color: '#9A6419' } }, med.name + ' - In-Patient (Restricted)'),
-              h('div', { style: { fontSize: '12px', color: '#7A5313' } }, 'Given by hospital staff')
-            )
-          );
-        }
+        // The dead "In-Patient (Restricted)" tile that used to be returned here is GONE (2026-08-26).
+        // It replaced every medication card with an unloggable element for the whole stay, so a
+        // caregiver at the bedside, or home for the evening on a half-day stay, had no way to record
+        // a real dose. Aaron hit exactly that: "I had to end in patient bc I couldn't enter the Dex
+        // for the evening." An app must never require falsifying one true record to enter another.
+        // The stay is still unmistakable -- the pinned banner at the top of Home says so -- and the
+        // hospital's own doses are handled by inpatientCoversMoment(), not by hiding the button.
         const st = status(med);
         const todayLogs = entriesFor(med.id).filter(e => e.ts >= dayStart(now));
         const lastToday = todayLogs[todayLogs.length - 1];
@@ -2697,7 +2757,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       h('span', { style: { flexShrink: '0', width: '28px', height: '28px', borderRadius: '50%', background: '#9A6419', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '15px' } }, '+'),
       h('div', { style: { flex: '1' } },
         h('div', { style: { fontWeight: '800', color: '#9A6419', fontSize: '15.5px', letterSpacing: '0.02em', marginBottom: '4px', textTransform: 'uppercase' } }, 'In-Patient Active'),
-        h('div', { style: { color: '#7A5313', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' } }, (ipDayN !== null ? ('Day ' + ipDayN + ' — ') : '') + 'meds below show as Restricted')
+        h('div', { style: { color: '#7A5313', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' } }, (ipDayN !== null ? ('Day ' + ipDayN + ' — ') : '') + 'doses given by hospital staff are not counted as missed. You can still log anything yourself.')
       ),
       h('button', { onClick: logInpatientEnd, style: { flexShrink: '0', minHeight: '42px', padding: '0 16px', borderRadius: '11px', background: '#9A6419', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(110,70,10,0.35)' } }, 'Log In-Patient End')
     ));
@@ -3113,12 +3173,8 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
 
   // Quick Log section
   const medCards = state.meds.filter(m => m.quickLog && (!m.chemoOnly || (dexActiveOn(now) && !status(m).courseComplete))).map(med => {
-    if (inpatientActiveNow) {
-      return h('div', { style: { background: 'rgba(154,100,25,0.08)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1.5px dashed rgba(154,100,25,0.35)', borderRadius: '16px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '4px' } },
-        h('div', { style: { fontSize: '15px', fontWeight: '800', letterSpacing: '-0.01em', color: '#8B5715' } }, med.name + ' - In-Patient (Restricted)'),
-        h('div', { style: { fontSize: '11.5px', color: '#704E22' } }, 'Given by hospital staff — not logged in this app')
-      );
-    }
+    // See the matching note in renderGroupedMedsCard(): the unloggable In-Patient tile is gone.
+    // Medications stay fully loggable during a stay.
     const st = status(med);
     const locked = !!st.locked;
     const last = latest(med.id);
@@ -3507,7 +3563,7 @@ function renderMedicationEditor() {
       renderPillToggle('Show as its own Home card', !!form.quickLog, () => toggleMedicationForm('quickLog'), 'Gives this medication its own compact card in the Quick Log section on Home.'),
       renderPillToggle('Group with morning meds', !!form.groupedMorning, () => toggleMedicationForm('groupedMorning'), 'Lists it in the shared "Morning meds" card instead of its own Quick Log card — for meds taken alongside Protonix in the morning.'),
       renderPillToggle('Group with evening meds', !!form.groupedEvening, () => toggleMedicationForm('groupedEvening'), 'Lists it in the shared "Evening meds" card instead of its own Quick Log card — for meds taken alongside Protonix at night.'),
-      renderPillToggle('Chemo-day only', !!form.chemoOnly, () => toggleMedicationForm('chemoOnly'), 'Only appears on Home during the chemo-adjacent day window (day before through day after chemo) — hidden the rest of the time.')
+      renderPillToggle('Chemo-day only', !!form.chemoOnly, () => toggleMedicationForm('chemoOnly'), 'For medications taken only around treatment. On Home it appears just for the chemo-adjacent days (day before through day after), AND — the part this description used to leave out — it is only checked for missed doses on those days. With this OFF, a chemo-only medication is treated as an everyday one and will be reported missed every single day.')
     ),
     h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '15px' } },
       h('button', { onClick: () => setState({ medEditor: null }), style: { minHeight: '42px', padding: '0 14px', borderRadius: '11px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(212,104,138,0.18)', color: '#6E5261', fontSize: '13px', fontWeight: '800' } }, 'Discard'),
