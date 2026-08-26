@@ -63,7 +63,9 @@ try:
     else:
         notes.append("dispatch flag = %s" % m.group(1))
         if m.group(1).upper() == "ACTIVE":
-            notes.append("ACTIVE: the two scheduled tasks must be ENABLED, or nobody is watching.")
+            notes.append("ACTIVE: both hourly tasks are ALWAYS enabled and push to Aaron's "
+                         "phone. This flag is the ONLY thing keeping them quiet — do not set "
+                         "ACTIVE until work is actually underway.")
         else:
             notes.append("IDLE: correct only if no work is in progress.")
     # The KEY that explains the flag must define both states, once each. It said IDLE twice and

@@ -21,12 +21,27 @@ to be notified when nothing is being worked on.
   Found by the Project Manager gate. `pm.py` now fails on it, because a definition nobody can
   read is how the flag gets set wrong in the first place.)*
 
-There are two independent layers, and BOTH must be switched on for Aaron to hear anything:
+**CORRECTED 2026-08-26 — the description below was WRONG, and Aaron caught it.**
 
-1. **The scheduled tasks themselves.** Two of them, offset 30 minutes apart
+There is only ONE switch that matters, not two:
+
+1. **The scheduled tasks are ALWAYS ON.** Two of them, offset 30 minutes apart
    (`trig_01A4vopDhe7gpm9xGXwz1v9f` at :22 and `trig_014Wx8yagUcAtxTqKCPVQH2w` at :52).
-   They are DISABLED by default and must be explicitly enabled when work starts.
-2. **This flag.** Even if the tasks are enabled, `IDLE` makes them stay silent.
+   This file used to claim they are "DISABLED by default and must be explicitly enabled when
+   work starts." **That is false.** Both have been `enabled: true` since 2026-08-21, both fire
+   EVERY HOUR, and both have `push: true` straight to Aaron's phone. Verified against the live
+   trigger list on 2026-08-26: both `last_run` SUCCEEDED, at 15:52 and 16:22 UTC that day.
+2. **This flag is therefore the only thing standing between Aaron and an hourly phone
+   notification.** `IDLE` makes each firing answer `idle — no report` and go quiet. `ACTIVE`
+   makes the very next firing — within the hour, possibly within minutes — push a status report
+   to his phone.
+
+**So the flag must not be set to `ACTIVE` until work is genuinely underway.** Setting it while
+still planning, scoping, or waiting on a decision sends him a real notification about a build
+that has not started. That happened on 2026-08-26: the flag went ACTIVE during planning and the
+16:22 firing pushed a report for work that had not begun. Aaron noticed, and was right to.
+
+Flip it when the first commit of the build is about to land — not when the plan is written.
 
 **Whoever starts a build owns both switches.** Set the flag to `ACTIVE` and enable the two
 tasks when work begins; set it back to `IDLE` and disable them the moment work stops or
