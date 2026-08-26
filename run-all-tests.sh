@@ -56,7 +56,13 @@ for f in "$DIR"/*.mjs; do
     [ "$match" -eq 1 ] || continue
   fi
   printf '  %-26s ' "$name"
-  out=$(timeout 600 node "$f" 2>&1); code=$?
+  # Suites that accept --file default to a PATCH-OUTPUT directory (harness/work/) that is gitignored
+  # scratch and that nothing in the repo rebuilds. Left to their defaults, six care-tracker gates
+  # simply died on a missing file -- which reads as "cannot start", i.e. indistinguishable from a
+  # gate that passed. Point every such suite at the build actually being released.
+  args=()
+  grep -q -- '--file' "$f" && args=(--file "$PWD/index.html")
+  out=$(timeout 900 node "$f" "${args[@]}" 2>&1); code=$?
 
   # A suite that dies before its first assertion is its OWN failure class. Folding it in with
   # ordinary red hides the worst case -- a gate that never ran at all, looking like one that did.
