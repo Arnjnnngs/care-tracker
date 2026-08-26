@@ -1158,7 +1158,9 @@ const MISSED_TRACK_SINCE = new Date(2026, 6, 12).getTime(); // Jul 12, 2026 — 
 function missedDosesFor(dayTs, now) {
   const d0 = dayStart(dayTs);
   if (d0 < dayStart(MISSED_TRACK_SINCE)) return [];
-  if (isInpatientDay(d0)) return []; // meds given by hospital staff that day — not tracked here
+  // The whole-day early return that used to sit here was removed 2026-08-26. Suppression is now
+  // decided per WINDOW, at the bottom of this function, so a half-day stay suppresses only the
+  // doses that fell inside it. See inpatientCoversMoment().
   const out = [];
   state.meds.filter(m => m.alerts && m.windows).forEach(med => {
     if (med.chemoOnly && !dexActiveOn(d0)) return;
@@ -1209,7 +1211,11 @@ function missedDosesFor(dayTs, now) {
       if (hit) { used.add(hit); win.covered = true; }
     });
     wins.forEach(win => {
-      if (!win.covered && now >= win.we) out.push({ missed: true, medId: med.id, ts: win.ws, windowName: win.w.name });
+      if (win.covered || now < win.we) return;
+      // Hospital staff gave this one. Suppressed per WINDOW, not per day, so the rest of a half-day
+      // stay is still tracked normally.
+      if (inpatientCoversMoment(win.ws)) return;
+      out.push({ missed: true, medId: med.id, ts: win.ws, windowName: win.w.name });
     });
   });
   return out.sort((a, b) => a.ts - b.ts);
@@ -1791,10 +1797,30 @@ function daysSinceInpatientStart() {
   if (!cur) return null;
   return Math.floor((dayStart(state.now) - dayStart(cur.start)) / 86400000) + 1; // start day counts as Day 1
 }
+// WHOLE-DAY test. Kept for DISPLAY only -- "was any part of this day a hospital day", which is the
+// right question for a History badge. It is the WRONG question for missed doses; see below.
 function isInpatientDay(ts) {
   const d0 = dayStart(ts), d1 = d0 + 86400000;
   if (state.entries.some(e => e.medId === 'inpatient' && dayStart(e.ts) === d0)) return true; // legacy marker
   return inpatientPeriods().some(p => p.start < d1 && (p.end === null || p.end > d0));
+}
+// MOMENT test -- was she actually in the hospital at this instant?
+//
+// Missed-dose suppression used isInpatientDay() and so was all-or-nothing for a whole calendar day.
+// Aaron, 2026-08-26, on a half-day stay: "they gave the Dex during the morning, but in the evening I
+// had to end in patient bc I couldn't enter the Dex for the evening." A stay starts and ends at a
+// TIME. Suppressing the entire day means the evening dose she took at home is invisible; ending the
+// stay early to log it means the morning doses the hospital gave are wrongly flagged missed. There
+// was no way to record the truth, so the app forced a false record either way.
+//
+// A dose window is the hospital's if she was admitted at the moment it OPENED -- that is when the
+// dose became due and somebody had to give it. Discharged at 5:51 PM with an 8 PM window? That one
+// is hers to log, and it is tracked normally.
+//
+// The legacy whole-day 'inpatient' marker has no times, so it still suppresses its whole day.
+function inpatientCoversMoment(ts) {
+  if (state.entries.some(e => e.medId === 'inpatient' && dayStart(e.ts) === dayStart(ts))) return true;
+  return inpatientPeriods().some(p => p.start <= ts && (p.end === null || p.end > ts));
 }
 async function logInpatientStart() {
   if (isInpatientActiveNow()) return;
