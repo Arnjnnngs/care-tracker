@@ -215,7 +215,22 @@ for (const dev of DEVICES) {
     }
     await page.waitForTimeout(900);
 
-    const found = await page.evaluate(scanFn, dev.w);
+    // THE WHOLE-PAGE WIDTH, checked before the per-element scan — because under mobile emulation the
+    // per-element scan CANNOT see this class. If content refuses to fit, Chromium widens the layout
+    // viewport instead of overflowing; every element then "fits" its now-wider page and the scan
+    // reports clean while the real phone side-scrolls. Found in ChemoWell, where a <select> sized to
+    // its longest option forced a 379px minimum and eight widths came back clean anyway. This file
+    // had the same blind spot and care-tracker happened not to be triggering it.
+    const layout = await page.evaluate(() => ({ inner: window.innerWidth, doc: document.documentElement.scrollWidth }));
+    if (layout.inner > dev.w + 1 || layout.doc > layout.inner + 1) {
+      problems++;
+      report.push({ dev: dev.name, os: dev.os, w: dev.w, screen, found: [{
+        text: 'THE PAGE ITSELF IS WIDER THAN THE PHONE', tag: 'document',
+        kind: 'app needs ' + Math.max(layout.inner, layout.doc) + 'px on a ' + dev.w + 'px screen — it will scroll sideways',
+        overBy: Math.max(layout.inner, layout.doc) - dev.w, box: layout.doc + 'x-', ws: 'n/a' }] });
+    }
+
+    const found = await page.evaluate(scanFn, Math.max(dev.w, layout.inner));
 
     if (SHOTS) {
       fs.mkdirSync(SHOTS, { recursive: true });
@@ -235,7 +250,15 @@ for (const dev of DEVICES) {
       continue;
     }
     await page.waitForTimeout(800);
-    const found = await page.evaluate(scanFn, dev.w);
+    const layoutX = await page.evaluate(() => ({ inner: window.innerWidth, doc: document.documentElement.scrollWidth }));
+    if (layoutX.inner > dev.w + 1 || layoutX.doc > layoutX.inner + 1) {
+      problems++;
+      report.push({ dev: dev.name, os: dev.os, w: dev.w, screen: extra.name, found: [{
+        text: 'THE PAGE ITSELF IS WIDER THAN THE PHONE', tag: 'document',
+        kind: 'app needs ' + Math.max(layoutX.inner, layoutX.doc) + 'px on a ' + dev.w + 'px screen — it will scroll sideways',
+        overBy: Math.max(layoutX.inner, layoutX.doc) - dev.w, box: layoutX.doc + 'x-', ws: 'n/a' }] });
+    }
+    const found = await page.evaluate(scanFn, Math.max(dev.w, layoutX.inner));
     if (SHOTS) {
       fs.mkdirSync(SHOTS, { recursive: true });
       await page.screenshot({ path: path.join(SHOTS, dev.w + '-' + extra.name + '.png') });
