@@ -212,6 +212,35 @@ if _pinned:
                     "    red on the next release for no defect:\n    %s"
                     % (len(_u), "\n    ".join(_u[:8])))
 
+# --- 7b. SOMEBODY MUST HAVE LOOKED AT IT ------------------------------------------------------
+# Aaron, 2026-08-29: "how is auditing being done if nothing can be seen to make sure everything
+# looks right? ... this is why I need you to have eyes on the actual view...that's the real audit
+# and always have been the real audit."
+#
+# Every check in this file reads bytes. None had ever measured a pixel, and the Designer stage was
+# skipped twice on the reasoning that "no visual surface changed" -- untrue for a release that
+# deleted card tiles and rewrote banner copy. The cost, found the first time anything rendered the
+# app: at 320px the In-Patient button ran off the right edge and the banner wrapped one or two words
+# per line, on the screen a caregiver reads in a hospital.
+#
+# "It looks fine to me" is not evidence and neither is a passing unit suite. An artifact is.
+_ver = v.group(1) if v else None
+if _ver:
+    _changed_ui, _rc_ui = sh("git -C %s diff --name-only origin/main 2>/dev/null" % REPO)
+    if _rc_ui == 0 and "index.html" in _changed_ui.split():
+        _render = os.path.join(REPO, "outputs", "RENDER-%s.md" % _ver)
+        if not os.path.exists(_render):
+            blockers.append("NOBODY LOOKED AT IT — index.html changed but there is no\n"
+                            "    outputs/RENDER-%s.md. Run harness/overflow-scan.mjs at iPhone widths,\n"
+                            "    record the result, and LOOK at the screenshots before calling this done." % _ver)
+        else:
+            _txt = open(_render, encoding="utf-8").read()
+            if "CLEAN" not in _txt:
+                warnings.append("outputs/RENDER-%s.md does not record a CLEAN scan — disclose what "
+                                "still overflows." % _ver)
+            else:
+                notes.append("render audit recorded for %s (outputs/RENDER-%s.md)" % (_ver, _ver))
+
 # --- 8. THE NOTES MUST MOVE WITH THE CODE ------------------------------------------------------
 # Aaron, 2026-08-24: "we need to make sure that notes are being updated each final push and commit."
 # Documentation failures are SILENT -- nothing breaks when a changelog goes stale, so no amount of
