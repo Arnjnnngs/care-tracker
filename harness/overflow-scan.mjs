@@ -86,6 +86,12 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 // most common Android width in the world.
 const DEVICES = [
   { name: 'iPhone SE (1st gen)',    w: 320, h: 568, os: 'iOS' },
+  // BETWEEN THE BREAKPOINTS. This list used to jump 320 -> 360, so a CSS rule with a boundary
+  // anywhere between them was never tested on either side of it. In ChemoWell a nav-label media
+  // query spilled text right through that band and the scan passed it, because it never looked
+  // there. Android's "Display size" setting puts real users in this band.
+  { name: 'Android small (display size)', w: 330, h: 720, os: 'Android' },
+  { name: 'Android small (display size)', w: 345, h: 760, os: 'Android' },
   { name: 'Galaxy S/A (most common)', w: 360, h: 800, os: 'Android' },
   { name: 'iPhone SE 2/3, 8',       w: 375, h: 667, os: 'iOS' },
   { name: 'Galaxy S22/S23',         w: 384, h: 854, os: 'Android' },
@@ -145,9 +151,39 @@ const scanFn = function (vw) {
     const info = consider(el);
     if (!info) return;
     const { cs, r, text, tag } = info;
-    const clipped = cs.textOverflow === 'ellipsis';   // deliberate truncation, not a defect
+    // DELIBERATE TRUNCATION NEEDS BOTH PROPERTIES. text-overflow alone does nothing without an
+    // overflow that clips — so treating ellipsis on its own as "intended" switched this check off
+    // permanently for any element carrying a text-overflow that never actually truncates anything.
+    const clipped = cs.textOverflow === 'ellipsis' &&
+      (cs.overflowX === 'hidden' || cs.overflowX === 'clip' || cs.overflow === 'hidden' || cs.overflow === 'clip');
     let kind = null, overBy = 0;
 
+    // A0. A <select> is measured as a CONTROL, not as text. A closed select renders none of its
+    // options, so a Range over its contents measures nothing and the previous version silently
+    // covered no dropdown at all while its comment claimed otherwise — the same shape of false
+    // claim this scan exists to catch. A dropdown that does not fit its column is the defect that
+    // forced this whole app to 379px, so it gets its own rule.
+    if (tag === 'select') {
+      const parentSel = el.parentElement;
+      if (parentSel && !clipped) {
+        const pcs = getComputedStyle(parentSel);
+        const pr = parentSel.getBoundingClientRect();
+        const padL = parseFloat(pcs.paddingLeft) || 0, padR = parseFloat(pcs.paddingRight) || 0;
+        const innerW = pr.width - padL - padR;
+        if (innerW > 0 && r.width - innerW > 1.5) {
+          kind = 'the dropdown is wider than the column it sits in';
+          overBy = Math.round(r.width - innerW);
+        }
+      }
+      if (!kind && r.right > vw + 1) { kind = 'the dropdown runs off the right edge'; overBy = Math.round(r.right - vw); }
+      if (kind) {
+        const labelS = text.slice(0, 64).replace(/\s+/g, ' ');
+        const keyS = labelS + '|' + Math.round(r.top) + '|' + kind;
+        if (!seen.has(keyS)) { seen.add(keyS);
+          out.push({ text: labelS, tag, kind, overBy, box: Math.round(r.width) + 'x' + Math.round(r.height), ws: cs.whiteSpace }); }
+      }
+      return;
+    }
     // A. THE TEXT is wider than the box it has to live in. Aaron's words are "some wording spills
     // outside the text box", so measure the wording, not the element. Comparing the element's RECT to
     // its parent flagged every oversized tap target in the app -- a 44x44 close button overhanging a
@@ -270,7 +306,13 @@ for (const dev of DEVICES) {
       // describes for navigateTo(), one level down. The app marks the live tab aria-current="page",
       // so that is the receipt to demand.
       const live = find();
-      return !!(live && live.getAttribute('aria-current') === 'page');
+      if (!(live && live.getAttribute('aria-current') === 'page')) return false;
+      // AND THE SCREEN MUST HAVE SOMETHING ON IT. In ChemoWell a view that rendered completely
+      // blank still set aria-current and still counted as scanned and clean. "I navigated there"
+      // and "there was anything there" are two different claims.
+      const nav = document.querySelector('nav');
+      const chrome = nav ? nav.innerText.length : 0;
+      return (document.body.innerText.length - chrome) > 80;
     }, screen);
     if (!navigated) {
       console.log('  COULD NOT REACH ' + screen.toUpperCase() + ' at ' + dev.w + 'px — not scanned');
