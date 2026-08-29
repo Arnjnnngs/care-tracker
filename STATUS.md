@@ -87,9 +87,36 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **Version** | v60 — **BUILT, NOT DEPLOYED.** v59 is what is live on her phone. |
 | **Commit** | on branch `claude/caretracker-chemowell-updates-k80ydk`, not on `main` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `aed5e82d34f3b4db89bf980507cb415d` |
+| **index.html md5** | `f9346583045be5d9a338e741678da01a` |
 | **sw.js md5** | `3e7516905e996b75ae623b71f3f84045` |
 | **State** | v59 healthy and live, verified 2026-08-24. v60 is built and gated but NOT pushed to `main` — care-tracker needs Aaron's explicit go-ahead, and this change touches dose logic. |
+
+## AUDIT BLOCKER, 2026-08-29 — clearing a treatment date did not clear it
+
+The Zero Day Auditor FAILED the retroactive audit of app-v67 and beta-v60. The defect is mine and
+was **already live in both ChemoWell apps**, and latent in this repo's unshipped v60.
+
+Clearing a treatment date is append-only — the Firestore rules forbid edits, so the Clear button
+appends a **tombstone**: a `chemo_date` row with `ts: 0`. The new `chemoDayList()` filtered
+`ts > 0`, which discarded the tombstone and kept **the date it was meant to erase**. So
+`nextChemoTs()` honoured the clear while `chemoOffsetFor()` did not, and the app held two
+contradictory beliefs at once: Zofran stayed blocked showing a **1 Jan 1970** unlock time, and
+Dexamethasone kept raising missed-dose alerts against a deleted schedule. A date entered by mistake
+could never be taken back.
+
+**Brandi is not affected** — her record contains zero tombstones; she has never cleared a date. The
+defect was latent for her and would have bitten the first time anyone tapped Clear.
+
+Also fixed, same audit: **Zofran's block is directional and "nearest date" is the wrong question
+for it.** The block runs treatment day through +2. With treatments on 24 and 27 Aug, the 26th is one
+day *before* the 27th and two days *after* the 24th; nearest returned −1 and silently unblocked a
+day that should be blocked. `chemoOffsetSinceLast()` answers that question separately. Dexamethasone's
+window is symmetric so nearest stays correct for it — one distance cannot answer both questions.
+
+`harness/chemo-offset-test.mjs` 17/17, and **5 of those checks go red on the code that is live
+right now**.
+
+---
 
 ## v60 — BUILT, NOT DEPLOYED — the in-patient and chemo-day rebuild
 

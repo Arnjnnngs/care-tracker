@@ -1177,12 +1177,44 @@ function nextChemoTs() {
 // Deduplicated because duplicates happen: her record carries TWO chemo_date entries for 2026-08-24.
 // Two entries for the same day must never mean two treatments.
 function chemoDayList() {
+  // CLEARING A TREATMENT DATE IS APPEND-ONLY. The Clear button cannot delete the original entry --
+  // the Firestore rules forbid edits -- so it writes a TOMBSTONE: a chemo_date row with ts: 0. The
+  // app calls these "cleared-chemo tombstones" elsewhere in this file.
+  //
+  // The first version of this function did `.filter(e => e.ts > 0)`, which threw away the TOMBSTONE
+  // and kept the DATE IT WAS MEANT TO ERASE -- so a cleared date went on driving everything. The
+  // Zero Day Auditor caught it: nextChemoTs() returned null (correctly cleared) while
+  // chemoOffsetFor() still measured from the deleted date, so the app held two contradictory beliefs
+  // at once. Zofran stayed blocked showing a 1 Jan 1970 unlock time, Dexamethasone kept raising
+  // missed-dose alerts against a schedule that no longer existed, and a date typed by mistake could
+  // never be taken back. Shipped live in app-v67 and beta-v60 before this was found.
+  //
+  // Ordered by loggedAt, because that is the order the caregiver actually did things in, and a
+  // tombstone wipes every date recorded BEFORE it. Setting a new date after a clear starts fresh.
+  const evs = (state.chemoDates || []).filter(Boolean).slice()
+    .sort((a, b) => (a.loggedAt || a.ts || 0) - (b.loggedAt || b.ts || 0));
+  let days = [];
+  evs.forEach(e => {
+    if (!e.ts) { days = []; return; } // tombstone: everything before this was cleared
+    days.push(dayStart(e.ts));
+  });
   const seen = new Set();
-  return (state.chemoDates || [])
-    .filter(e => e && e.ts > 0)
-    .map(e => dayStart(e.ts))
-    .filter(d => { if (seen.has(d)) return false; seen.add(d); return true; })
-    .sort((a, b) => a - b);
+  return days.filter(d => { if (seen.has(d)) return false; seen.add(d); return true; })
+             .sort((a, b) => a - b);
+}
+// THE MOST RECENT TREATMENT ON OR BEFORE THIS DAY -- a DIRECTIONAL offset, not the nearest one.
+//
+// Also from the audit. "Nearest date" answers "is this day treatment-adjacent", which is the right
+// question for Dexamethasone's symmetric -1..+1 window. It is the WRONG question for Zofran, whose
+// block runs strictly FORWARD from a treatment (day 0 through +2). With treatments on 24 and 27
+// Aug, the 26th is one day BEFORE the 27th and two days AFTER the 24th; nearest picks the 27th,
+// returns -1, and Zofran silently unblocks on a day it should be blocked. One distance cannot
+// answer two different questions.
+function chemoOffsetSinceLast(dayTs) {
+  const d0 = dayStart(dayTs);
+  let prev = null;
+  chemoDayList().forEach(d => { if (d <= d0 && (prev === null || d > prev)) prev = d; });
+  return prev === null ? null : Math.round((d0 - prev) / 86400000);
 }
 // THE CHEMO DATE RELEVANT TO *THIS* DAY -- the nearest one, in either direction.
 //
@@ -1210,7 +1242,7 @@ function dexActiveOn(dayTs) { const o = chemoOffsetFor(dayTs); return o !== null
 // blocked Thu/Fri/Sat, opens Sunday). Confirmed by Aaron as the original, correct spec — v61/v62
 // of this file incorrectly "fixed" this to a 2-day block based on stale internal documentation;
 // reverted once confirmed with Aaron. See README.md version history for details.
-function zofranBlockedOn(dayTs) { const o = chemoOffsetFor(dayTs); return o !== null && o >= 0 && o <= 2; }
+function zofranBlockedOn(dayTs) { const o = chemoOffsetSinceLast(dayTs); return o !== null && o >= 0 && o <= 2; }
 function dexWindowsForOffset(offset) { return offset === 1 ? [{ start: 8, end: 12, name: 'Morning' }] : [{ start: 8, end: 12, name: 'Morning' }, { start: 14, end: 18, name: 'Afternoon' }]; }
 
 const MISSED_TRACK_SINCE = new Date(2026, 6, 12).getTime(); // Jul 12, 2026 — no retroactive flags before this
