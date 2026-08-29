@@ -3428,7 +3428,13 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
         h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '4px', minWidth: '0', flex: '1', flexWrap: 'wrap' } },
           h('div', { style: { fontSize: '15.5px', fontWeight: '800', letterSpacing: '-0.01em', color: '#342530', whiteSpace: 'nowrap' } }, med.name),
-          h('div', { style: { fontSize: '11.5px', color: '#664F5D', fontWeight: '600', whiteSpace: 'nowrap' } }, med.sub)
+          // v60: was whiteSpace 'nowrap'. The generic-name line is the longest text on a Quick Log
+          // card -- "Acetaminophen \u00b7 Oral suspension" is 218px -- and nowrap held it on one line, so it
+          // ran 57px past the card at 320px, 17px at 360px and 2px at 375px. Wrapped rather than
+          // truncated: this line is what tells a caregiver WHICH drug this actually is, and an
+          // ellipsis on a medication card costs more than the line it saves. The row already sets
+          // flexWrap, so it drops under the name and wraps inside the card.
+          h('div', { style: { fontSize: '11.5px', color: '#664F5D', fontWeight: '600', minWidth: '0', overflowWrap: 'anywhere' } }, med.sub)
         ),
         locked ?
           ((st.ceilingHit || st.chemoBlock) ?

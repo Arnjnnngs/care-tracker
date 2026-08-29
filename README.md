@@ -181,3 +181,18 @@ Both files live in the repo root and serve as the single source of truth for onb
   1 day either side. The label promised a window the app did not obey. Everything now goes through
   `clampTreatmentDays()` (0–14, blank → 1), so the editor, the badge, the save path and the logic
   cannot disagree. Ported from the same fix in ChemoWell app-v68.
+
+- **v60 (in progress) — text spilling outside its box on Home, and the scan that could not see it.**
+  The Quick Log card's generic-name line ("Acetaminophen · Oral suspension") was held on a single
+  line by `white-space: nowrap`. At 320px it ran 57px past the edge of its card, 17px at 360px — the
+  most common Android width — and 2px at 375px. It now wraps under the medication name instead of
+  being truncated: that line is what tells a caregiver which drug this actually is, so an ellipsis
+  would cost more than it saves.
+
+  This was live, and the first render scan reported the app clean anyway. Its overflow test asked
+  `scrollWidth > clientWidth`, which is always 0 for an inline element — meaning for nearly every
+  piece of text in the app — plus "did it leave the viewport", which text spilling a card in the
+  middle of the screen never does. The Zero Day Auditor proved the same blindness in ChemoWell by
+  deleting a layout fix and watching the scan stay green. The scan now measures the *rendered text*
+  against the box it has to live in, and it also refuses to call a screen clean unless the app
+  confirms it actually navigated there (`aria-current="page"`).

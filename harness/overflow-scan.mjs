@@ -116,29 +116,85 @@ const SCREENS = ['home', 'meds', 'reports', 'inpatient', 'symptoms'];
 // ONE scanner body, used by the tab loop and the overlay loop alike. It was duplicated at first
 // and the copies drifted within minutes -- the overlay copy silently scanned nothing.
 const scanFn = function (vw) {
-      const out = [], seen = new Set();
-      document.querySelectorAll('*').forEach(el => {
-        const cs = getComputedStyle(el);
-        if (cs.display === 'none' || cs.visibility === 'hidden' || !el.getClientRects().length) return;
-        const r = el.getBoundingClientRect();
-        if (!r.width || !r.height) return;
-        const text = (el.textContent || '').trim();
-        if (!text) return;
-        if ([...el.children].some(c => (c.textContent || '').trim())) return; // leaves only
-        const scrollable = cs.overflowX === 'auto' || cs.overflowX === 'scroll';
-        const clipped = cs.textOverflow === 'ellipsis';   // deliberate truncation, not a defect
-        const overflowsSelf = el.scrollWidth - el.clientWidth > 1 && !scrollable && !clipped;
-        const offRight = r.right > vw + 1, offLeft = r.left < -1;
-        if (!overflowsSelf && !offRight && !offLeft) return;
-        const label = text.slice(0, 64).replace(/\s+/g, ' ');
-        const key = label + '|' + Math.round(r.top);
-        if (seen.has(key)) return; seen.add(key);
-        out.push({ text: label, tag: el.tagName.toLowerCase(),
-          kind: overflowsSelf ? 'content wider than its box' : (offRight ? 'off the right edge' : 'off the left edge'),
-          overBy: overflowsSelf ? el.scrollWidth - el.clientWidth : Math.round(offRight ? r.right - vw : -r.left),
-          box: Math.round(r.width) + 'x' + Math.round(r.height), ws: cs.whiteSpace });
-      });
-      return out;
+  // WHAT "SPILLS ITS BOX" ACTUALLY MEANS, rewritten after the Zero Day Auditor deleted the nav-label
+  // fix and this scan still said CLEAN. The old test was scrollWidth > clientWidth, which is ALWAYS 0
+  // for an inline element -- i.e. for nearly every piece of text in this app -- plus "is it off the
+  // viewport", which text overflowing a grid cell in the middle of the screen never is. It also
+  // skipped every <select>, because a select has child <option>s and the "leaves only" filter threw
+  // it out. It was blind to both defects it had been written to catch.
+  //
+  // The real question is whether an element sticks out of THE BOX IT IS IN. So: measure each element
+  // against its parent's padding box. That catches a 65px label in a 58px grid cell, a select wider
+  // than its column, and anything pushed past the edge of the screen, all with one rule.
+  const out = [], seen = new Set();
+  const isScrollable = cs => cs.overflowX === 'auto' || cs.overflowX === 'scroll';
+  const consider = el => {
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || !el.getClientRects().length) return null;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const text = (el.textContent || '').trim();
+    if (!text) return null;
+    // Leaves, plus <select> — a select's options are children with text, which is exactly how the
+    // previous version excused itself from looking at the control that broke the layout.
+    const tag = el.tagName.toLowerCase();
+    if (tag !== 'select' && [...el.children].some(c => (c.textContent || '').trim())) return null;
+    return { cs, r, text, tag };
+  };
+  document.querySelectorAll('*').forEach(el => {
+    const info = consider(el);
+    if (!info) return;
+    const { cs, r, text, tag } = info;
+    const clipped = cs.textOverflow === 'ellipsis';   // deliberate truncation, not a defect
+    let kind = null, overBy = 0;
+
+    // A. THE TEXT is wider than the box it has to live in. Aaron's words are "some wording spills
+    // outside the text box", so measure the wording, not the element. Comparing the element's RECT to
+    // its parent flagged every oversized tap target in the app -- a 44x44 close button overhanging a
+    // 39px header slot is deliberate iOS touch sizing, not a defect, and a gate that cries about those
+    // is a gate nobody keeps. So: measure the rendered text with a Range and ask whether THAT fits.
+    const parent = el.parentElement;
+    if (parent && parent !== document.body && parent !== document.documentElement && !clipped) {
+      const pcs = getComputedStyle(parent);
+      const parentClips = isScrollable(pcs) || pcs.overflow === 'auto' || pcs.overflow === 'scroll';
+      if (!parentClips && cs.whiteSpace !== 'normal' || !parentClips) {
+        const pr = parent.getBoundingClientRect();
+        const padL = parseFloat(pcs.paddingLeft) || 0, padR = parseFloat(pcs.paddingRight) || 0;
+        const innerW = (pr.width - padL - padR);
+        let textW = 0;
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const rects = [...range.getClientRects()];
+          textW = rects.length ? Math.max(...rects.map(q => q.width)) : 0;
+        } catch (e) { textW = 0; }
+        // Also account for the element's own horizontal padding/border: the text has to fit inside
+        // the parent along with them.
+        const own = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        const need = textW + own;
+        // 1.5px, not 1: sub-pixel layout rounding produces sub-pixel "overflow" that is not real.
+        if (textW > 0 && innerW > 0 && need - innerW > 1.5) {
+          kind = 'the wording is wider than the box it sits in';
+          overBy = Math.round(need - innerW);
+        }
+      }
+    }
+    // B. Its own content does not fit (block elements, scrollable content).
+    if (!kind && !isScrollable(cs) && !clipped && el.scrollWidth - el.clientWidth > 1) {
+      kind = 'content wider than its box'; overBy = el.scrollWidth - el.clientWidth;
+    }
+    // C. Past the edge of the screen.
+    if (!kind && r.right > vw + 1) { kind = 'off the right edge'; overBy = Math.round(r.right - vw); }
+    if (!kind && r.left < -1) { kind = 'off the left edge'; overBy = Math.round(-r.left); }
+    if (!kind) return;
+
+    const label = text.slice(0, 64).replace(/\s+/g, ' ');
+    const key = label + '|' + Math.round(r.top) + '|' + kind;
+    if (seen.has(key)) return; seen.add(key);
+    out.push({ text: label, tag, kind, overBy,
+      box: Math.round(r.width) + 'x' + Math.round(r.height), ws: cs.whiteSpace });
+  });
+  return out;
 };
 
 let problems = 0, unreachable = 0;
@@ -198,15 +254,23 @@ for (const dev of DEVICES) {
     // which differed only because the on-screen clock ticks. A gate that cannot fail is bad; a gate
     // that reports covering ground it never touched is worse, and I shipped that claim to Aaron.
     // Clicking the actual button also tests the real interaction rather than an internal function.
-    const navigated = await page.evaluate(label => {
+    const navigated = await page.evaluate(async label => {
       const want = label.toLowerCase();
-      const btn = [...document.querySelectorAll('button')].find(b => {
+      const find = () => [...document.querySelectorAll('button')].find(b => {
         const t = ((b.getAttribute('aria-label') || b.innerText || '')).trim().toLowerCase();
         return t === want || t === want.replace('inpatient', 'in-patient');
       });
+      const btn = find();
       if (!btn) return false;
       btn.click();
-      return true;
+      await new Promise(r => setTimeout(r, 600));
+      // PROVE THE VIEW CHANGED, do not just prove a button was clicked. The previous version returned
+      // true unconditionally; in ChemoWell the Zero Day Auditor made three of five tabs completely
+      // dead and the scan still reported every combination clean. Same trap this file's own header
+      // describes for navigateTo(), one level down. The app marks the live tab aria-current="page",
+      // so that is the receipt to demand.
+      const live = find();
+      return !!(live && live.getAttribute('aria-current') === 'page');
     }, screen);
     if (!navigated) {
       console.log('  COULD NOT REACH ' + screen.toUpperCase() + ' at ' + dev.w + 'px — not scanned');
@@ -243,7 +307,14 @@ for (const dev of DEVICES) {
   }
   // then the overlay screens
   for (const extra of EXTRA) {
-    const opened = await extra.open(page);
+    let opened = await extra.open(page);
+    if (opened) {
+      await page.waitForTimeout(600);
+      // A click is not a screen: the editor must actually be on screen. Its Save control is the
+      // marker that exists only while it is open.
+      opened = await page.evaluate(() => [...document.querySelectorAll('button')]
+        .some(b => /^(save|save changes|add medication)$/i.test((b.innerText || '').trim())));
+    }
     if (!opened) {
       console.log('  COULD NOT OPEN ' + extra.name + ' at ' + dev.w + 'px — not scanned');
       unreachable++;
