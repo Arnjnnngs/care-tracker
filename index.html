@@ -1235,6 +1235,33 @@ function chemoDayList() {
 // Aug, the 26th is one day BEFORE the 27th and two days AFTER the 24th; nearest picks the 27th,
 // returns -1, and Zofran silently unblocks on a day it should be blocked. One distance cannot
 // answer two different questions.
+// WHICH TREATMENT DATE DID THIS DAY'S ANSWER ACTUALLY COME FROM?
+//
+// Display sites printed dayStart(nextChemoTs()) -- the most recently ENTERED date -- while the
+// condition wrapping them used the new offsets. The two disagree, so the card refused to unlock and
+// then named a date three weeks in the past ("Opens Thu, Aug 6"), and when no date existed at all
+// dayStart(null) produced 1 Jan 1970. Both were reported as fixed in the release notes before they
+// were; the Zero Day Auditor measured them still happening.
+// A label must be derived from the same date the decision was, or it is not a label, it is a guess.
+function chemoDayFor(dayTs) {
+  const days = chemoDayList();
+  if (!days.length) return null;
+  const d0 = dayStart(dayTs);
+  let best = days[0];
+  days.forEach(d => { if (Math.abs(d - d0) < Math.abs(best - d0)) best = d; });
+  return best;
+}
+// The treatment day actually holding Zofran shut -- the latest one whose 0..+2 block covers this
+// day. With two treatments close together it is not necessarily the nearest.
+function zofranBlockingDay(dayTs) {
+  const d0 = dayStart(dayTs);
+  let best = null;
+  chemoDayList().forEach(d => {
+    const o = Math.round((d0 - d) / 86400000);
+    if (o >= 0 && o <= 2 && (best === null || d > best)) best = d;
+  });
+  return best;
+}
 function chemoOffsetSinceLast(dayTs) {
   const d0 = dayStart(dayTs);
   let prev = null;
@@ -1279,11 +1306,28 @@ function dexActiveOn(dayTs) { const o = chemoOffsetFor(dayTs); return o !== null
 // Defaults are 1 and 1, which reproduce the old fixed window exactly -- so every existing
 // medication behaves identically until somebody deliberately changes it.
 function treatmentActiveOn(med, dayTs) {
-  const o = chemoOffsetFor(dayTs);
-  if (o === null) return false;
+  // ANY TREATMENT, not the nearest one. This asked chemoOffsetFor() -- "how far is the closest
+  // treatment" -- and then tested that single number against the window. With treatments on 24 and
+  // 27 Aug and a window of 0 before / 3 after, the 26th is TWO days after the 24th and inside the
+  // window, but the closest date is the 27th, one day ahead, so it measured -1 and the medication
+  // vanished. Caught by the Zero Day Auditor after I had already "fixed" the directional problem
+  // for Zofran and written in the release notes that it was settled. It was settled for one caller
+  // out of two.
+  //
+  // The failure runs both ways and one direction is worse: a treatment-only medication disappears
+  // from Home and its misses go unreported, and an EXCLUDED medication is offered on a day it
+  // should be withheld.
+  //
+  // A window belongs to a treatment, and there can be several. Ask every one of them.
+  const days = chemoDayList();
+  if (!days.length) return false;
+  const d0 = dayStart(dayTs);
   const before = Number.isFinite(med && med.treatmentDaysBefore) ? med.treatmentDaysBefore : 1;
   const after  = Number.isFinite(med && med.treatmentDaysAfter)  ? med.treatmentDaysAfter  : 1;
-  return o >= -before && o <= after;
+  return days.some(d => {
+    const o = Math.round((d0 - d) / 86400000);
+    return o >= -before && o <= after;
+  });
 }
 // Plain-language summary of a medication's window, for the editor and the badge.
 function treatmentWindowLabel(med) {
@@ -1298,7 +1342,16 @@ function treatmentWindowLabel(med) {
 // blocked Thu/Fri/Sat, opens Sunday). Confirmed by Aaron as the original, correct spec — v61/v62
 // of this file incorrectly "fixed" this to a 2-day block based on stale internal documentation;
 // reverted once confirmed with Aaron. See README.md version history for details.
-function zofranBlockedOn(dayTs) { const o = chemoOffsetSinceLast(dayTs); return o !== null && o >= 0 && o <= 2; }
+// Blocked on any treatment day and the two days after it. Same correction as treatmentActiveOn:
+// ask every treatment, not one. chemoOffsetSinceLast() got the direction right but still answered
+// for a single date, so a second treatment inside the block could shorten it.
+function zofranBlockedOn(dayTs) {
+  const d0 = dayStart(dayTs);
+  return chemoDayList().some(d => {
+    const o = Math.round((d0 - d) / 86400000);
+    return o >= 0 && o <= 2;
+  });
+}
 function dexWindowsForOffset(offset) { return offset === 1 ? [{ start: 8, end: 12, name: 'Morning' }] : [{ start: 8, end: 12, name: 'Morning' }, { start: 14, end: 18, name: 'Afternoon' }]; }
 
 const MISSED_TRACK_SINCE = new Date(2026, 6, 12).getTime(); // Jul 12, 2026 — no retroactive flags before this
@@ -1440,7 +1493,17 @@ function status(med) {
   const now = state.now;
   if (med.id === 'zofran' && zofranBlockedOn(now)) {
     // 3-day block (chemo day + 2 following days, see zofranBlockedOn) — opens on day+3 at 8am.
-    return { locked: true, chemoBlock: true, availableAt: dayStart(nextChemoTs()) + 3 * 86400000 + 8 * 3600000 };
+    // From the treatment day that is actually blocking, never from nextChemoTs(), and never
+    // unguarded: dayStart(null) is 1 Jan 1970 and that is what the card used to display.
+    //
+    // Returning availableAt: null instead would just move the 1970 downstream -- fmtTime(null)
+    // renders the epoch too, at three separate call sites. zofranBlockedOn() and zofranBlockingDay()
+    // ask the same question of the same list, so a null here means they disagree, which is not
+    // reachable today. If it ever becomes reachable, falling through and leaving the medication
+    // AVAILABLE is the safe failure: a caregiver can still give a dose the app should have allowed,
+    // whereas a lock stamped 1 Jan 1970 strands it with no way forward.
+    const zb = zofranBlockingDay(now);
+    if (zb !== null) return { locked: true, chemoBlock: true, availableAt: zb + 3 * 86400000 + 8 * 3600000 };
   }
   const es = entriesFor(med.id).slice().sort((a, b) => a.ts - b.ts);
   if (med.type === 'gap') {
@@ -2935,7 +2998,8 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // Chemo plan banner — persistent from 2 days before chemo through the day after
   const chemoOffNow = chemoOffsetFor(now);
   if (chemoOffNow !== null && chemoOffNow >= -2 && chemoOffNow <= 1) {
-    const cLabel = new Date(dayStart(nextChemoTs())).toLocaleDateString([], { weekday: 'long', month: 'numeric', day: 'numeric' });
+    const cDay = chemoDayFor(now);
+    const cLabel = cDay === null ? '' : new Date(cDay).toLocaleDateString([], { weekday: 'long', month: 'numeric', day: 'numeric' });
     let cTitle = '', cBody = '';
     if (chemoOffNow === -2) { cTitle = 'Chemo ' + cLabel; cBody = 'Steroids start TOMORROW — Dexamethasone 2 tablets at 8 AM & 2 PM, for 3 days. Zofran will be restricted on chemo days.'; }
     else if (chemoOffNow === -1) { cTitle = 'Chemo tomorrow — ' + cLabel; cBody = 'Steroids start TODAY (day 1 of 3): Dexamethasone 2 tablets at 8 AM & 2 PM. Zofran will be restricted tomorrow and the day after.'; }

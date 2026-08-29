@@ -41,10 +41,11 @@ vm.runInContext([
   fn('dayStart'), fn('entriesFor'), fn('nextChemoTs'), fn('chemoDayList'), fn('chemoOffsetFor'),
   fn('chemoOffsetSinceLast'), fn('dexActiveOn'), fn('dexWindowsForOffset'),
   fn('clampTreatmentDays'), fn('treatmentActiveOn'), fn('treatmentWindowLabel'),
+  fn('chemoDayFor'), fn('zofranBlockingDay'), fn('zofranBlockedOn'),
   fn('safeMedicationId'), fn('normalizeMedication'),
   fn('inpatientEntries'), fn('inpatientPeriods'), fn('isInpatientDay'), fn('inpatientCoversMoment'),
   fn('missedDosesFor'),
-  'globalThis.__api = { treatmentActiveOn, treatmentWindowLabel, clampTreatmentDays, normalizeMedication, missedDosesFor, dayStart };'
+  'globalThis.__api = { treatmentActiveOn, treatmentWindowLabel, clampTreatmentDays, normalizeMedication, missedDosesFor, dayStart, chemoDayFor, zofranBlockingDay, zofranBlockedOn };'
 ].join('\n'), ctx);
 const A = ctx.__api;
 
@@ -99,6 +100,69 @@ t('a treatment-day-only medication is not reported missed the day after',
 t('and IS still reported missed on the treatment day itself',
   A.missedDosesFor(D(8, 24), NOW).length > 0,
   A.missedDosesFor(D(8, 24), NOW).map(m => m.windowName).join(', ') || 'none');
+
+// ---- ASK EVERY TREATMENT, NOT THE NEAREST ONE (Zero Day Auditor, app-v68 round) -------------
+// This asked chemoOffsetFor() -- distance to the CLOSEST treatment -- and tested that one number
+// against the window. Treatments on 24 and 27 Aug with a 0-before/3-after window: the 26th is two
+// days after the 24th and inside the window, but the closest date is the 27th, so it measured -1
+// and the medication vanished. I had already "fixed" the directional problem for Zofran and written
+// in the release notes that it was settled; it was settled for one caller out of two.
+ctx.state.chemoDates = [
+  { medId: 'chemo_date', ts: D(8, 24), loggedAt: 1 },
+  { medId: 'chemo_date', ts: D(8, 27), loggedAt: 2 }
+];
+const wide = { treatmentDaysBefore: 0, treatmentDaysAfter: 3 };
+t('26 Aug is 2 days after the 24th and stays active, though the 27th is nearer',
+  A.treatmentActiveOn(wide, D(8, 26)) === true);
+t('the window still ends where it should', A.treatmentActiveOn(wide, D(8, 31)) === false);
+t('Zofran is blocked across BOTH treatments, not just the nearer one',
+  [24, 25, 26, 27, 28, 29].every(d => A.zofranBlockedOn(D(8, d))) && !A.zofranBlockedOn(D(8, 30)));
+
+// ---- A LABEL MUST NAME THE DATE ITS OWN ANSWER CAME FROM -------------------------------------
+// Display sites printed dayStart(nextChemoTs()) -- the most recently ENTERED date -- while the
+// condition around them used the new offsets. The card refused to unlock and then named a date
+// three weeks in the past; with no date at all, dayStart(null) printed 1 Jan 1970. Both were
+// reported fixed in the release notes before they were.
+ctx.state.chemoDates = [
+  { medId: 'chemo_date', ts: D(8, 24), loggedAt: 1 },
+  { medId: 'chemo_date', ts: D(8, 3),  loggedAt: 2 }   // the OLDER date entered LAST
+];
+t('the banner names the treatment nearest the day, not the one typed last',
+  A.chemoDayFor(D(8, 25)) === D(8, 24),
+  new Date(A.chemoDayFor(D(8, 25))).toLocaleDateString());
+t('with no treatment date, there is nothing to name — and never 1 Jan 1970',
+  (ctx.state.chemoDates = [], A.chemoDayFor(D(8, 25)) === null && A.zofranBlockingDay(D(8, 25)) === null));
+ctx.state.chemoDates = [
+  { medId: 'chemo_date', ts: D(8, 24), loggedAt: 1 },
+  { medId: 'chemo_date', ts: D(8, 26), loggedAt: 2 }
+];
+t('Zofran names the treatment actually holding it shut, the later block',
+  A.zofranBlockingDay(D(8, 27)) === D(8, 26),
+  new Date(A.zofranBlockingDay(D(8, 27))).toLocaleDateString());
+
+// The three checks above prove the HELPERS are right. They do not prove the screens USE them --
+// and when this suite was falsified against the pre-fix build, the label checks stayed green
+// because the mutant only changed the call sites. So assert on the call sites directly: the raw
+// pattern that produced both "Opens Thu, Aug 6" and 1 Jan 1970 must not appear anywhere.
+const code = html.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+// A LITERAL-PATTERN BAN WAS THE FIRST ATTEMPT AND IT WAS WEAK. It looked for the exact string
+// `dayStart(nextChemoTs())`, and when this suite was falsified the mutant wrote the same thing in
+// two steps -- `const cDay = nextChemoTs()` then `dayStart(cDay)` -- and sailed past. A check that
+// only catches one spelling of a mistake is close to no check.
+//
+// So pin the CALL SITES instead. nextChemoTs() has exactly two legitimate consumers, both of which
+// genuinely want "the treatment date most recently entered" rather than a per-day answer:
+//   * the Chemo schedule card, which displays the next/last treatment itself
+//   * the printable report header
+// Every OTHER use is a per-day question and belongs to chemoDayFor() or zofranBlockingDay().
+// Adding a third call site turns this red, and whoever adds it has to come and justify it here.
+//
+// WHAT THIS STILL DOES NOT PROVE, plainly: that the screens render the right date. It proves the
+// helpers are correct and that nothing new reaches for the wrong source. Proving the rendered text
+// needs a browser assertion, which this project does not yet have for these cards.
+const nextChemoCalls = (code.match(/nextChemoTs\(\)/g) || []).length - 1; // minus its own definition
+t('nextChemoTs() still has exactly its two legitimate display consumers',
+  nextChemoCalls === 2, nextChemoCalls + ' call site(s)');
 
 console.log('\n' + pass + '/' + (pass + fail) + ' checks passed');
 process.exit(fail ? 1 : 0);
