@@ -37,6 +37,14 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
 
 ### Ready to build
 
+- [ ] **The missed-dose banner is a wall of run-on text on a phone.** Visible in Aaron's own
+  screenshot and reproduced by the new render check: every unresolved miss since `MISSED_TRACK_SINCE`
+  is concatenated into ONE paragraph separated by `·`, so a handful of days fills the whole screen
+  and the caregiver scrolls past it rather than reading it. It should be a short count with the
+  detail behind a tap, or one row per miss with the oldest collapsed. **An alert nobody reads is an
+  alert that does not work**, and this is the screen that matters most. Needs the Designer stage.
+
+
 - [ ] **Units picker for CareTracker (°F/°C, lbs/kg) — and the per-entry tagging it depends on.**
   Raised by Aaron 2026-08-24 while asking about "Litres" vs "Liters". ChemoWell already has this;
   CareTracker has `CONFIG.tempUnit` with no UI and no weight unit at all. **Order matters:** a

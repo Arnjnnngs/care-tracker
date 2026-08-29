@@ -24,6 +24,14 @@ button:focus-visible{outline:2px solid #AA5375;outline-offset:2px;}
 @keyframes cw-spin{to{transform:rotate(360deg);}}
 .spin{animation:cw-spin 0.7s linear infinite;}
 @media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s;}}
+/* NAV LABELS ON THE NARROWEST PHONES.
+   The bottom bar is five equal columns. At 320px (iPhone SE, iPhone mini) each is about 59px and
+   "Symptoms" and "In-Patient" need ~61px at 10.5px, so both ran past their column and clipped.
+   A media query rather than shrinking the type for everyone: the labels stay full size on every
+   phone that has room, and only the narrowest devices pay for it. Truncating with an ellipsis was
+   the alternative and it is worse -- "Sympto..." on a five-item nav bar costs more legibility than
+   the two pixels it saves. Found by harness/overflow-scan.mjs, this project's first render check. */
+@media (max-width:360px){.navlabel{font-size:9.5px;letter-spacing:-0.03em;}}
 input{-webkit-tap-highlight-color:transparent;font-family:inherit;}
 input:focus{outline:2px solid #AA5375;outline-offset:0;border-color:#AA5375;}
 ::placeholder{color:#7D6974 !important;opacity:1;}
@@ -2186,9 +2194,12 @@ function renderBottomNav() {
     h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '4px' } },
       ...items.map(item => {
         const active = state.view === item.key;
-        return h('button', { onClick: () => navigateTo(item.key), 'aria-label': item.label, 'aria-current': active ? 'page' : 'false', style: { minHeight: '54px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px', borderRadius: '14px', color: active ? '#AA5375' : '#705B66', background: active ? 'rgba(170,83,117,0.13)' : 'transparent', fontSize: '10.5px', fontWeight: active ? '800' : '700', transition: 'background .18s ease, color .18s ease' } },
+        return h('button', { onClick: () => navigateTo(item.key), 'aria-label': item.label, 'aria-current': active ? 'page' : 'false', style: { minHeight: '54px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '3px', borderRadius: '14px', color: active ? '#AA5375' : '#705B66', background: active ? 'rgba(170,83,117,0.13)' : 'transparent', fontSize: '10.5px', fontWeight: active ? '800' : '700', transition: 'background .18s ease, color .18s ease', minWidth: '0', paddingLeft: '2px', paddingRight: '2px' } },
           appIcon(item.icon, 21),
-          h('span', null, item.label)
+          // At 320px the five columns are 64px each and 'In-Patient'/'Symptoms' ran 4px past
+          // their column. Tightened rather than truncated -- an ellipsis on a five-item nav bar
+          // costs more legibility than the two pixels it saves.
+          h('span', { className: 'navlabel', style: { maxWidth: '100%' } }, item.label)
         );
       })
     )
@@ -2785,13 +2796,27 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // In-Patient banner — pinned, non-dismissible, only shown while a stay is active
   if (inpatientActiveNow) {
     const ipDayN = daysSinceInpatientStart();
-    parts.push(h('div', { style: { background: 'rgba(154,100,25,0.16)', border: '2px solid #9A6419', borderRadius: '16px', padding: '15px 16px', display: 'flex', gap: '12px', alignItems: 'center', boxShadow: '0 4px 24px rgba(154,100,25,0.25)' } },
-      h('span', { style: { flexShrink: '0', width: '28px', height: '28px', borderRadius: '50%', background: '#9A6419', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '15px' } }, '+'),
-      h('div', { style: { flex: '1' } },
-        h('div', { style: { fontWeight: '800', color: '#9A6419', fontSize: '15.5px', letterSpacing: '0.02em', marginBottom: '4px', textTransform: 'uppercase' } }, 'In-Patient Active'),
-        h('div', { style: { color: '#7A5313', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' } }, (ipDayN !== null ? ('Day ' + ipDayN + ' — ') : '') + 'doses given by hospital staff are not counted as missed. You can still log anything yourself.')
+    // COLUMN, not a row, and the button gets its own full-width line.
+    //
+    // This was a flex ROW -- icon, text, button -- with the button flexShrink:0. At 320px (iPhone
+    // SE and mini) the button is 173px wide, which squeezed the text column to about 100px: the
+    // sentence wrapped one or two words per line into a banner half a screen tall, AND the button
+    // still ran 12px off the right edge, clipped. Found 2026-08-29 by the first render-layer check
+    // this project has ever had, after Aaron said "on an iPhone, some wording spills outside the
+    // text box". Every existing gate passed this screen because every existing gate reads bytes.
+    //
+    // The copy was mine too and made it worse: I replaced the short original with a two-sentence
+    // explanation without once looking at it on a phone. Shortened here to what a caregiver
+    // actually needs at a glance; the full explanation lives in Help.
+    parts.push(h('div', { style: { background: 'rgba(154,100,25,0.16)', border: '2px solid #9A6419', borderRadius: '16px', padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: '11px', boxShadow: '0 4px 24px rgba(154,100,25,0.25)' } },
+      h('div', { style: { display: 'flex', gap: '12px', alignItems: 'flex-start' } },
+        h('span', { style: { flexShrink: '0', width: '28px', height: '28px', borderRadius: '50%', background: '#9A6419', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '15px' } }, '+'),
+        h('div', { style: { flex: '1', minWidth: '0' } },
+          h('div', { style: { fontWeight: '800', color: '#9A6419', fontSize: '15.5px', letterSpacing: '0.02em', marginBottom: '4px', textTransform: 'uppercase' } }, 'In-Patient Active'),
+          h('div', { style: { color: '#7A5313', fontSize: '14px', fontWeight: '600', lineHeight: '1.45' } }, (ipDayN !== null ? ('Day ' + ipDayN + ' · ') : '') + 'Hospital doses aren\u2019t counted missed. You can still log.')
+        )
       ),
-      h('button', { onClick: logInpatientEnd, style: { flexShrink: '0', minHeight: '42px', padding: '0 16px', borderRadius: '11px', background: '#9A6419', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(110,70,10,0.35)' } }, 'Log In-Patient End')
+      h('button', { onClick: logInpatientEnd, style: { width: '100%', minHeight: '44px', padding: '0 16px', borderRadius: '11px', background: '#9A6419', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(110,70,10,0.35)' } }, 'Log In-Patient End')
     ));
   }
 
