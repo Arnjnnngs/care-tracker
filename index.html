@@ -1043,7 +1043,7 @@ const APP_VERSION = 'v60';
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, bkProtect: false, bkPw: '', bkPw2: '', bkLocked: null, bkUnlockPw: '', reportKind: 'problem', reportDraft: '', reportNotice: null, reportBusy: false, reportShowAll: false, reportConfirmClear: false, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missedBannerOpen: false, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, bkProtect: false, bkPw: '', bkPw2: '', bkLocked: null, bkUnlockPw: '', reportKind: 'problem', reportDraft: '', reportNotice: null, reportBusy: false, reportShowAll: false, reportConfirmClear: false, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -2989,15 +2989,56 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // and dismiss the current list without deleting the underlying data (new misses still show).
   // Persisted via Firestore (caretracker_prefs) so it survives reloads across devices.
   if (bannerItems.length) {
+    // BANNER REDESIGN (v60). Aaron: "the long list of banner needs a real redesign."
+    //
+    // Every miss used to be rendered as a full sentence -- "Tuesday, Aug 4: Dexamethasone - Afternoon
+    // window (2:00 PM) closed with no dose logged" -- and all of them were joined with ' · ' into ONE
+    // paragraph. Twelve misses made a wall of near-identical text with the useful words (which day,
+    // which drug, which window) buried mid-sentence and repeated twelve times. He screenshotted
+    // exactly that. A caregiver cannot scan it, and an alert that cannot be scanned is not an alert.
+    //
+    // The rewrite says the same thing structurally instead of in prose: a COUNT in the heading so the
+    // size of the problem is one glance, then one row per miss GROUPED UNDER ITS DAY so the day is
+    // written once rather than per row, and the repeated boilerplate ("closed with no dose logged")
+    // dropped entirely -- it is a missed-dose banner, that is what every row means.
+    //
+    // CAPPED AT THREE DAYS with the rest behind a control, because the failure mode Aaron hit is a
+    // long backlog after an in-patient stay, and a banner that grows without limit pushes Today's
+    // actual medication cards off the screen. The cap is on DAYS, not rows: cutting mid-day would
+    // hide some of a day's misses while showing others, which reads as "that dose was fine".
+    const byDay = [];
+    bannerItems.forEach(m => {
+      const row = byDay.find(g => g.when === m.when);
+      if (row) row.items.push(m); else byDay.push({ when: m.when, items: [m] });
+    });
+    const CAP = 3;
+    const collapsed = byDay.length > CAP && !state.missedBannerOpen;
+    const shownDays = collapsed ? byDay.slice(0, CAP) : byDay;
+    const hiddenDays = byDay.length - shownDays.length;
+    const hiddenDoses = byDay.slice(shownDays.length).reduce((n, g) => n + g.items.length, 0);
     parts.push(h('div', { style: { background: 'rgba(192,69,59,0.16)', border: '2px solid #C0453B', borderRadius: '16px', padding: '15px 16px', display: 'flex', gap: '12px', alignItems: 'flex-start', boxShadow: '0 4px 24px rgba(192,69,59,0.25)' } },
       h('span', { style: { flexShrink: '0', width: '28px', height: '28px', borderRadius: '50%', background: '#C0453B', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '17px' } }, '!'),
-      h('div', { style: { flex: '1' } },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '4px' } },
-          h('div', { style: { fontWeight: '800', color: '#C0453B', fontSize: '15.5px', letterSpacing: '0.02em', textTransform: 'uppercase' } }, 'Missed dose' + (bannerItems.length > 1 ? 's' : '')),
-          h('button', { onClick: clearMissedDoses, style: { flexShrink: '0', minHeight: '30px', padding: '0 12px', borderRadius: '99px', background: 'rgba(192,69,59,0.14)', border: '1px solid rgba(192,69,59,0.4)', color: '#A13830', fontSize: '11.5px', fontWeight: '800' } }, 'Clear')
+      h('div', { style: { flex: '1', minWidth: '0' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '8px' } },
+          // The count leads. "3 missed doses" answers the only question a caregiver opening the app
+          // actually has, before any of the detail below is read.
+          h('div', { style: { fontWeight: '800', color: '#C0453B', fontSize: '15.5px', letterSpacing: '0.02em', textTransform: 'uppercase', minWidth: '0', overflowWrap: 'anywhere' } },
+            bannerItems.length + ' missed dose' + (bannerItems.length > 1 ? 's' : '')),
+          h('button', { onClick: clearMissedDoses, 'data-missed-clear': 'true', style: { flexShrink: '0', minHeight: '30px', padding: '0 12px', borderRadius: '99px', background: 'rgba(192,69,59,0.14)', border: '1px solid rgba(192,69,59,0.4)', color: '#A13830', fontSize: '11.5px', fontWeight: '800' } }, 'Clear')
         ),
-        h('div', { style: { color: '#A13830', fontSize: '14px', fontWeight: '600', lineHeight: '1.5' } },
-          bannerItems.map(m => m.when + ': ' + nameOf(m.medId) + ' — ' + m.windowName + ' window (' + fmtTime(m.ts) + ') closed with no dose logged').join(' · '))
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '9px' } },
+          ...shownDays.map(g => h('div', { key: g.when, style: { minWidth: '0' } },
+            h('div', { style: { color: '#C0453B', fontSize: '12px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '2px' } }, g.when),
+            ...g.items.map(m => h('div', { key: m.medId + m.ts, style: { color: '#A13830', fontSize: '14px', fontWeight: '600', lineHeight: '1.45', minWidth: '0', overflowWrap: 'anywhere' } },
+              nameOf(m.medId) + ' \u00b7 ' + m.windowName + ', ' + fmtTime(m.ts)))
+          ))
+        ),
+        // Only rendered when something is actually hidden, and it says WHAT is hidden rather than
+        // just "more" -- a caregiver deciding whether to open it needs the number, not a chevron.
+        hiddenDays > 0 ? h('button', { onClick: () => setState({ missedBannerOpen: true }), 'data-missed-more': 'true', style: { marginTop: '10px', minHeight: '38px', padding: '0 13px', borderRadius: '10px', background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.35)', color: '#A13830', fontSize: '13px', fontWeight: '800', textAlign: 'left' } },
+          'Show ' + hiddenDoses + ' more on ' + hiddenDays + ' earlier day' + (hiddenDays > 1 ? 's' : '')) : null,
+        (state.missedBannerOpen && byDay.length > CAP) ? h('button', { onClick: () => setState({ missedBannerOpen: false }), 'data-missed-less': 'true', style: { marginTop: '10px', minHeight: '38px', padding: '0 13px', borderRadius: '10px', background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.35)', color: '#A13830', fontSize: '13px', fontWeight: '800', textAlign: 'left' } },
+          'Show fewer') : null
       )
     ));
   }

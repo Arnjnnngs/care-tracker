@@ -196,3 +196,25 @@ Both files live in the repo root and serve as the single source of truth for onb
   deleting a layout fix and watching the scan stay green. The scan now measures the *rendered text*
   against the box it has to live in, and it also refuses to call a screen clean unless the app
   confirms it actually navigated there (`aria-current="page"`).
+
+- **v60 (in progress) — the missed-dose banner, redesigned.** Aaron: *"the long list of banner needs
+  a real redesign."* Every miss used to be written as a full sentence — "Tuesday, Aug 4:
+  Dexamethasone — Afternoon window (2:00 PM) closed with no dose logged" — and all of them were
+  joined into a single paragraph. Twelve misses meant twelve near-identical sentences with the
+  useful words buried in the middle of each one. A caregiver cannot scan that, and an alert nobody
+  can scan is not an alert.
+
+  It now says the same thing structurally: **the number of missed doses leads the heading**, so the
+  size of the problem is one glance; each dose is **its own line, grouped under its day**, so the
+  day is written once instead of once per dose; and the repeated "closed with no dose logged" is
+  gone, because that is what every row in a missed-dose banner means.
+
+  **Capped at three days**, with the rest behind a control that says exactly what it is hiding
+  ("Show 225 more on 45 earlier days") rather than a bare chevron. The cap is on days, not rows —
+  cutting mid-day would show some of a day's misses and hide others, which reads as "that dose was
+  fine". This matters after an in-patient stay, where the backlog is long and an unbounded banner
+  pushes Today's actual medication cards off the screen.
+
+  Checked by `harness/missed-banner-test.mjs`, which reads the **rendered screen** in a real browser
+  rather than the source or a helper function — the defect was never in the data, it was in how the
+  data was put on screen, which no data-layer test here could have caught.
