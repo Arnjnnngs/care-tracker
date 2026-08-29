@@ -72,12 +72,27 @@ export function serverTimestamp(){return Date.now();}
 const rawHtml = fs.readFileSync(APP_FILE, 'utf-8');
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
 
+// BOTH PLATFORMS. Aaron, 2026-08-29: "although I mentioned that the text overlay was on iPhone,
+// this is being viewed on both iPhone and Android. so both matters." The first version of this
+// scanned iPhone widths only, which made the gate it feeds half-blind -- and Brandi's caregiver is
+// on a Samsung, so Android is not the secondary case here, it is the daily one.
+//
+// Worth knowing which way the fidelity runs: Chromium IS Android's engine, so these Android rows
+// are close to what a Galaxy or Pixel actually renders. The iPhone rows are Chromium at Apple's
+// viewport SIZES and are an approximation -- right about boxes too small for their content, silent
+// about WebKit font metrics.
+//
+// 320 and 360 are the two that matter most: 320 is the iPhone SE/mini floor, and 360 is the single
+// most common Android width in the world.
 const DEVICES = [
-  { name: 'iPhone SE (1st gen)', w: 320, h: 568 },
-  { name: 'iPhone SE 2/3, 8',    w: 375, h: 667 },
-  { name: 'iPhone 13/14',        w: 390, h: 844 },
-  { name: 'iPhone 15 Pro',       w: 393, h: 852 },
-  { name: 'iPhone 14/15 Plus',   w: 428, h: 926 }
+  { name: 'iPhone SE (1st gen)',    w: 320, h: 568, os: 'iOS' },
+  { name: 'Galaxy S/A (most common)', w: 360, h: 800, os: 'Android' },
+  { name: 'iPhone SE 2/3, 8',       w: 375, h: 667, os: 'iOS' },
+  { name: 'Galaxy S22/S23',         w: 384, h: 854, os: 'Android' },
+  { name: 'iPhone 13/14',           w: 390, h: 844, os: 'iOS' },
+  { name: 'Pixel 7/8',              w: 393, h: 873, os: 'Android' },
+  { name: 'Pixel Pro, Galaxy S+',   w: 412, h: 915, os: 'Android' },
+  { name: 'iPhone 14/15 Plus',      w: 428, h: 926, os: 'iOS' }
 ];
 
 // Her real medication names, which are what actually stress the layout.
@@ -98,7 +113,35 @@ const SEED = [
 
 const SCREENS = ['home', 'meds', 'reports', 'inpatient', 'symptoms'];
 
-let problems = 0;
+// ONE scanner body, used by the tab loop and the overlay loop alike. It was duplicated at first
+// and the copies drifted within minutes -- the overlay copy silently scanned nothing.
+const scanFn = function (vw) {
+      const out = [], seen = new Set();
+      document.querySelectorAll('*').forEach(el => {
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || !el.getClientRects().length) return;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const text = (el.textContent || '').trim();
+        if (!text) return;
+        if ([...el.children].some(c => (c.textContent || '').trim())) return; // leaves only
+        const scrollable = cs.overflowX === 'auto' || cs.overflowX === 'scroll';
+        const clipped = cs.textOverflow === 'ellipsis';   // deliberate truncation, not a defect
+        const overflowsSelf = el.scrollWidth - el.clientWidth > 1 && !scrollable && !clipped;
+        const offRight = r.right > vw + 1, offLeft = r.left < -1;
+        if (!overflowsSelf && !offRight && !offLeft) return;
+        const label = text.slice(0, 64).replace(/\s+/g, ' ');
+        const key = label + '|' + Math.round(r.top);
+        if (seen.has(key)) return; seen.add(key);
+        out.push({ text: label, tag: el.tagName.toLowerCase(),
+          kind: overflowsSelf ? 'content wider than its box' : (offRight ? 'off the right edge' : 'off the left edge'),
+          overBy: overflowsSelf ? el.scrollWidth - el.clientWidth : Math.round(offRight ? r.right - vw : -r.left),
+          box: Math.round(r.width) + 'x' + Math.round(r.height), ws: cs.whiteSpace });
+      });
+      return out;
+};
+
+let problems = 0, unreachable = 0;
 const report = [];
 
 for (const dev of DEVICES) {
@@ -126,35 +169,53 @@ for (const dev of DEVICES) {
   await page.evaluate(rows => rows.forEach(r => globalThis.__mc.pushEntry(r)), SEED);
   await page.waitForTimeout(1200);
 
-  for (const screen of SCREENS) {
-    await page.evaluate(v => { try { if (typeof navigateTo === 'function') navigateTo(v); } catch (e) {} }, screen);
-    await page.waitForTimeout(700);
+  // THE MEDICATION EDITOR IS A SCREEN TOO, and it is where settings get typed. It was missed by the
+  // first version of this scan, which walked only the five tabs -- so a release that CHANGED the
+  // editor would have passed a render gate that never rendered it. Same blind spot, one level in.
+  const EXTRA = [{ name: 'med-editor', open: async page => {
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(x => ((x.getAttribute('aria-label') || x.innerText || '').trim().toLowerCase()) === 'meds');
+      if (b) b.click();
+    });
+    await page.waitForTimeout(900);
+    return page.evaluate(() => {
+      // The edit controls are icon buttons labelled by aria-label ("Edit Dexamethasone"), not by
+      // text. Matching innerText found nothing and the editor was never scanned. Dexamethasone by
+      // preference: it is the medication that carries the new treatment-window fields.
+      const btns = [...document.querySelectorAll('button')];
+      const label = b => (b.getAttribute('aria-label') || '').trim();
+      const b = btns.find(x => /^edit dexamethasone$/i.test(label(x))) || btns.find(x => /^edit /i.test(label(x)));
+      if (b) { b.click(); return true; }
+      return false;
+    });
+  } }];
 
-    const found = await page.evaluate(vw => {
-      const out = [], seen = new Set();
-      document.querySelectorAll('*').forEach(el => {
-        const cs = getComputedStyle(el);
-        if (cs.display === 'none' || cs.visibility === 'hidden' || !el.getClientRects().length) return;
-        const r = el.getBoundingClientRect();
-        if (!r.width || !r.height) return;
-        const text = (el.textContent || '').trim();
-        if (!text) return;
-        if ([...el.children].some(c => (c.textContent || '').trim())) return; // leaves only
-        const scrollable = cs.overflowX === 'auto' || cs.overflowX === 'scroll';
-        const clipped = cs.textOverflow === 'ellipsis';   // deliberate truncation, not a defect
-        const overflowsSelf = el.scrollWidth - el.clientWidth > 1 && !scrollable && !clipped;
-        const offRight = r.right > vw + 1, offLeft = r.left < -1;
-        if (!overflowsSelf && !offRight && !offLeft) return;
-        const label = text.slice(0, 64).replace(/\s+/g, ' ');
-        const key = label + '|' + Math.round(r.top);
-        if (seen.has(key)) return; seen.add(key);
-        out.push({ text: label, tag: el.tagName.toLowerCase(),
-          kind: overflowsSelf ? 'content wider than its box' : (offRight ? 'off the right edge' : 'off the left edge'),
-          overBy: overflowsSelf ? el.scrollWidth - el.clientWidth : Math.round(offRight ? r.right - vw : -r.left),
-          box: Math.round(r.width) + 'x' + Math.round(r.height), ws: cs.whiteSpace });
+  for (const screen of SCREENS) {
+    // CLICK THE REAL NAV BUTTON. The first version called navigateTo() inside page.evaluate, wrapped
+    // in a try/catch. The app is a MODULE, so navigateTo and state are not on window: every call
+    // threw ReferenceError, the catch swallowed it, and the scan never left Home -- while reporting
+    // that it had walked five screens. I "verified" navigation by comparing screenshot checksums,
+    // which differed only because the on-screen clock ticks. A gate that cannot fail is bad; a gate
+    // that reports covering ground it never touched is worse, and I shipped that claim to Aaron.
+    // Clicking the actual button also tests the real interaction rather than an internal function.
+    const navigated = await page.evaluate(label => {
+      const want = label.toLowerCase();
+      const btn = [...document.querySelectorAll('button')].find(b => {
+        const t = ((b.getAttribute('aria-label') || b.innerText || '')).trim().toLowerCase();
+        return t === want || t === want.replace('inpatient', 'in-patient');
       });
-      return out;
-    }, dev.w);
+      if (!btn) return false;
+      btn.click();
+      return true;
+    }, screen);
+    if (!navigated) {
+      console.log('  COULD NOT REACH ' + screen.toUpperCase() + ' at ' + dev.w + 'px — not scanned');
+      unreachable++;
+      continue;
+    }
+    await page.waitForTimeout(900);
+
+    const found = await page.evaluate(scanFn, dev.w);
 
     if (SHOTS) {
       fs.mkdirSync(SHOTS, { recursive: true });
@@ -162,9 +223,26 @@ for (const dev of DEVICES) {
     }
     if (found.length) {
       problems += found.length;
-      report.push({ dev: dev.name, w: dev.w, screen, found });
+      report.push({ dev: dev.name, os: dev.os, w: dev.w, screen, found });
     }
   }
+  // then the overlay screens
+  for (const extra of EXTRA) {
+    const opened = await extra.open(page);
+    if (!opened) {
+      console.log('  COULD NOT OPEN ' + extra.name + ' at ' + dev.w + 'px — not scanned');
+      unreachable++;
+      continue;
+    }
+    await page.waitForTimeout(800);
+    const found = await page.evaluate(scanFn, dev.w);
+    if (SHOTS) {
+      fs.mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: path.join(SHOTS, dev.w + '-' + extra.name + '.png') });
+    }
+    if (found.length) { problems += found.length; report.push({ dev: dev.name, os: dev.os, w: dev.w, screen: extra.name, found }); }
+  }
+
   await ctx.close();
   server.close();
 }
@@ -172,7 +250,7 @@ await browser.close();
 
 if (report.length) {
   report.forEach(r => {
-    console.log('\n  ' + r.dev + ' (' + r.w + 'px) — ' + r.screen.toUpperCase() + ' — ' + r.found.length + ' problem(s)');
+    console.log('\n  ' + r.os + '  ' + r.dev + ' (' + r.w + 'px) — ' + r.screen.toUpperCase() + ' — ' + r.found.length + ' problem(s)');
     r.found.slice(0, 10).forEach(f => {
       console.log('      "' + f.text + '"');
       console.log('        <' + f.tag + '> ' + f.kind + ' by ' + f.overBy + 'px · box ' + f.box + ' · white-space:' + f.ws);
@@ -180,9 +258,16 @@ if (report.length) {
     if (r.found.length > 10) console.log('      ... and ' + (r.found.length - 10) + ' more');
   });
 } else {
-  console.log('  every screen clean at all ' + DEVICES.length + ' iPhone widths');
+  console.log('  every screen clean at all ' + DEVICES.length + ' device widths (iOS and Android)');
 }
 if (errs.length) console.log('\n  PAGE ERRORS: ' + errs.length + '\n    ' + errs.slice(0,3).join('\n    '));
 console.log('\n' + (DEVICES.length * SCREENS.length) + ' screen/width combinations, ' + problems + ' overflowing element(s).');
-console.log(problems ? 'NOT CLEAN' : 'CLEAN (Chromium at iPhone sizes — not Safari).');
+if (unreachable) {
+  // A screen the scan could not reach is NOT a clean screen. Reporting it as one is how a render
+  // gate ends up blessing a page nobody ever rendered -- which is exactly what happened here first.
+  console.log(unreachable + ' screen/width combination(s) COULD NOT BE REACHED and were not scanned.');
+  console.log('NOT CLEAN — an unreachable screen is an unchecked screen.');
+  process.exit(1);
+}
+console.log(problems ? 'NOT CLEAN' : 'CLEAN — Android rows are high fidelity (Chromium is Android\'s engine); iOS rows are Chromium at Apple viewport sizes, not Safari.');
 process.exit(problems ? 1 : 0);

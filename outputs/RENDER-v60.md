@@ -1,36 +1,40 @@
 # Render audit — care-tracker v60
 
-Run: `env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy node harness/overflow-scan.mjs --shots outputs/render-v60`
+`env -u HTTPS_PROXY -u https_proxy -u HTTP_PROXY -u http_proxy node harness/overflow-scan.mjs --shots outputs/render-v60`
 
-**Result: CLEAN — 25 screen/width combinations, 0 overflowing elements.**
+**CLEAN — 40 screen/width combinations plus the medication editor, 0 overflowing elements.**
 
-| width | device | result |
+| width | device | platform |
 |---|---|---|
-| 320 | iPhone SE (1st gen), iPhone mini | clean |
-| 375 | iPhone SE 2/3, iPhone 8 | clean |
-| 390 | iPhone 13 / 14 | clean |
-| 393 | iPhone 15 Pro | clean |
-| 428 | iPhone 14 / 15 Plus | clean |
+| 320 | iPhone SE (1st gen), iPhone mini | iOS |
+| 360 | Galaxy S/A — the most common Android width in the world | Android |
+| 375 | iPhone SE 2/3, iPhone 8 | iOS |
+| 384 | Galaxy S22/S23 | Android |
+| 390 | iPhone 13 / 14 | iOS |
+| 393 | Pixel 7/8 | Android |
+| 412 | Pixel Pro, Galaxy S+ | Android |
+| 428 | iPhone 14 / 15 Plus | iOS |
 
-Screens walked with Brandi's real medication names seeded: Home, Meds, Reports, In-Patient,
-Symptoms. Navigation verified by confirming all five screenshots differ — an earlier version of
-this scan reported "clean" while only ever looking at an empty Home screen.
+Screens: Home, Meds, Reports, In-Patient, Symptoms, and the medication editor — reached by
+**clicking the real controls**, with Brandi's actual medication names seeded because overflow only
+shows with long content.
 
-## Fixed in this release, both found by this scan and by nothing else
+## Three corrections this scan needed before it could be trusted
 
-- **In-patient banner at 320px** — the Log In-Patient End button ran 12px off the right edge and the
-  text column was squeezed to ~100px, wrapping one or two words per line. Now a column with the
-  button on its own full-width row.
-- **Bottom nav labels at 320px** — "Symptoms" and "In-Patient" overflowed their 59px columns.
-  Media query at 360px rather than shrinking type on every phone.
+1. **It only ever looked at Home.** Navigation called `navigateTo()` inside `page.evaluate` wrapped
+   in a try/catch. The app is a module, so `navigateTo` and `state` are not on `window`: every call
+   threw and the catch swallowed it. It now clicks the actual nav buttons.
+2. **The "proof" that navigation worked was worthless.** Screenshot checksums were compared — and
+   they differ anyway because the on-screen clock ticks every second.
+3. **An unreachable screen was being counted as clean.** The medication editor could not be opened
+   (its controls are labelled by `aria-label`, not text) and the run still printed CLEAN. Now any
+   screen that cannot be reached fails the run: an unreachable screen is an unchecked screen.
 
-## What this does NOT cover — read before trusting it
+## What this does NOT cover
 
-**Chromium at iPhone viewport sizes is not Safari.** This catches a box too small for its content,
-which is most "text spills out" bugs. It does not catch WebKit font metrics or text shaping. Aaron's
-original report was specifically an iPhone; if spill remains after this ships, Safari is where to
-look next.
+**Chromium at iPhone viewport sizes is not Safari.** The Android rows are high fidelity — Chromium
+is Android's engine — but the iOS rows are an approximation: right about boxes too small for their
+content, silent about WebKit font metrics.
 
-It also checks **overflow only**. It does not judge whether a screen is *good* — the missed-dose
-banner passes this scan and is still a wall of run-on text that nobody reads. That is a Designer
-question and is logged in REQUESTS.md.
+It checks **overflow only**, not whether a screen is any good. The missed-dose banner passes this
+scan and is still a wall of run-on text nobody reads (REQUESTS.md).

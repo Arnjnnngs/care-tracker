@@ -87,7 +87,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **Version** | v60 — **BUILT, NOT DEPLOYED.** v59 is what is live on her phone. |
 | **Commit** | on branch `claude/caretracker-chemowell-updates-k80ydk`, not on `main` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `1767a8a680f7e90f07511ef2bcb1e2af` |
+| **index.html md5** | `a7d5f67ab07949554397ef05624c9552` |
 | **sw.js md5** | `3e7516905e996b75ae623b71f3f84045` |
 | **State** | v59 healthy and live, verified 2026-08-24. v60 is built and gated but NOT pushed to `main` — care-tracker needs Aaron's explicit go-ahead, and this change touches dose logic. |
 

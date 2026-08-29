@@ -30,7 +30,7 @@ vm.createContext(ctx);
 vm.runInContext([
   line(/const MISSED_TRACK_SINCE = [^\n]*/),
   fn('dayStart'), fn('entriesFor'), fn('nextChemoTs'), fn('chemoDayList'), fn('chemoOffsetFor'), fn('chemoOffsetSinceLast'), fn('zofranBlockedOn'),
-  fn('dexActiveOn'), fn('dexWindowsForOffset'), fn('inpatientEntries'), fn('inpatientPeriods'),
+  fn('dexActiveOn'), fn('dexWindowsForOffset'), fn('clampTreatmentDays'), fn('treatmentActiveOn'), fn('inpatientEntries'), fn('inpatientPeriods'),
   fn('isInpatientDay'), fn('inpatientCoversMoment'), fn('missedDosesFor'),
   'globalThis.__api = { missedDosesFor, chemoOffsetFor, chemoOffsetSinceLast, zofranBlockedOn, dexActiveOn, dexWindowsForOffset, chemoDayList, dayStart };'
 ].join('\n'), ctx);

@@ -207,6 +207,14 @@ function safeMedicationId(value, fallback) {
   return cleaned || 'medication';
 }
 
+// 0-14 days, or 1 when unset. Bounded because the field is free text on a phone keyboard: a
+// mistyped 30 would make a medication "treatment-adjacent" for two months either side.
+function clampTreatmentDays(v) {
+  if (v === '' || v === null || v === undefined) return 1;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(0, Math.min(14, Math.round(n)));
+}
 function normalizeMedication(raw, index) {
   const original = raw || {};
   const id = safeMedicationId(original.id, original.name || ('medication-' + (index + 1)));
@@ -230,7 +238,14 @@ function normalizeMedication(raw, index) {
     gapH: type === 'gap' ? Math.max(0, Number(original.gapH) || 0) : 0,
     quickLog: typeof original.quickLog === 'boolean' ? original.quickLog : DEFAULT_QUICK_LOG_IDS.includes(id),
     groupedEvening: typeof original.groupedEvening === 'boolean' ? original.groupedEvening : DEFAULT_EVENING_IDS.includes(id),
-    groupedMorning: typeof original.groupedMorning === 'boolean' ? original.groupedMorning : DEFAULT_MORNING_IDS.includes(id)
+    groupedMorning: typeof original.groupedMorning === 'boolean' ? original.groupedMorning : DEFAULT_MORNING_IDS.includes(id),
+    // COERCED HERE, and the reason is a bug this nearly shipped with. The editor writes these
+    // straight from a number input, so they arrive as STRINGS -- and treatmentActiveOn() tests
+    // Number.isFinite(), which is false for "3". Every configured window would have silently
+    // fallen back to the 1/1 default and the setting would have looked broken for no visible
+    // reason. Normalised at the one place every medication passes through, whatever the source.
+    treatmentDaysBefore: clampTreatmentDays(original.treatmentDaysBefore),
+    treatmentDaysAfter: clampTreatmentDays(original.treatmentDaysAfter)
   };
   if (doses && doses.length) medication.doses = doses; else delete medication.doses;
   if (type === 'win') medication.windows = windows.length ? windows : [{ start: 0, end: 24, name: 'Daily' }]; else delete medication.windows;
@@ -705,7 +720,9 @@ const MEDSYNC_FIELD_INFO = Object.assign(Object.create(null), {
   ceilingGroup: { label: 'Shares its limit with', fmt: function (v) { return v ? String(v) : 'nothing'; } },
   volumeCeilingMl: { label: 'Liquid limit per day (mL)', fmt: function (v) { return Number(v) > 0 ? medsyncNum(v) : 'none'; } },
   volumePerDoseMl: { label: 'Liquid per dose (mL)', fmt: function (v) { return Number(v) > 0 ? medsyncNum(v) : 'none'; } },
-  chemoOnly: { label: 'Chemo days only', fmt: medsyncFmtYesNo },
+  chemoOnly: { label: 'Only around treatment days', fmt: medsyncFmtYesNo },
+  treatmentDaysBefore: { label: 'Days before treatment' },
+  treatmentDaysAfter: { label: 'Days after treatment' },
   quickLog: { label: 'Has its own card on Home', fmt: medsyncFmtYesNo },
   groupedMorning: { label: 'In the morning group', fmt: medsyncFmtYesNo },
   groupedEvening: { label: 'In the evening group', fmt: medsyncFmtYesNo },
@@ -1246,6 +1263,37 @@ function chemoOffsetFor(dayTs) {
   return Math.round((d0 - best) / 86400000);
 }
 function dexActiveOn(dayTs) { const o = chemoOffsetFor(dayTs); return o !== null && o >= -1 && o <= 1; }
+// IS THIS MEDICATION IN ITS OWN TREATMENT WINDOW ON THIS DAY?
+//
+// Aaron, 2026-08-29: "Not sure it should say chemo only day...bc it's not something taken on just
+// chemo only days. none of the medication is. it should be like the other app and say treatment day
+// with some offset options."
+//
+// He is right twice over. The LABEL was wrong -- nothing here is taken only on a treatment day;
+// Dexamethasone runs the day before through the day after, which is a window AROUND treatment. And
+// that window was hardcoded at -1..+1 for every medication, in a function named after one drug.
+// A medication needing two days after, or starting three days before, could not be expressed at
+// all, and its doses would be judged against somebody else's schedule.
+//
+// Ported from ChemoWell, which has had per-medication offsets for a while and is the better design.
+// Defaults are 1 and 1, which reproduce the old fixed window exactly -- so every existing
+// medication behaves identically until somebody deliberately changes it.
+function treatmentActiveOn(med, dayTs) {
+  const o = chemoOffsetFor(dayTs);
+  if (o === null) return false;
+  const before = Number.isFinite(med && med.treatmentDaysBefore) ? med.treatmentDaysBefore : 1;
+  const after  = Number.isFinite(med && med.treatmentDaysAfter)  ? med.treatmentDaysAfter  : 1;
+  return o >= -before && o <= after;
+}
+// Plain-language summary of a medication's window, for the editor and the badge.
+function treatmentWindowLabel(med) {
+  const before = Number.isFinite(med && med.treatmentDaysBefore) ? med.treatmentDaysBefore : 1;
+  const after  = Number.isFinite(med && med.treatmentDaysAfter)  ? med.treatmentDaysAfter  : 1;
+  if (!before && !after) return 'Treatment day only';
+  const b = before === 0 ? '' : (before === 1 ? '1 day before' : before + ' days before');
+  const a = after === 0 ? '' : (after === 1 ? '1 day after' : after + ' days after');
+  return (b && a) ? (b + ' \u2192 ' + a) : (b ? b + ' \u2192 treatment day' : 'treatment day \u2192 ' + a);
+}
 // Zofran is blocked for 3 days: chemo day itself plus the 2 days after (e.g. chemo Thursday ->
 // blocked Thu/Fri/Sat, opens Sunday). Confirmed by Aaron as the original, correct spec — v61/v62
 // of this file incorrectly "fixed" this to a 2-day block based on stale internal documentation;
@@ -1262,7 +1310,7 @@ function missedDosesFor(dayTs, now) {
   // doses that fell inside it. See inpatientCoversMoment().
   const out = [];
   state.meds.filter(m => m.alerts && m.windows).forEach(med => {
-    if (med.chemoOnly && !dexActiveOn(d0)) return;
+    if (med.chemoOnly && !treatmentActiveOn(med, d0)) return;
     const windows = med.id === 'dexamethasone' ? dexWindowsForOffset(chemoOffsetFor(d0)) : med.windows;
     const dayEntries = entriesFor(med.id).filter(e => e.ts >= d0 && e.ts < d0 + 86400000).sort((a, b) => a.ts - b.ts);
     const used = new Set();
@@ -1434,7 +1482,7 @@ function status(med) {
     if (now < ws) return { locked: true, availableAt: ws, windowName: w.name };
     if (now >= ws && now < we) return { locked: false, windowName: w.name };
   }
-  const chemoOver = med.chemoOnly && !dexActiveOn(d0 + 86400000);
+  const chemoOver = med.chemoOnly && !treatmentActiveOn(med, d0 + 86400000);
   if (chemoOver) {
     return { locked: true, courseComplete: true };
   }
@@ -3229,7 +3277,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   ));
 
   // Quick Log section
-  const medCards = state.meds.filter(m => m.quickLog && (!m.chemoOnly || (dexActiveOn(now) && !status(m).courseComplete))).map(med => {
+  const medCards = state.meds.filter(m => m.quickLog && (!m.chemoOnly || (treatmentActiveOn(m, now) && !status(m).courseComplete))).map(med => {
     // See the matching note in renderGroupedMedsCard(): the unloggable In-Patient tile is gone.
     // Medications stay fully loggable during a stay.
     const st = status(med);
@@ -3441,7 +3489,11 @@ function medicationFormFrom(med) {
     quickLog: typeof base.quickLog === 'boolean' ? base.quickLog : true,
     groupedEvening: !!base.groupedEvening,
     groupedMorning: !!base.groupedMorning,
-    chemoOnly: !!base.chemoOnly
+    chemoOnly: !!base.chemoOnly,
+    // Stored alongside chemoOnly rather than replacing it, so every device's saved medication list
+    // keeps working with no migration. Absent means "never configured" -> 1 and 1, the old fixed window.
+    treatmentDaysBefore: Number.isFinite(Number(base.treatmentDaysBefore)) && base.treatmentDaysBefore !== '' && base.treatmentDaysBefore !== null ? Math.max(0, Math.min(14, Math.round(Number(base.treatmentDaysBefore)))) : 1,
+    treatmentDaysAfter: Number.isFinite(Number(base.treatmentDaysAfter)) && base.treatmentDaysAfter !== '' && base.treatmentDaysAfter !== null ? Math.max(0, Math.min(14, Math.round(Number(base.treatmentDaysAfter)))) : 1
   };
 }
 
@@ -3515,6 +3567,8 @@ function saveMedicationEditor() {
     groupedEvening: !!form.groupedEvening,
     groupedMorning: !!form.groupedMorning,
     chemoOnly: !!form.chemoOnly,
+    treatmentDaysBefore: form.treatmentDaysBefore,
+    treatmentDaysAfter: form.treatmentDaysAfter,
     ceiling: dailyLimit > 0,
     ceilingMax: dailyLimit || undefined,
     ceilingUnit: form.dailyLimitUnit === 'mg' ? undefined : form.dailyLimitUnit
@@ -3620,8 +3674,20 @@ function renderMedicationEditor() {
       renderPillToggle('Show as its own Home card', !!form.quickLog, () => toggleMedicationForm('quickLog'), 'Gives this medication its own compact card in the Quick Log section on Home.'),
       renderPillToggle('Group with morning meds', !!form.groupedMorning, () => toggleMedicationForm('groupedMorning'), 'Lists it in the shared "Morning meds" card instead of its own Quick Log card — for meds taken alongside Protonix in the morning.'),
       renderPillToggle('Group with evening meds', !!form.groupedEvening, () => toggleMedicationForm('groupedEvening'), 'Lists it in the shared "Evening meds" card instead of its own Quick Log card — for meds taken alongside Protonix at night.'),
-      renderPillToggle('Chemo-day only', !!form.chemoOnly, () => toggleMedicationForm('chemoOnly'), 'For medications taken only around treatment. On Home it appears just for the chemo-adjacent days (day before through day after), AND — the part this description used to leave out — it is only checked for missed doses on those days. With this OFF, a chemo-only medication is treated as an everyday one and will be reported missed every single day.')
+      renderPillToggle('Only around treatment days', !!form.chemoOnly, () => toggleMedicationForm('chemoOnly'), 'For medications taken around a treatment rather than every day. Set the window below. This controls BOTH whether the card appears on Home and whether missed doses are checked — with it OFF, the medication is treated as an everyday one and is reported missed every single day.')
     ),
+    // THE WINDOW, per medication. Was hardcoded at one day either side, in a function named after
+    // Dexamethasone, so nothing else could express its own schedule. Aaron: "it should be like the
+    // other app and say treatment day with some offset options." Shown only when the toggle is on,
+    // because the numbers mean nothing otherwise.
+    form.chemoOnly ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '8px', marginTop: '8px', padding: '11px 12px', borderRadius: '12px', background: 'rgba(170,83,117,0.07)', border: '1px solid rgba(212,104,138,0.18)' } },
+      h('div', { style: { gridColumn: '1 / -1', fontSize: '11.5px', fontWeight: '800', color: '#8E3D61', letterSpacing: '0.02em' } },
+        'Active window \u00b7 ' + treatmentWindowLabel({ treatmentDaysBefore: Number(form.treatmentDaysBefore), treatmentDaysAfter: Number(form.treatmentDaysAfter) })),
+      h('label', null, fieldLabel('Days before', '0 = starts on treatment day itself.'),
+        formInput({ type: 'number', min: '0', max: '14', step: '1', value: String(form.treatmentDaysBefore), onInput: event => updateMedicationForm('treatmentDaysBefore', event.target.value) })),
+      h('label', null, fieldLabel('Days after', '0 = treatment day only.'),
+        formInput({ type: 'number', min: '0', max: '14', step: '1', value: String(form.treatmentDaysAfter), onInput: event => updateMedicationForm('treatmentDaysAfter', event.target.value) }))
+    ) : null,
     h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '15px' } },
       h('button', { onClick: () => setState({ medEditor: null }), style: { minHeight: '42px', padding: '0 14px', borderRadius: '11px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(212,104,138,0.18)', color: '#6E5261', fontSize: '13px', fontWeight: '800' } }, 'Discard'),
       h('button', { onClick: saveMedicationEditor, style: { minHeight: '42px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13px', fontWeight: '800', boxShadow: 'inset 0 -2px 0 rgba(121,57,84,0.35)' } }, state.medEditor.mode === 'add' ? 'Add medication' : 'Save changes')
@@ -3682,7 +3748,7 @@ function renderMedicationManager(now) {
         med.quickLog ? h('span', { style: { borderRadius: '99px', padding: '3px 7px', background: 'rgba(170,83,117,0.11)', color: '#8E3D61', fontSize: '10px', fontWeight: '800' } }, 'Own Home card') : h('span', { style: { borderRadius: '99px', padding: '3px 7px', background: 'rgba(125,105,116,0.10)', color: '#705B66', fontSize: '10px', fontWeight: '800' } }, 'Managed only (no Home card)'),
         med.groupedMorning ? h('span', { style: { borderRadius: '99px', padding: '3px 7px', background: 'rgba(155,91,138,0.12)', color: '#7B3F6B', fontSize: '10px', fontWeight: '800' } }, 'Morning group') : null,
         med.groupedEvening ? h('span', { style: { borderRadius: '99px', padding: '3px 7px', background: 'rgba(155,91,138,0.12)', color: '#7B3F6B', fontSize: '10px', fontWeight: '800' } }, 'Evening group') : null,
-        med.chemoOnly ? h('span', { style: { borderRadius: '99px', padding: '3px 7px', background: 'rgba(192,69,59,0.10)', color: '#A15B56', fontSize: '10px', fontWeight: '800' } }, 'Chemo-day only') : null
+        med.chemoOnly ? h('span', { style: { borderRadius: '99px', padding: '3px 7px', background: 'rgba(192,69,59,0.10)', color: '#A15B56', fontSize: '10px', fontWeight: '800' } }, treatmentWindowLabel(med)) : null
       ),
       deleting ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', paddingTop: '9px', borderTop: '1px solid rgba(192,69,59,0.16)' } },
         h('span', { style: { flex: '1', fontSize: '11px', color: '#A15B56', fontWeight: '700', lineHeight: '1.35' } }, 'Existing dose history will remain visible.'),
