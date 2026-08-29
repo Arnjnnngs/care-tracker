@@ -1322,8 +1322,11 @@ function treatmentActiveOn(med, dayTs) {
   const days = chemoDayList();
   if (!days.length) return false;
   const d0 = dayStart(dayTs);
-  const before = Number.isFinite(med && med.treatmentDaysBefore) ? med.treatmentDaysBefore : 1;
-  const after  = Number.isFinite(med && med.treatmentDaysAfter)  ? med.treatmentDaysAfter  : 1;
+  // The shared clamp, not a private copy. Number.isFinite is FALSE for the string "3" a text field
+  // produces, so this used to collapse a configured window back to 1/1 whenever a medication reached
+  // it without having passed through normalizeMedication first (v60, ported from ChemoWell app-v68).
+  const before = clampTreatmentDays(med ? med.treatmentDaysBefore : undefined);
+  const after  = clampTreatmentDays(med ? med.treatmentDaysAfter  : undefined);
   return days.some(d => {
     const o = Math.round((d0 - d) / 86400000);
     return o >= -before && o <= after;
@@ -1331,8 +1334,12 @@ function treatmentActiveOn(med, dayTs) {
 }
 // Plain-language summary of a medication's window, for the editor and the badge.
 function treatmentWindowLabel(med) {
-  const before = Number.isFinite(med && med.treatmentDaysBefore) ? med.treatmentDaysBefore : 1;
-  const after  = Number.isFinite(med && med.treatmentDaysAfter)  ? med.treatmentDaysAfter  : 1;
+  // Same clamp the save path uses, so this label can never promise a window the app will not obey.
+  // It used to be handed Number(form.treatmentDaysBefore) by the editor, and Number('') is 0 -- so a
+  // CLEARED field read as a deliberate 0 and the editor said "Treatment day only", while saving it
+  // fell back to 1 day either side. The screen and the behaviour disagreed on a blank box.
+  const before = clampTreatmentDays(med ? med.treatmentDaysBefore : undefined);
+  const after  = clampTreatmentDays(med ? med.treatmentDaysAfter  : undefined);
   if (!before && !after) return 'Treatment day only';
   const b = before === 0 ? '' : (before === 1 ? '1 day before' : before + ' days before');
   const a = after === 0 ? '' : (after === 1 ? '1 day after' : after + ' days after');
@@ -3556,8 +3563,10 @@ function medicationFormFrom(med) {
     chemoOnly: !!base.chemoOnly,
     // Stored alongside chemoOnly rather than replacing it, so every device's saved medication list
     // keeps working with no migration. Absent means "never configured" -> 1 and 1, the old fixed window.
-    treatmentDaysBefore: Number.isFinite(Number(base.treatmentDaysBefore)) && base.treatmentDaysBefore !== '' && base.treatmentDaysBefore !== null ? Math.max(0, Math.min(14, Math.round(Number(base.treatmentDaysBefore)))) : 1,
-    treatmentDaysAfter: Number.isFinite(Number(base.treatmentDaysAfter)) && base.treatmentDaysAfter !== '' && base.treatmentDaysAfter !== null ? Math.max(0, Math.min(14, Math.round(Number(base.treatmentDaysAfter)))) : 1
+    // A second, hand-inlined copy of clampTreatmentDays lived here. Two copies of one rule is one
+    // more than can stay correct; the editor opens on exactly the number the app will obey.
+    treatmentDaysBefore: clampTreatmentDays(base.treatmentDaysBefore),
+    treatmentDaysAfter: clampTreatmentDays(base.treatmentDaysAfter)
   };
 }
 
@@ -3631,8 +3640,8 @@ function saveMedicationEditor() {
     groupedEvening: !!form.groupedEvening,
     groupedMorning: !!form.groupedMorning,
     chemoOnly: !!form.chemoOnly,
-    treatmentDaysBefore: form.treatmentDaysBefore,
-    treatmentDaysAfter: form.treatmentDaysAfter,
+    treatmentDaysBefore: clampTreatmentDays(form.treatmentDaysBefore),
+    treatmentDaysAfter: clampTreatmentDays(form.treatmentDaysAfter),
     ceiling: dailyLimit > 0,
     ceilingMax: dailyLimit || undefined,
     ceilingUnit: form.dailyLimitUnit === 'mg' ? undefined : form.dailyLimitUnit
@@ -3746,7 +3755,7 @@ function renderMedicationEditor() {
     // because the numbers mean nothing otherwise.
     form.chemoOnly ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '8px', marginTop: '8px', padding: '11px 12px', borderRadius: '12px', background: 'rgba(170,83,117,0.07)', border: '1px solid rgba(212,104,138,0.18)' } },
       h('div', { style: { gridColumn: '1 / -1', fontSize: '11.5px', fontWeight: '800', color: '#8E3D61', letterSpacing: '0.02em' } },
-        'Active window \u00b7 ' + treatmentWindowLabel({ treatmentDaysBefore: Number(form.treatmentDaysBefore), treatmentDaysAfter: Number(form.treatmentDaysAfter) })),
+        'Active window \u00b7 ' + treatmentWindowLabel({ treatmentDaysBefore: form.treatmentDaysBefore, treatmentDaysAfter: form.treatmentDaysAfter })),
       h('label', null, fieldLabel('Days before', '0 = starts on treatment day itself.'),
         formInput({ type: 'number', min: '0', max: '14', step: '1', value: String(form.treatmentDaysBefore), onInput: event => updateMedicationForm('treatmentDaysBefore', event.target.value) })),
       h('label', null, fieldLabel('Days after', '0 = treatment day only.'),

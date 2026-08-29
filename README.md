@@ -172,3 +172,12 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 - **CARETRACKER_HANDOFF.md** — Update the "Last updated" date at the top, add the new version to the Version History table, and revise any affected sections (medication definitions, Firebase collections, reminder schedule, known issues, etc.).
 
 Both files live in the repo root and serve as the single source of truth for onboarding new contributors or AI agents.
+
+- **v60 (in progress) — one shared clamp for treatment windows.** Four places in `index.html` answered
+  "how many days is this window?" and two of them were hand-inlined copies of the rule that tested
+  `Number.isFinite()` on values coming from a text field — where `"3"` is a string and the test is
+  false. The visible symptom was a blank box: the medication editor read an empty field as a
+  deliberate 0 and printed **"Treatment day only"**, while saving that same blank box fell back to
+  1 day either side. The label promised a window the app did not obey. Everything now goes through
+  `clampTreatmentDays()` (0–14, blank → 1), so the editor, the badge, the save path and the logic
+  cannot disagree. Ported from the same fix in ChemoWell app-v68.

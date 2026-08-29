@@ -164,5 +164,59 @@ const nextChemoCalls = (code.match(/nextChemoTs\(\)/g) || []).length - 1; // min
 t('nextChemoTs() still has exactly its two legitimate display consumers',
   nextChemoCalls === 2, nextChemoCalls + ' call site(s)');
 
+// ---- ONE clamp, ported from ChemoWell app-v68 (its PM found the split there first) ----
+//
+// Four places in THIS file answered "how many days is this window?": the save path, the editor's
+// form seed, the editor's own preview label, and treatmentActiveOn. Two of them were hand-inlined
+// copies of the rule and two tested Number.isFinite() on values that arrive from a text field --
+// where "3" is a string and isFinite("3") is false. The visible consequence was a blank box: the
+// editor read Number('') as a deliberate 0 and printed "Treatment day only", while saving the same
+// blank box fell back to 1 day either side. The label promised a window the app did not obey.
+const DAYMS = 86400000;
+const Tw = new Date(2026, 7, 20).getTime();
+ctx.state.chemoDates = [{ ts: Tw, loggedAt: Tw }];
+
+const { clampTreatmentDays, treatmentWindowLabel, treatmentActiveOn } = A;
+t('a cleared field reads as 1 day, not as a deliberate 0', clampTreatmentDays('') === 1, clampTreatmentDays(''));
+t('the editor label agrees with the save path on a cleared field',
+  treatmentWindowLabel({ treatmentDaysBefore: '', treatmentDaysAfter: '' }) !== 'Treatment day only',
+  treatmentWindowLabel({ treatmentDaysBefore: '', treatmentDaysAfter: '' }));
+t('a deliberate 0/0 still reads "Treatment day only"',
+  treatmentWindowLabel({ treatmentDaysBefore: 0, treatmentDaysAfter: 0 }) === 'Treatment day only',
+  treatmentWindowLabel({ treatmentDaysBefore: 0, treatmentDaysAfter: 0 }));
+t('a window typed as text is obeyed, not collapsed to 1',
+  treatmentActiveOn({ treatmentDaysBefore: '3', treatmentDaysAfter: '0' }, Tw - 3 * DAYMS) === true, '');
+t('and it still ends where it should',
+  treatmentActiveOn({ treatmentDaysBefore: '3', treatmentDaysAfter: '0' }, Tw - 4 * DAYMS) === false, '');
+t('a window typed as text is LABELLED as typed', 
+  treatmentWindowLabel({ treatmentDaysBefore: '3', treatmentDaysAfter: '0' }).indexOf('3 days before') === 0,
+  treatmentWindowLabel({ treatmentDaysBefore: '3', treatmentDaysAfter: '0' }));
+t('a mistyped 300 cannot make a medication treatment-adjacent for months',
+  treatmentActiveOn({ treatmentDaysBefore: 300, treatmentDaysAfter: 300 }, Tw - 20 * DAYMS) === false, '');
+t('and the label shows the clamped number, not 300',
+  treatmentWindowLabel({ treatmentDaysBefore: 300, treatmentDaysAfter: 300 }).indexOf('14 days before') === 0,
+  treatmentWindowLabel({ treatmentDaysBefore: 300, treatmentDaysAfter: 300 }));
+
+// The invariant, stated where it is actually enforced. Falsifying the clamp on the editor's save
+// path did NOT turn this suite red, and that is worth writing down rather than papering over: every
+// candidate goes through normalizeMedication() on the way to storage, so THAT is what guarantees a
+// stored window is a bounded number. The clamp at the save site is defence in depth against a future
+// path that stores without normalizing -- it is not what makes this true today. What must never
+// break is the invariant itself, so it is asserted here against the function that owns it.
+const storedWide = A.normalizeMedication({ id: 'x', name: 'Wide', treatmentDaysBefore: '300', treatmentDaysAfter: 300 }, 0);
+t('nothing reaches storage with an out-of-range window',
+  storedWide.treatmentDaysBefore === 14 && storedWide.treatmentDaysAfter === 14,
+  storedWide.treatmentDaysBefore + '/' + storedWide.treatmentDaysAfter);
+const storedText = A.normalizeMedication({ id: 'y', name: 'Text', treatmentDaysBefore: '3', treatmentDaysAfter: '' }, 0);
+t('a window stored as text survives as the number typed',
+  storedText.treatmentDaysBefore === 3 && storedText.treatmentDaysAfter === 1,
+  storedText.treatmentDaysBefore + '/' + storedText.treatmentDaysAfter);
+
+// The rule must exist once. A second hand-inlined copy is how these drifted apart to begin with.
+const inlineBounds = (code.match(/Math\.min\(\s*14\s*,/g) || []).length;
+t('exactly one 14-day bound in the file, inside clampTreatmentDays', inlineBounds === 1, inlineBounds + ' found');
+const isFiniteOnWindow = (code.match(/Number\.isFinite\([^)]*treatmentDays(Before|After)/g) || []).length;
+t('no Number.isFinite test left on a treatment-day field', isFiniteOnWindow === 0, isFiniteOnWindow + ' found');
+
 console.log('\n' + pass + '/' + (pass + fail) + ' checks passed');
 process.exit(fail ? 1 : 0);

@@ -392,3 +392,12 @@ A report of "all blank" on a device was investigated. Loading the app in a fresh
 
 ### Why this matters:
 These two files are the single source of truth for onboarding new contributors or AI agents to this project. Stale documentation leads to incorrect assumptions and wasted debugging time. Treat doc updates as part of the feature — not a follow-up task.
+
+- **v60 (in progress) — one shared clamp for treatment windows.** Four places in `index.html` answered
+  "how many days is this window?" and two of them were hand-inlined copies of the rule that tested
+  `Number.isFinite()` on values coming from a text field — where `"3"` is a string and the test is
+  false. The visible symptom was a blank box: the medication editor read an empty field as a
+  deliberate 0 and printed **"Treatment day only"**, while saving that same blank box fell back to
+  1 day either side. The label promised a window the app did not obey. Everything now goes through
+  `clampTreatmentDays()` (0–14, blank → 1), so the editor, the badge, the save path and the logic
+  cannot disagree. Ported from the same fix in ChemoWell app-v68.
