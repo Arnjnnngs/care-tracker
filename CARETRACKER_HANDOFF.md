@@ -9,7 +9,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** August 16, 2026
-> **Current version:** v59
+> **Current version:** v60 (built, not deployed — v59 is live)
 
 ---
 
@@ -392,3 +392,49 @@ A report of "all blank" on a device was investigated. Loading the app in a fresh
 
 ### Why this matters:
 These two files are the single source of truth for onboarding new contributors or AI agents to this project. Stale documentation leads to incorrect assumptions and wasted debugging time. Treat doc updates as part of the feature — not a follow-up task.
+
+- **v60 (in progress) — one shared clamp for treatment windows.** Four places in `index.html` answered
+  "how many days is this window?" and two of them were hand-inlined copies of the rule that tested
+  `Number.isFinite()` on values coming from a text field — where `"3"` is a string and the test is
+  false. The visible symptom was a blank box: the medication editor read an empty field as a
+  deliberate 0 and printed **"Treatment day only"**, while saving that same blank box fell back to
+  1 day either side. The label promised a window the app did not obey. Everything now goes through
+  `clampTreatmentDays()` (0–14, blank → 1), so the editor, the badge, the save path and the logic
+  cannot disagree. Ported from the same fix in ChemoWell app-v68.
+
+- **v60 (in progress) — text spilling outside its box on Home, and the scan that could not see it.**
+  The Quick Log card's generic-name line ("Acetaminophen · Oral suspension") was held on a single
+  line by `white-space: nowrap`. At 320px it ran 57px past the edge of its card, 17px at 360px — the
+  most common Android width — and 2px at 375px. It now wraps under the medication name instead of
+  being truncated: that line is what tells a caregiver which drug this actually is, so an ellipsis
+  would cost more than it saves.
+
+  This was live, and the first render scan reported the app clean anyway. Its overflow test asked
+  `scrollWidth > clientWidth`, which is always 0 for an inline element — meaning for nearly every
+  piece of text in the app — plus "did it leave the viewport", which text spilling a card in the
+  middle of the screen never does. The Zero Day Auditor proved the same blindness in ChemoWell by
+  deleting a layout fix and watching the scan stay green. The scan now measures the *rendered text*
+  against the box it has to live in, and it also refuses to call a screen clean unless the app
+  confirms it actually navigated there (`aria-current="page"`).
+
+- **v60 (in progress) — the missed-dose banner, redesigned.** Aaron: *"the long list of banner needs
+  a real redesign."* Every miss used to be written as a full sentence — "Tuesday, Aug 4:
+  Dexamethasone — Afternoon window (2:00 PM) closed with no dose logged" — and all of them were
+  joined into a single paragraph. Twelve misses meant twelve near-identical sentences with the
+  useful words buried in the middle of each one. A caregiver cannot scan that, and an alert nobody
+  can scan is not an alert.
+
+  It now says the same thing structurally: **the number of missed doses leads the heading**, so the
+  size of the problem is one glance; each dose is **its own line, grouped under its day**, so the
+  day is written once instead of once per dose; and the repeated "closed with no dose logged" is
+  gone, because that is what every row in a missed-dose banner means.
+
+  **Capped at three days**, with the rest behind a control that says exactly what it is hiding
+  ("Show 225 more on 45 earlier days") rather than a bare chevron. The cap is on days, not rows —
+  cutting mid-day would show some of a day's misses and hide others, which reads as "that dose was
+  fine". This matters after an in-patient stay, where the backlog is long and an unbounded banner
+  pushes Today's actual medication cards off the screen.
+
+  Checked by `harness/missed-banner-test.mjs`, which reads the **rendered screen** in a real browser
+  rather than the source or a helper function — the defect was never in the data, it was in how the
+  data was put on screen, which no data-layer test here could have caught.

@@ -63,9 +63,20 @@ try:
     else:
         notes.append("dispatch flag = %s" % m.group(1))
         if m.group(1).upper() == "ACTIVE":
-            notes.append("ACTIVE: the two scheduled tasks must be ENABLED, or nobody is watching.")
+            notes.append("ACTIVE: both hourly tasks are ALWAYS enabled and push to Aaron's "
+                         "phone. This flag is the ONLY thing keeping them quiet — do not set "
+                         "ACTIVE until work is actually underway.")
         else:
             notes.append("IDLE: correct only if no work is in progress.")
+    # The KEY that explains the flag must define both states, once each. It said IDLE twice and
+    # never defined ACTIVE for a week -- so the one document explaining when Aaron gets notified
+    # contradicted itself, and nothing caught it. A flag whose meaning is ambiguous is a flag that
+    # gets set wrong.
+    for state in ("ACTIVE", "IDLE"):
+        n = len(re.findall(r"^- \*\*`DISPATCH: %s`\*\*" % state, st, re.M))
+        if n != 1:
+            blockers.append("STATUS.md's dispatch key defines `DISPATCH: %s` %d time(s), expected "
+                            "exactly 1 — the flag's own definition is unreadable." % (state, n))
     live = re.search(r"\*\*Version\*\*\s*\|\s*(v[\d.]+)", st)
     if live and v and live.group(1) != v.group(1):
         warnings.append("STATUS.md says live is %s but the build here is %s — update STATUS.md "
@@ -142,6 +153,114 @@ if os.path.exists(_sp):
                                 % (_name, _m.group(1)[:12], _actual[:12]))
             else:
                 notes.append("STATUS.md md5 for %s matches the file" % _name)
+
+# --- 7. THE GATES THEMSELVES ---------------------------------------------------------------
+# Added 2026-08-24. Every check above this line inspects index.html. NONE of them ever looked at
+# the suites, and that is exactly where the defects were hiding:
+#   * A literal `|| true` sat in outputs/webmain-v43/run.mjs making an assertion permanently green.
+#     pm.py checked index.html for `|| true` and walked straight past the file that had one.
+#   * All 39 suites across the three repos hardcoded a playwright path from a retired sandbox and
+#     could not START. A gate that cannot start is indistinguishable from a gate that passes.
+#   * Suites pinned version literals ('app-v64') and broke on the very next release -- three
+#     patches lost to this already.
+# The gates are code too. They get checked like code.
+_SUITE_EXT = ('.mjs', '.sh')
+_SKIP_DIRS = {'.git', 'node_modules', 'outputs/v58-shots'}
+_suites = []
+for _root, _dirs, _files in os.walk(REPO):
+    _dirs[:] = [d for d in _dirs if d not in _SKIP_DIRS and not d.startswith('.git')]
+    for _f in _files:
+        if _f.endswith(_SUITE_EXT):
+            _suites.append(os.path.join(_root, _f))
+
+def _strip_comments(_t):
+    return re.sub(r'^\s*(//|#).*$', '', re.sub(r'/\*[\s\S]*?\*/', '', _t), flags=re.M)
+
+_dead_paths, _ortrue, _pinned = [], [], []
+for _f in _suites:
+    try: _t = open(_f, encoding='utf-8').read()
+    except Exception: continue
+    _rel = os.path.relpath(_f, REPO)
+    _code = _strip_comments(_t)
+    # a path from an environment that no longer exists = a gate that cannot start
+    # DIRECT use only. A dead path listed as one CANDIDATE among fallbacks is fine -- that is the
+    # fix, not the bug. Flag it only when it is the single thing being required/read, which is what
+    # actually stops a suite starting.
+    for _m in re.finditer(
+            r"(?:require|readFileSync|createReadStream|import)\s*\(\s*"
+            r"['\"](/home/claude/[^'\"]*|/tmp/[A-Za-z0-9_.-]+\.(?:js|mjs|json|html))['\"]", _code):
+        _dead_paths.append("%s -> %s" % (_rel, _m.group(1)))
+    if re.search(r"\|\|\s*true\b", _code):
+        _ortrue.append(_rel)
+    # a version literal in a suite breaks on the next release; read it from the file under test
+    for _m in re.finditer(r"['\"]((?:app-|beta-)?v\d+(?:\.\d+)?)['\"]", _code):
+        _pinned.append("%s -> '%s'" % (_rel, _m.group(1)))
+
+if _dead_paths:
+    blockers.append("GATE CANNOT START — %d suite reference(s) point at a path from a dead\n"
+                    "    environment. A gate that cannot start looks exactly like one that passes:\n    %s"
+                    % (len(_dead_paths), "\n    ".join(sorted(set(_dead_paths))[:6])))
+if _ortrue:
+    blockers.append("a `|| true` in %d suite file(s) — a check that cannot fail has shipped here\n    before: %s"
+                    % (len(_ortrue), ", ".join(sorted(set(_ortrue))[:6])))
+if _pinned:
+    _u = sorted(set(_pinned))
+    warnings.append("PINNED VERSION LITERAL in %d place(s) — compare input to output, or read\n"
+                    "    APP_VERSION from the file under test. This has cost three patches.\n"
+                    "    JUDGEMENT REQUIRED: a harness/ PATCH legitimately names the versions it\n"
+                    "    transforms between. An ASSERTION never should — that is the one that goes\n"
+                    "    red on the next release for no defect:\n    %s"
+                    % (len(_u), "\n    ".join(_u[:8])))
+
+# --- 7b. SOMEBODY MUST HAVE LOOKED AT IT ------------------------------------------------------
+# Aaron, 2026-08-29: "how is auditing being done if nothing can be seen to make sure everything
+# looks right? ... this is why I need you to have eyes on the actual view...that's the real audit
+# and always have been the real audit."
+#
+# Every check in this file reads bytes. None had ever measured a pixel, and the Designer stage was
+# skipped twice on the reasoning that "no visual surface changed" -- untrue for a release that
+# deleted card tiles and rewrote banner copy. The cost, found the first time anything rendered the
+# app: at 320px the In-Patient button ran off the right edge and the banner wrapped one or two words
+# per line, on the screen a caregiver reads in a hospital.
+#
+# "It looks fine to me" is not evidence and neither is a passing unit suite. An artifact is.
+_ver = v.group(1) if v else None
+if _ver:
+    _changed_ui, _rc_ui = sh("git -C %s diff --name-only origin/main 2>/dev/null" % REPO)
+    if _rc_ui == 0 and "index.html" in _changed_ui.split():
+        _render = os.path.join(REPO, "outputs", "RENDER-%s.md" % _ver)
+        if not os.path.exists(_render):
+            blockers.append("NOBODY LOOKED AT IT — index.html changed but there is no\n"
+                            "    outputs/RENDER-%s.md. Run harness/overflow-scan.mjs at iPhone widths,\n"
+                            "    record the result, and LOOK at the screenshots before calling this done." % _ver)
+        else:
+            _txt = open(_render, encoding="utf-8").read()
+            if "CLEAN" not in _txt:
+                warnings.append("outputs/RENDER-%s.md does not record a CLEAN scan — disclose what "
+                                "still overflows." % _ver)
+            else:
+                notes.append("render audit recorded for %s (outputs/RENDER-%s.md)" % (_ver, _ver))
+
+# --- 8. THE NOTES MUST MOVE WITH THE CODE ------------------------------------------------------
+# Aaron, 2026-08-24: "we need to make sure that notes are being updated each final push and commit."
+# Documentation failures are SILENT -- nothing breaks when a changelog goes stale, so no amount of
+# careful reading catches it. Only a check that fails loudly does. Today's evidence: BETA_HANDOFF
+# still said "Last updated July 23" and "Current version v71" seven releases later, and a debug
+# checklist named a banner renamed months earlier -- which would have told a reader the beta was
+# writing to the patient's real records.
+_changed, _rc = sh("git -C %s diff --name-only origin/main 2>/dev/null" % REPO)
+if _rc == 0 and _changed.strip():
+    _files_changed = set(_changed.split())
+    _app_touched = {f for f in ("index.html", "sw.js") if f in _files_changed}
+    if _app_touched:
+        _required = ("README.md", "CARETRACKER_HANDOFF.md", "STATUS.md")
+        _missing = [d for d in _required if d not in _files_changed]
+        if _missing:
+            blockers.append("NOTES DID NOT MOVE WITH THE CODE — %s changed but %s did not.\n"
+                            "    Docs are part of 'done', not a follow-up task. Update them in the\n"
+                            "    SAME commit." % (", ".join(sorted(_app_touched)), ", ".join(_missing)))
+        else:
+            notes.append("notes moved with the code (%s + all three docs)" % ", ".join(sorted(_app_touched)))
 
 print("=" * 74)
 print("PM CHECK — %s" % REPO)

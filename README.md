@@ -123,6 +123,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 ## Version History
 
+| v60 | Aug 26, 2026 | **In-patient stays, and the Dexamethasone alarm that ran for three weeks.** Aaron reported that ending a hospital stay produced a wall of missed doses. It was **three separate defects**, and the in-patient logic was only one of them. **(1) Every line in that banner was Dexamethasone, twice a day, since 4 Aug.** `chemoOnly` — the flag marking a medication as taken only around treatment — was added to `DEFAULT_MEDS` *after* her device had saved its own medication list, and nothing ever backfilled a new property onto an already-saved medication (`mergeMissingDefaultMeds()` adds missing MEDS, not missing PROPERTIES, and `normalizeMedication()` then froze the absent flag to `false` forever). A chemo-only steroid was therefore tracked as an everyday medication — against the hardcoded 8 AM / 2 PM schedule its id gets in the dose logic. `backfillDefaultMedFlags()` now fills in any property a saved medication has never heard of, **absent-only**: an explicit `false` is the caregiver's choice and is never overwritten. **(2) The wrong chemo date was used for every day in history.** `chemoOffsetFor()` measured from the most recently *entered* chemo date rather than the one nearest the day being asked about, so logging a past treatment after a future one shifted the entire timeline. Her 4 Aug is **one day after** the 3 Aug treatment — a day that expects a **Morning dose only**, which she logged at 10:30 — but it measured as 20 days out. Duplicate chemo dates (her record has two for 24 Aug) now collapse to one treatment day. **(3) A half-day stay had no correct answer.** Suppression was all-or-nothing per calendar day, and every medication card became an unloggable *In-Patient (Restricted)* tile for the duration. Aaron: *"they gave the Dex during the morning, but in the evening I had to end in patient bc I couldn't enter the Dex for the evening."* Leave the stay open and the evening dose she took at home is invisible; end it early to log it and the hospital's morning doses are flagged missed — **the app required a false record either way**. Suppression is now decided **per dose window** (the hospital's if she was admitted at the moment that window opened), and **medications stay fully loggable during a stay** — the banner still makes the stay unmistakable. *Take all* is restored for the same reason. **Also:** the *Chemo-day only* toggle described itself as controlling Home visibility while it silently also gated missed-dose alerts — which is very likely why it was left off. It now says so. **No data was migrated or rewritten; her 530 records are untouched.** `APP_VERSION` → `v60`, `sw.js` CACHE → `caretracker-v60`. Gates: `harness/inpatient-window-test.mjs` 10/10, `harness/medflag-backfill-test.mjs` 9/9, `harness/chemo-offset-test.mjs` 9/9 — **all three falsified against the pre-fix code**, and the chemo suite runs on her real chemo dates and asserts the exact line from her screenshot is gone. |
 | v59 | Aug 24, 2026 | **One spelling for "liter".** Aaron: *"for the para.. is it supposed to be 'Litres' or Liters?"* It was both — every identifier used the American spelling while four user-facing strings used the British one, in an app whose patient and oncology team are American. Normalised to **liters**; no identifier touched. The gate asserts it **by absence against the shipped bytes** rather than against a screen. `harness/para-test.mjs` 16/16, falsified against v58. **The units question, answered rather than built:** paracentesis needs no unit picker — liters is the standard unit in every country. What is missing is a units picker at all, and there is a hazard behind it: `CONFIG.tempUnit` exists and `tempFever()`/`tempHigh()` already switch thresholds on it, but a reading is stored as `{temp: 98.6, dose: '98.6 °F'}` — the unit lives only in a display string, so exposing a picker today would re-read every historical reading in the new unit. Logged in REQUESTS.md, not built. `sw.js` cache `caretracker-v58` → `caretracker-v59`. |
 | v58 | Aug 24, 2026 | **Settings exists, and the backup lives in it.** Aaron: *"all the backup stuff shouldn't live under reports. it should be under settings. and i don't even see a settings tab anymore in caretracker."* Right twice — there has never **been** a Settings screen in this app; the backup landed under Reports in v43.1 because that is where "save a copy" was built. **Reports keeps the two documents** — the spreadsheet and the printable record, both of which exist to be read or handed to a doctor and neither of which can be loaded back. **Settings gets everything that manages the data**: the backup, its password switch, putting one back, and sharing this tracker with another caregiver — plus a route to *Report a problem* and an About block naming the build and stating that, with no sign-in, the address itself is what grants access. One function renders both cards, so the counts and button behaviour cannot drift apart. **The half that matters:** someone who has tapped that backup button weekly for months will go to Reports looking for it, so Reports carries *"Looking for the backup? It moved to Settings"* and a one-tap route there — a move without that is a disappearance, and the thing that disappeared is the only copy of a patient's record. Drawer only, not a sixth bottom-nav tab: that grid is hardcoded to five and silently overflows. `harness/settings-test.mjs` 11/11, falsified against v57 at 8 red. Four suites were repointed at Settings; a fifth, `logger-test`, had pinned the literal `'v57'` — the exact anti-pattern Rule 5 forbids — and now reads the version from the file under test. `sw.js` cache `caretracker-v57` → `caretracker-v58`. |
 | v57 | Aug 22, 2026 | **The app writes down its own errors, and there is a place to add yours.** Aaron: *"we were also going to build in a logger for errors or improvements."* A **Report a problem** row, last in the menu. Three things in the order they are needed: say what happened (*Something's wrong* / *An idea* — both, not only crashes), see what the app noticed by itself, take the lot away as one plain-text file. Passive `error` and `unhandledrejection` listeners record faults as they happen; the second matters more here, because almost every failure in this app is inside an `await` against Firestore where `window.onerror` never fires. Neither handler `preventDefault()`s — the gate asserts a thrown error is still thrown. **Kept in localStorage, never in Firestore**: that collection is her medical record under append-only rules, and a stack trace written there cannot be cleaned up. Repeats collapse to one counted entry; the list is capped; a full phone does not turn an error into a broken screen. Trimming drops the oldest **errors** first and takes what the person wrote last — a straight ring buffer let a flood of errors evict her own description of the fault she was reporting. The file carries version, device and the log, and no dose, temperature, weight, symptom or appointment. `harness/logger-test.mjs` 19/19, falsified against v55 at 16 red. `sw.js` cache `caretracker-v56` → `caretracker-v57`. |
@@ -171,3 +172,49 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 - **CARETRACKER_HANDOFF.md** — Update the "Last updated" date at the top, add the new version to the Version History table, and revise any affected sections (medication definitions, Firebase collections, reminder schedule, known issues, etc.).
 
 Both files live in the repo root and serve as the single source of truth for onboarding new contributors or AI agents.
+
+- **v60 (in progress) — one shared clamp for treatment windows.** Four places in `index.html` answered
+  "how many days is this window?" and two of them were hand-inlined copies of the rule that tested
+  `Number.isFinite()` on values coming from a text field — where `"3"` is a string and the test is
+  false. The visible symptom was a blank box: the medication editor read an empty field as a
+  deliberate 0 and printed **"Treatment day only"**, while saving that same blank box fell back to
+  1 day either side. The label promised a window the app did not obey. Everything now goes through
+  `clampTreatmentDays()` (0–14, blank → 1), so the editor, the badge, the save path and the logic
+  cannot disagree. Ported from the same fix in ChemoWell app-v68.
+
+- **v60 (in progress) — text spilling outside its box on Home, and the scan that could not see it.**
+  The Quick Log card's generic-name line ("Acetaminophen · Oral suspension") was held on a single
+  line by `white-space: nowrap`. At 320px it ran 57px past the edge of its card, 17px at 360px — the
+  most common Android width — and 2px at 375px. It now wraps under the medication name instead of
+  being truncated: that line is what tells a caregiver which drug this actually is, so an ellipsis
+  would cost more than it saves.
+
+  This was live, and the first render scan reported the app clean anyway. Its overflow test asked
+  `scrollWidth > clientWidth`, which is always 0 for an inline element — meaning for nearly every
+  piece of text in the app — plus "did it leave the viewport", which text spilling a card in the
+  middle of the screen never does. The Zero Day Auditor proved the same blindness in ChemoWell by
+  deleting a layout fix and watching the scan stay green. The scan now measures the *rendered text*
+  against the box it has to live in, and it also refuses to call a screen clean unless the app
+  confirms it actually navigated there (`aria-current="page"`).
+
+- **v60 (in progress) — the missed-dose banner, redesigned.** Aaron: *"the long list of banner needs
+  a real redesign."* Every miss used to be written as a full sentence — "Tuesday, Aug 4:
+  Dexamethasone — Afternoon window (2:00 PM) closed with no dose logged" — and all of them were
+  joined into a single paragraph. Twelve misses meant twelve near-identical sentences with the
+  useful words buried in the middle of each one. A caregiver cannot scan that, and an alert nobody
+  can scan is not an alert.
+
+  It now says the same thing structurally: **the number of missed doses leads the heading**, so the
+  size of the problem is one glance; each dose is **its own line, grouped under its day**, so the
+  day is written once instead of once per dose; and the repeated "closed with no dose logged" is
+  gone, because that is what every row in a missed-dose banner means.
+
+  **Capped at three days**, with the rest behind a control that says exactly what it is hiding
+  ("Show 225 more on 45 earlier days") rather than a bare chevron. The cap is on days, not rows —
+  cutting mid-day would show some of a day's misses and hide others, which reads as "that dose was
+  fine". This matters after an in-patient stay, where the backlog is long and an unbounded banner
+  pushes Today's actual medication cards off the screen.
+
+  Checked by `harness/missed-banner-test.mjs`, which reads the **rendered screen** in a real browser
+  rather than the source or a helper function — the defect was never in the data, it was in how the
+  data was put on screen, which no data-layer test here could have caught.

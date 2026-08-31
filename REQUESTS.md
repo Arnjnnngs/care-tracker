@@ -37,6 +37,14 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
 
 ### Ready to build
 
+- [ ] **The missed-dose banner is a wall of run-on text on a phone.** Visible in Aaron's own
+  screenshot and reproduced by the new render check: every unresolved miss since `MISSED_TRACK_SINCE`
+  is concatenated into ONE paragraph separated by `·`, so a handful of days fills the whole screen
+  and the caregiver scrolls past it rather than reading it. It should be a short count with the
+  detail behind a tap, or one row per miss with the oldest collapsed. **An alert nobody reads is an
+  alert that does not work**, and this is the screen that matters most. Needs the Designer stage.
+
+
 - [ ] **Units picker for CareTracker (°F/°C, lbs/kg) — and the per-entry tagging it depends on.**
   Raised by Aaron 2026-08-24 while asking about "Litres" vs "Liters". ChemoWell already has this;
   CareTracker has `CONFIG.tempUnit` with no UI and no weight unit at all. **Order matters:** a
@@ -66,21 +74,42 @@ Nothing is deleted when it is finished. It moves to Completed with the version i
   for paracentesis: *"there needs to be a way to log the reason for weight change."* The
   paracentesis half shipped as v52; the reason half never did. ChemoWell has `WEIGHT_REASONS`;
   care-tracker has nothing.
-- [ ] **Regenerate chemowell-beta** from care-tracker v55 — the beta is a version behind, so the
-  place he is supposed to test things is not currently testable.
-
 ### Known, not urgent
 
 - [ ] **`test/v57-browser-notice.mjs` fails 17 checks in ChemoWell** — pre-existing, present on
   app-v58 as well, so not caused by any recent release. Those suites need a manually started server
   on port 8899 and otherwise die with a connection error that reads like infrastructure rather than
   failure, which is why real design regressions sat unnoticed.
+  **RUN 2026-08-24, and the 17 are now named.** Server started by hand (`python3 -m http.server 8899
+  --directory .`); the 11 static checks pass and the 17 browser ones fail for real. All of them are
+  on the **Help search results screen** — the same screen that carries the care-team safety strip:
+  - **The strip is 216px tall at 360px wide** (`R2D-1` wants under 200; it is 235 at 320px).
+  - **It has no surface of its own** — `rgb(255,255,255)`, the same white as the cards around it
+    (`R2D-4`), so it reads as content rather than as a notice.
+  - **The count line is not on screen at all** (`R2D-3`, three checks: found / above the rows /
+    contrast). The "closest N of M" total the result list is capped against is simply missing.
+  - **The consequence, and why this deserves its own release:** with the strip that tall the first
+    result row has **41px visible above the bottom nav**. On a 360px phone the answers are
+    effectively below the fold — someone searching Help sees a disclaimer and almost no results.
+  - Also failing: `R2D-2` (a welcome toast competes with the notice on a first browser run),
+    `R2D-9` (neither notice nor strip capped at 560px), `M3` (toast lift position).
+  Not fixed here: this is `index.html` layout work, so it needs APP_CLAUDE.md rule 5's Auditor + PM
+  gates and a design pass.
 - [ ] **Quiet-hours vs late-recovery policy** — the 10 PM reminder sits on the 22:05 boundary.
   Needs a decision from Aaron about which wins.
 
 ---
 
 ## COMPLETED
+
+- [x] **Regenerate chemowell-beta from care-tracker** — asked earlier, noting the place he is
+  supposed to test things was not testable. **Done 2026-08-24, and it was SEVEN releases behind, not
+  one** — stuck at `beta-v52` since Aug 21 while production shipped v53 through v59. Re-derived from
+  v59 with `harness/betaify-patch.py`: 9/9 isolation edits clean, every safety post-condition green,
+  `beta-isolation-test` 9/9, `eod-test` 11/11. **`sw.js` was brought over too**, which the
+  one-command recipe does not cover — the beta still ran the pre-v53 cache-first worker, so a tester
+  could pass or fail a build that was not the one under test. Pushed to the working branch, **not to
+  main**, so it is not live yet.
 
 - [x] **"Litres" or "Liters"** — asked 2026-08-24. **Built as care-tracker v59 / ChemoWell app-v65.**
   American in every identifier, British in 4 user-facing strings here and 10 there, including a
