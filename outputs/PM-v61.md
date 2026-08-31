@@ -1,6 +1,74 @@
 # PM gate — v61 ("What's new")
-AUDITED-COMMIT: 67ef9cb327642da795c6fc8ee3a513f3e995da77
-VERDICT: DO NOT SHIP
+AUDITED-COMMIT: 535e05a0c322a564279e5206f916e2443ac89cbf
+VERDICT: SHIP
+
+> **Read this first — this report changed its mind, and the reason matters.**
+> It first returned **DO NOT SHIP** against `67ef9cb`, for five wrong history entries, a gate v61
+> broke, and a live 30px control. While it was being written, the builder session picked those
+> findings up and fixed every one of them in `535e05a`. I have re-checked each fix myself against
+> the sources and with the suites, and they hold. **Sections 1–9 below are the original findings
+> against `67ef9cb` and are left exactly as written** — they are the record of what was wrong.
+> **Section 0, immediately below, is the re-check.**
+>
+> Nobody has approved anything. No human has been asked or has answered. The fixes were made by
+> another Claude session working in this same directory, and this verdict is my own re-verification
+> of them, not anyone's sign-off.
+
+---
+
+## 0. Re-check at `535e05a` — every blocker cleared, verified, with one new blemish
+
+All six things I blocked on are fixed. I did not take that on trust; here is each one and how I
+checked it.
+
+| What I blocked on | Fixed? | How I verified it |
+|---|---|---|
+| **v52** — "the weight chart no longer jumps because of a drain" | **Yes** | Now reads *"The weight chart shows readings exactly as recorded, with drains marked on it rather than subtracted from it."* That is the app's own Weight-report sentence, near enough word for word. The two screens now agree. |
+| **v49** — "so the alert never appeared" | **Yes** | Now reads *"The missed-dose alert was right, but the medication's own card still said 'Waiting' for the same dose."* That is exactly what STATUS's v49 section says. |
+| **v54** — "records which phone it came from" | **Yes** | Device claim gone. Now describes what v54 actually did: it used to say how many records were saved but never where the file went. Matches STATUS. |
+| **v23** — Senokot "with its own card" | **Yes** | Now names the 8 AM / 10 PM windows, as-needed, and the Take-all default dose — README's v23 row, precisely. The card claim (which was v24's) is gone. |
+| **v28** — "could have written fake entries" | **Yes** | Now: *"had written sample entries into the real record … those entries were deleted."* Matches README, and stops understating a real data incident. |
+| **v50 title** — "Exports reach the iPhone" | **Yes** | Retitled *"A different way of handing over the saved file."* It no longer asserts the thing Rule 7 says must not be asserted until Aaron confirms it on his phone. The honest bullet is unchanged. |
+| **`para-test` PARA-0 regression** | **Yes** | The v59 entry was reworded so it no longer needs to print the British spelling. `grep -ci litre index.html` → **0**. **`para-test` 16/16**, back to its pre-v61 score. |
+| **The 30px Clear button** on the missed-dose banner | **Yes** | Raised to the 44px floor. I measured it in a browser: **59.6 × 44.0 at 320, 375 and 390px**. It was 59.6 × 30.0 before. |
+| **`cal-test`'s dark drawer gate** (my "next release" item) | **Yes, early** | The count is now derived from the app source instead of pinned at six. **`cal-test` 67/70 → 69/70**: both `TAP-drawer-items` checks now run and pass, so the tap-target gate is alive for the first time in three releases — including on the row v61 added. |
+
+**Re-run numbers at `535e05a`:** `para-test` **16/16** (was 15/16) · `whatsnew-test` **23/23** ·
+`cal-test` **69/70** (was 67/70) · `missed-banner-test` **16/16** · `missedcard-test` **7/7** ·
+`python3 pm.py` **exit 2 — clear, warnings only**, no blockers, and the working tree is clean.
+`cal-test`'s single remaining red is `FILE-app-version`, still pinned to the literal `v43.3` — a
+stale patch precondition, unrelated to v61 and unchanged by it.
+
+### One new error came in with the fixes, and it is small
+
+The reworded **v59** entry now says the two spellings appeared in *"the input box, a warning
+message, the Reports empty state and **a Help page**."* I checked the actual v59 commit (`7f269a2`).
+Three of those four are right. The fourth was not a Help page — it was the label *"Litres drained,
+recorded separately"* on the paracentesis record. **CareTracker has no Help page at all**; the
+drawer has eight `view` rows plus What's new, and none of them is Help. (That screen is ChemoWell's.)
+
+I am **not** holding the release for this, and I want to be consistent about why. Everything I
+blocked on was either untrue about Brandi's care — her weight chart, her missed-dose alerts, whether
+her backup works — or a gate that went red. This is a wrong detail about which screen once showed a
+misspelling of "liter" a week ago. Nobody is misled about their medication by it. It is a one-clause
+correction that should be made on the way out; if it is not, it goes first next.
+
+But it is worth saying plainly what it demonstrates: **a fresh factual error was introduced in the
+very entry being corrected, by writing a specific detail without checking it against the source.**
+That is the same failure mode for the third time. Which is why the last item below still stands.
+
+### The one thing I asked for that was not done
+
+**There is still no pairing record.** No file in `outputs/` lists each of the 51 entries against the
+README or STATUS line it came from. That was item 6 of my original list and it is the item that
+actually ends this loop — twice now, "all 51 were re-checked" has been followed by someone finding
+more errors in half an hour. It does not block the release. It should exist before the next one.
+
+---
+
+*Everything below this line is the original report against `67ef9cb`, unedited.*
+
+---
 
 **I am holding this release for two reasons: the words are still wrong, and it breaks a test that
 was passing.** The audit fixed the six entries it found and those fixes are good — but the commit
