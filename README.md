@@ -218,3 +218,43 @@ Both files live in the repo root and serve as the single source of truth for onb
   Checked by `harness/missed-banner-test.mjs`, which reads the **rendered screen** in a real browser
   rather than the source or a helper function — the defect was never in the data, it was in how the
   data was put on screen, which no data-layer test here could have caught.
+
+### v61 — Aug 31, 2026 — you can see what changed
+
+Aaron: *"I wanted a section on caretracker under the ellipsis for latest updates or versioning. I
+also want something with a pop up when opening the app to say what new on the latest release."*
+
+**Menu → "What's new"** lists every release from v13 (1 Jul) to v61, newest first, and names the
+version that phone is running. **A notice on opening after an update** shows the newest release
+only — fifty entries on open is something a person dismisses without reading.
+
+Three decisions that separate useful from annoying:
+
+- **A fresh install is not an update.** With nothing stored the app cannot tell a new phone from one
+  that has run for weeks, so it records the version silently and says nothing. The next real update
+  is the first thing this ever shows.
+- **Per phone, not per person.** Two phones share this record, but "have I read this" is a fact
+  about the phone in your hand, so it lives in local storage.
+- **Armed at start-up, painted once loaded** — it never covers "Connecting…", but the decision does
+  not wait for the network, so it still appears offline.
+
+The user-facing history is reconstructed from this file (v13–v43.3, v56–v60) and `STATUS.md`
+(v44–v55, which this file never carried). It is written for the person holding the phone and names
+no function, file or commit — the engineering record stays here, and the two are deliberately not
+the same text. Where a release was plumbing, it says so; an honest "nothing you would notice" is
+what makes the entries that do matter believable.
+
+`CHANGELOG` sits immediately after `APP_VERSION` and before `state`, deliberately. A `const` is
+unreachable before the line that defines it, and this app's sibling shipped exactly that bug this
+week — a bound declared below the start-up code that used it threw, was swallowed by a `try/catch`,
+and silently emptied every saved medication.
+
+**Gate:** `harness/whatsnew-test.mjs` — 20/20, reading the rendered DOM and real browser storage.
+Falsified five ways: pop-up disabled → 10/17; greeting a fresh install → 18/20; dismissal not
+remembered → 18/20; history truncated → 18/20; menu row removed → 14/15.
+
+Two corrections recorded rather than quietly fixed. The test first failed on *"it does not come back
+on the next open"* — that was the **test**, not the app: Playwright re-runs its setup script on
+reload, resetting the stored version, so the app was right to show the notice again. And the first
+falsification **crashed** instead of failing, because it clicked a button that was no longer there;
+a suite that dies when the thing it guards breaks is only accidentally a suite.

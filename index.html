@@ -1039,7 +1039,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1058,6 +1058,12 @@ const APP_VERSION = 'v60';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
+  { v: 'v61', date: 'Aug 31, 2026', title: 'You can see what changed',
+    points: [
+      'A "What\u2019s new" page under the menu, listing every update to CareTracker with the newest first.',
+      'A short notice when the app opens after an update, so a change never arrives unannounced.',
+      'The version this phone is running is shown at the top of that page.'
+    ] },
   { v: 'v60', date: 'Aug 26, 2026', title: 'Hospital stays, and a three-week false alarm',
     points: [
       'Ending a hospital stay no longer produces a wall of missed doses. Dexamethasone had been raising alerts twice a day since 4 August, against a schedule it was never on.',
@@ -1204,7 +1210,7 @@ function whatsNewMarkSeen() { medsyncLsSet(WHATS_NEW_KEY, APP_VERSION); }
 // update is the first thing this ever shows.
 function whatsNewShouldShow() {
   const seen = whatsNewSeenVersion();
-  if (!seen) { return true; }
+  if (!seen) { whatsNewMarkSeen(); return false; }
   return seen !== APP_VERSION;
 }
 

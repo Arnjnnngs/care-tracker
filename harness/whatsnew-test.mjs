@@ -133,6 +133,16 @@ console.log('\n3. A fresh install is NOT greeted with an update notice');
 console.log('\n4. Dismissing it makes it stay dismissed');
 {
   const { ctx, page } = await openApp('v1-something-older');
+  // GUARDED. With the pop-up disabled there is no close button, and clicking a control that is not
+  // there threw a Playwright timeout -- so the suite died with a stack trace instead of a legible
+  // red. A suite that crashes when the thing it guards breaks is only accidentally a suite.
+  if (!(await page.$('[data-whatsnew-close]'))) {
+    t('cannot check dismissal — the pop-up never appeared', false, '');
+    t('cannot check that the version is remembered', false, '');
+    t('cannot check it stays dismissed', false, '');
+    t('cannot check the menu is still reachable', false, '');
+    await ctx.close();
+  } else {
   await page.click('[data-whatsnew-close]');
   await page.waitForTimeout(400);
   t('it closes when dismissed', !(await page.$('[data-whatsnew-modal]')), '');
@@ -150,6 +160,7 @@ console.log('\n4. Dismissing it makes it stay dismissed');
   t('the history is still reachable from the menu afterwards',
     !!(await page2.$('[data-cal-menu-button]')), '');
   await ctx.close();
+  }
 }
 
 console.log('\n5. The history lives under the menu and lists the real releases');
