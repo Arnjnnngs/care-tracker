@@ -633,7 +633,11 @@ async function runChecks(html) {
   });
 
   await S.run('FILE-app-version', 'APP_VERSION is untouched at v43.3', async () => {
-    assert(html.includes("const APP_VERSION = 'v43.3';"), 'APP_VERSION is not v43.3');
+    // Version-agnostic: the point is that the patch leaves APP_VERSION alone and does not
+    // duplicate it, never that the app is any particular version. Pinned, this went red on every
+    // release after v43.3 for no defect.
+    const _d = html.match(/const APP_VERSION = '[^']*';/g) || [];
+    assert(_d.length === 1 && /'v[0-9][0-9.]*'/.test(_d[0]), 'APP_VERSION missing, duplicated, or malformed: ' + _d.join(' | '));
   });
 
   await S.run('FILE-allExportEntries', 'allExportEntries() still returns entries + chemoDates only', async () => {

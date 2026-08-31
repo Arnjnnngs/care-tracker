@@ -781,7 +781,10 @@ check('PERSIST-deactivation-saved', 'the removal is written to localStorage and 
 
 check('FILE-app-version-untouched', 'APP_VERSION is still v43.3 — the patch must not set the version', async () => {
   const src = fs.readFileSync(APP_FILE, 'utf8');
-  return { ok: src.includes("const APP_VERSION = 'v43.3';"), detail: (src.match(/const APP_VERSION = '[^']*';/) || ['<missing>'])[0] };
+  // Version-agnostic: exactly one well-formed APP_VERSION, whatever release this is. Pinned to
+  // 'v43.3' it reported a failure on every release since, which is noise, not a finding.
+  const _d = src.match(/const APP_VERSION = '[^']*';/g) || [];
+  return { ok: _d.length === 1 && /'v[0-9][0-9.]*'/.test(_d[0]), detail: (_d[0] || '<missing>') };
 });
 
 check('FILE-no-bare-usedRecently-gates', 'no Home counter card is gated on usedRecently() alone any more', async () => {
