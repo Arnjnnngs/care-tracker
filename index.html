@@ -1041,9 +1041,184 @@ const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' 
 // produced it, and a release check needs one place to compare against sw.js's cache key.
 const APP_VERSION = 'v60';
 
+// ---------- WHAT'S NEW ----------
+//
+// Aaron, 2026-08-31: "I wanted a section on caretracker under the ellipsis for latest updates or
+// versioning. I also want something with a pop up when opening the app to say what new on the
+// latest release. much like most app have now a days."
+//
+// WHO THIS IS FOR AND HOW IT IS WRITTEN. Brandi reads this on her phone between doses, not a
+// developer reading a diff. So every line says what CHANGED FOR HER -- what the app now does, or
+// stops doing wrong -- and never names a function, a file or a commit. The engineering record
+// stays in README.md and STATUS.md where it belongs; the two are deliberately not the same text.
+//
+// The history is real, not invented for the feature: it is reconstructed from README.md (v13-v43.3
+// and v56-v60) and STATUS.md (v44-v55, which the README never carried). Where a release was
+// internal plumbing with nothing a person would notice, it says so plainly rather than dressing it
+// up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
+// makes the entries that DO matter believable.
+const CHANGELOG = [
+  { v: 'v60', date: 'Aug 26, 2026', title: 'Hospital stays, and a three-week false alarm',
+    points: [
+      'Ending a hospital stay no longer produces a wall of missed doses. Dexamethasone had been raising alerts twice a day since 4 August, against a schedule it was never on.',
+      'A half-day stay works properly. The hospital covers the doses given while she was there; a dose she took at home that evening is still yours to log.',
+      'Nothing is locked during a stay. Every medication can still be logged, whatever the app thinks about it.',
+      'The missed-dose alert was one long paragraph and is now a readable list: the number first, one line per dose, grouped by day, with older days folded away.',
+      'A medication’s treatment-day window is now yours to set, instead of one drug’s schedule being hardcoded for everything.'
+    ] },
+  { v: 'v59', date: 'Aug 24, 2026', title: 'One spelling for "liter"',
+    points: ['The app used both "liters" and "litres" in different places. It now uses one, everywhere.'] },
+  { v: 'v58', date: 'Aug 24, 2026', title: 'Settings, and the backup lives in it',
+    points: ['A Settings screen, which this app never had. Saving a copy of the records moved into it, instead of hiding under Reports.'] },
+  { v: 'v57', date: 'Aug 22, 2026', title: 'The app writes down its own errors',
+    points: [
+      'If something goes wrong, the app records it, so a fault you saw once can still be described days later.',
+      'A place to report a problem or an idea, without having to remember it until you next speak to someone.'
+    ] },
+  { v: 'v56', date: 'Aug 22, 2026', title: 'A backup can be password-protected',
+    points: ['A saved copy of the records can be locked with a password before it is sent to anyone.'] },
+  { v: 'v55', date: 'Aug 21, 2026', title: 'Restoring never leaves the medication list behind',
+    points: ['Restoring from a saved file used to bring back the entries but silently skip the medication list. It no longer does, and it tells you what it restored.'] },
+  { v: 'v54', date: 'Aug 21, 2026', title: 'A saved file says where it came from',
+    points: [
+      'A saved copy now records which phone and which day it came from, so two files can be told apart.',
+      'A second caregiver can be brought in without either phone losing anything.'
+    ] },
+  { v: 'v53', date: 'Aug 20, 2026', title: 'A new version actually reaches the phone',
+    points: ['A fix could be live and correct on the server while the phone kept showing the old version, with no way to tell. The app now checks for a newer version each time it opens.'] },
+  { v: 'v52', date: 'Aug 20, 2026', title: 'Paracentesis is its own record',
+    points: [
+      'Fluid drained is recorded separately instead of being mixed into the weight trend.',
+      'The weight chart no longer jumps because of a drain.'
+    ] },
+  { v: 'v51', date: 'Aug 19, 2026', title: 'The end-of-day check-in asks about today',
+    points: ['Bowel movement and appetite are asked once at the end of the day, about that day -- not the next morning about yesterday.'] },
+  { v: 'v50', date: 'Aug 19, 2026', title: 'Exports reach the iPhone',
+    points: [
+      'Saving a copy failed silently on iPhone. It works now.',
+      'Two phones sharing the record no longer drift apart without saying so.'
+    ] },
+  { v: 'v49', date: 'Aug 18, 2026', title: 'A missed dose can no longer hide behind "Waiting"',
+    points: ['A card could show "Waiting" over a dose that had actually been missed, so the alert never appeared.'] },
+  { v: 'v48', date: 'Aug 18, 2026', title: 'Honest failures, and bigger text',
+    points: [
+      'If a dose fails to save, the app says so instead of closing the box as though it worked.',
+      'Every text box is now large enough that an iPhone does not zoom in when you tap it.'
+    ] },
+  { v: 'v47', date: 'Aug 17, 2026', title: 'Live updates stop wiping what you are typing',
+    points: ['If the other phone logged something while you were mid-sentence, your typing was thrown away. It is kept now.'] },
+  { v: 'v46', date: 'Aug 17, 2026', title: 'Shared medication settings',
+    points: ['Both phones can share one medication list, so a change made on one is not silently missing on the other.'] },
+  { v: 'v45', date: 'Aug 16, 2026', title: 'A guided tour',
+    points: ['A short walkthrough of the app, available any time from the menu.'] },
+  { v: 'v44', date: 'Aug 16, 2026', title: 'Groundwork',
+    points: ['Internal work with nothing you would notice on screen.'] },
+  { v: 'v43.3', date: 'Aug 16, 2026', title: 'Three live faults fixed',
+    points: ['Three problems that were live on the phone, all caused by the same underlying mistake in how the screen was drawn.'] },
+  { v: 'v43.2', date: 'Aug 16, 2026', title: 'Late doses and false alarms',
+    points: [
+      'Logging a dose late no longer raises a false alarm for the window it was late for.',
+      'It also no longer silences the alert for the next window.'
+    ] },
+  { v: 'v43.1', date: 'Aug 15, 2026', title: 'Save a copy of the records',
+    points: ['A spreadsheet export and a printable report -- the first way this app ever had to get the records out of it.'] },
+  { v: 'v42', date: 'Jul 22, 2026', title: 'Tested changes brought across',
+    points: ['A batch of changes moved over from the test version after checking.'] },
+  { v: 'v41', date: 'Jul 20, 2026', title: 'Evening medication timing corrected',
+    points: ['A correction to the previous release’s Buspirone and Paroxetine window.'] },
+  { v: 'v40', date: 'Jul 20, 2026', title: 'Buspirone and Paroxetine moved to the morning',
+    points: ['Both moved out of the 10 PM window into a new morning window alongside Protonix.'] },
+  { v: 'v39', date: 'Jul 20, 2026', title: 'Repair release',
+    points: ['A previous upload had damaged two files. This put them back.'] },
+  { v: 'v38', date: 'Jul 19, 2026', title: 'Refresh only',
+    points: ['Forced every phone to pick up the current version. Nothing changed on screen.'] },
+  { v: 'v37', date: 'Jul 19, 2026', title: 'Clearer dose buttons',
+    points: ['Tidied up the wording on the quick-log cards.'] },
+  { v: 'v36', date: 'Jul 19, 2026', title: 'Duplicate wording removed',
+    points: ['Cards said "Available" and "Available now" at the same time.'] },
+  { v: 'v35', date: 'Jul 19, 2026', title: 'Clearer status on each card',
+    points: ['A redesigned status badge on the quick-log cards, and tidier chemo-day wording.'] },
+  { v: 'v34', date: 'Jul 18, 2026', title: 'Chemo-day medication rules corrected',
+    points: ['Zofran’s restriction and Dexamethasone’s window were both measuring the wrong days around treatment.'] },
+  { v: 'v33', date: 'Jul 18, 2026', title: 'Senokot is as-needed',
+    points: ['Its fixed 8 AM and 10 PM windows were removed -- it is taken when needed, so it is no longer flagged as missed.'] },
+  { v: 'v32', date: 'Jul 18, 2026', title: 'False missed alerts fixed',
+    points: ['A dose logged the same day could still be reported as missed, because it was being matched to the wrong window.'] },
+  { v: 'v31', date: 'Jul 18, 2026', title: 'Evening reminders match the app',
+    points: ['The phone reminders were firing at different times from the windows shown in the app.'] },
+  { v: 'v30', date: 'Jul 17, 2026', title: 'The chemo cycle system',
+    points: ['Treatment dates, the medications that follow them, and the restrictions around them.'] },
+  { v: 'v29', date: 'Jul 17, 2026', title: 'The 48-hour edit lock is back',
+    points: ['Entries older than 48 hours are protected again, after a temporary unlock.'] },
+  { v: 'v28', date: 'Jul 17, 2026', title: 'Demo data removed',
+    points: ['A leftover demo function that could have written fake entries into the real record is gone.'] },
+  { v: 'v27', date: 'Jul 13, 2026', title: 'Yesterday’s misses show too',
+    points: ['A dose missed late at night no longer disappeared from the alert at midnight.'] },
+  { v: 'v26', date: 'Jul 12, 2026', title: 'Missed-dose alerts',
+    points: ['A red banner and marked rows for the scheduled medications, so a missed dose is visible instead of having to be noticed.'] },
+  { v: 'v25', date: 'Jul 12, 2026', title: 'Times of day',
+    points: ['The journal and history are grouped into Overnight, Morning, Afternoon and Evening.'] },
+  { v: 'v24', date: 'Jul 12, 2026', title: 'Home screen layout',
+    points: ['Protonix and Senokot got their own cards; the shared card became "Evening meds".'] },
+  { v: 'v23', date: 'Jul 12, 2026', title: 'Senokot added',
+    points: ['Added to the medication list with its own card.'] },
+  { v: 'v22', date: 'Jul 12, 2026', title: 'Daily limits are enforced',
+    points: ['A dose button that would take her over the daily limit is now blocked rather than warned about.'] },
+  { v: 'v21', date: 'Jul 11, 2026', title: 'Tylenol limit, and safer logging',
+    points: [
+      'A 2500 mg daily Tylenol ceiling.',
+      'A warning if a dose is logged at a time in the future, and a confirmation before deleting.'
+    ] },
+  { v: 'v20', date: 'Jul 11, 2026', title: 'Lidocaine added',
+    points: ['Topical cream with a 4-hour gap and a maximum of 4 applications a day.'] },
+  { v: 'v19', date: 'Jul 7, 2026', title: 'History cannot be wiped',
+    points: ['The "Clear all" buttons are gone. Nothing removes the record wholesale.'] },
+  { v: 'v18', date: 'Jul 2, 2026', title: 'Phone reminders',
+    points: ['Reminders that arrive even when the app is closed.'] },
+  { v: 'v17', date: 'Jul 2, 2026', title: 'Fewer reminders',
+    points: ['Tylenol, Morphine and Imodium are as-needed, so they no longer send reminders.'] },
+  { v: 'v16', date: 'Jul 2, 2026', title: 'Medication reminders',
+    points: ['The first reminders for scheduled medications.'] },
+  { v: 'v15', date: 'Jul 2, 2026', title: 'A new look',
+    points: ['The pink glass theme, and tabs that stay put when you scroll.'] },
+  { v: 'v14', date: 'Jul 1, 2026', title: 'Typing no longer loses focus',
+    points: ['The keyboard dropped out mid-word while the screen refreshed.'] },
+  { v: 'v13', date: 'Jul 1, 2026', title: 'Forced refresh',
+    points: ['Made every phone pick up the current version.'] }
+];
+
+// Placed immediately after APP_VERSION and before `state`, deliberately. A const is unreachable
+// before the line that defines it, and this app's sibling learned that the hard way: a bound
+// declared 300 lines below the start-up code that used it threw, was swallowed by a try/catch, and
+// silently emptied every saved medication. Nothing here can be read before it exists.
+const WHATS_NEW_KEY = 'caretracker-seen-version';
+function whatsNewLatest() { return CHANGELOG[0] || null; }
+// PER DEVICE, not per person. Two phones share this record, and "have I read this yet" is a fact
+// about the phone in your hand -- so it lives in local storage rather than in the shared prefs,
+// and reading it on one phone never silences it on the other.
+function whatsNewSeenVersion() { return medsyncLsGet(WHATS_NEW_KEY); }
+function whatsNewMarkSeen() { medsyncLsSet(WHATS_NEW_KEY, APP_VERSION); }
+// A FRESH INSTALL IS NOT AN UPDATE. With nothing stored we cannot tell a new phone from one that
+// has been running for weeks, and greeting a first-time user with "here is what changed" is both
+// meaningless and in the way. Record the current version silently and say nothing; the next real
+// update is the first thing this ever shows.
+function whatsNewShouldShow() {
+  const seen = whatsNewSeenVersion();
+  if (!seen) { return true; }
+  return seen !== APP_VERSION;
+}
+
+
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missedBannerOpen: false, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, bkProtect: false, bkPw: '', bkPw2: '', bkLocked: null, bkUnlockPw: '', reportKind: 'problem', reportDraft: '', reportNotice: null, reportBusy: false, reportShowAll: false, reportConfirmClear: false, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missedBannerOpen: false, whatsNewOpen: false, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, bkProtect: false, bkPw: '', bkPw2: '', bkLocked: null, bkUnlockPw: '', reportKind: 'problem', reportDraft: '', reportNotice: null, reportBusy: false, reportShowAll: false, reportConfirmClear: false, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+
+// Decided ONCE at start-up, not on every render: whether this phone has already seen this version.
+// Reading it per render would re-open the pop-up the moment anything else redrew the screen.
+// It is only PAINTED once state.loaded is true (see renderWhatsNewModal) so it never covers the
+// "Connecting..." overlay -- but the decision does not wait for the network, so it still appears on
+// a phone that opens offline.
+state.whatsNewOpen = whatsNewShouldShow();
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -2375,6 +2550,61 @@ function renderGroupedMedsCard(title, meds, now) {
   );
 }
 
+// ---- What's new ----
+//
+// One entry renderer, shared by the full history screen and the pop-up, so the two can never drift
+// into describing the same release differently. `latest` only changes the styling of the top card.
+function whatsNewEntry(e, latest) {
+  return h('div', { key: e.v, 'data-whatsnew-entry': e.v, style: { background: latest ? 'rgba(170,83,117,0.10)' : 'rgba(255,255,255,0.55)', border: '1px solid ' + (latest ? 'rgba(170,83,117,0.32)' : 'rgba(212,104,138,0.14)'), borderRadius: '15px', padding: '13px 14px', minWidth: '0' } },
+    h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '3px' } },
+      h('div', { style: { fontSize: '14.5px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em', minWidth: '0', overflowWrap: 'anywhere' } }, e.title),
+      h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', flexShrink: '0' } }, e.v + ' \u00b7 ' + e.date)
+    ),
+    h('ul', { style: { margin: '7px 0 0', paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '5px' } },
+      ...(e.points || []).map((pt, i) => h('li', { key: String(i), style: { fontSize: '13.5px', lineHeight: '1.5', color: '#4A3742', overflowWrap: 'anywhere' } }, pt))
+    )
+  );
+}
+
+function renderWhatsNew(now) {
+  const latest = whatsNewLatest();
+  return [
+    h('section', { 'data-whatsnew-screen': 'true', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+      h('div', { style: { minWidth: '0' } },
+        h('div', { style: { fontSize: '18px', fontWeight: '800', letterSpacing: '-0.02em', color: '#342530' } }, "What's new"),
+        h('div', { style: { fontSize: '13px', color: '#6E5261', marginTop: '3px', lineHeight: '1.45' } },
+          'Every update to CareTracker, newest first. This phone is running ' + APP_VERSION + '.')
+      ),
+      ...CHANGELOG.map((e, i) => whatsNewEntry(e, i === 0 && latest && e.v === latest.v))
+    )
+  ];
+}
+
+// The pop-up. Deliberately NOT the whole history -- it shows the newest release only, because a
+// wall of fifty entries on open is something a person dismisses without reading, which defeats the
+// point of showing it at all. "See all updates" is one tap away for anyone who wants the rest.
+function renderWhatsNewModal() {
+  if (!state.whatsNewOpen || !state.loaded) return null;
+  const e = whatsNewLatest();
+  if (!e) return null;
+  const close = () => { whatsNewMarkSeen(); setState({ whatsNewOpen: false }); };
+  return h('div', { 'data-whatsnew-modal': 'true', role: 'dialog', 'aria-modal': 'true', 'aria-label': "What's new in " + e.v,
+    onClick: (ev) => { if (ev.target === ev.currentTarget) close(); },
+    style: { position: 'fixed', inset: '0', zIndex: '95', background: 'rgba(52,37,48,0.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '16px' } },
+    h('div', { style: { width: '100%', maxWidth: '460px', maxHeight: '80vh', overflowY: 'auto', background: '#FFF9FB', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '20px', padding: '18px 16px calc(16px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(121,72,96,0.22)', minWidth: '0' } },
+      h('div', { style: { fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#AA5375', marginBottom: '8px' } }, 'Updated \u00b7 ' + e.v),
+      whatsNewEntry(e, true),
+      h('div', { style: { display: 'flex', gap: '9px', marginTop: '14px' } },
+        h('button', { 'data-whatsnew-all': 'true', type: 'button',
+          onClick: () => { whatsNewMarkSeen(); setState({ whatsNewOpen: false, view: 'whatsnew', drawerOpen: false }); },
+          style: { flex: '1', minHeight: '46px', borderRadius: '13px', background: 'rgba(170,83,117,0.12)', border: '1px solid rgba(170,83,117,0.34)', color: '#AA5375', fontSize: '14px', fontWeight: '800' } }, 'See all updates'),
+        h('button', { 'data-whatsnew-close': 'true', type: 'button', onClick: close,
+          style: { flex: '1', minHeight: '46px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '800', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Got it')
+      )
+    )
+  );
+}
+
 function renderContent(now, mg, pct, tyColor, ceiling) {
   if (state.view === 'medsync') return renderMedsyncScreen(now);
   if (state.view === 'meds') return renderMedicationManager(now);
@@ -2383,6 +2613,7 @@ function renderContent(now, mg, pct, tyColor, ceiling) {
   if (state.view === 'symptoms') return renderSymptoms(now);
   if (state.view === 'calendar') return renderCalendarView(now);
   if (state.view === 'settings') return renderSettings(now);
+  if (state.view === 'whatsnew') return renderWhatsNew(now);
   if (state.view === 'report') return renderReportView(now);
   return [...renderToday(now, mg, pct, tyColor, ceiling)];
 }
@@ -2404,6 +2635,7 @@ function render() {
     state.toast ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'fixed', bottom: 'calc(96px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '18px', fontSize: '14px', fontWeight: '600', lineHeight: '1.35', boxShadow: '0 10px 28px rgba(120,60,90,0.2), 0 0 0 1px rgba(255,255,255,0.3)', zIndex: '50', maxWidth: 'calc(100vw - 32px)', width: 'max-content', textAlign: 'center', whiteSpace: 'normal', overflowWrap: 'anywhere' } }, state.toast) : null,
     renderTimeModal(),
     renderCalDrawer(),
+    renderWhatsNewModal(),
     renderApptSheet(),
     (state.view === 'reports' && state.reportsView) ? h('div', { style: { position: 'fixed', zIndex: '34', left: '0', right: '0', bottom: 'calc(78px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', pointerEvents: 'none' } },
       h('button', { onClick: () => setState({ reportsView: null }), style: { pointerEvents: 'auto', minHeight: '42px', padding: '0 18px', borderRadius: '99px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '800', boxShadow: '0 10px 28px rgba(120,60,90,0.22)' } }, '↩ Back')
@@ -4537,6 +4769,10 @@ const CAL_DRAWER_ITEMS = [
   { view: 'reports', label: 'Reports', icon: 'chart', blurb: 'History, charts, save a copy' },
   { view: 'inpatient', label: 'In-Patient', icon: 'hospital', blurb: 'Hospital stays' },
   { view: 'symptoms', label: 'Symptoms', icon: 'notes', blurb: 'How she is feeling' },
+  // Aaron asked for this under the ellipsis: "a section on caretracker under the ellipsis for
+  // latest updates or versioning". It sits below the day-to-day screens because it is something
+  // you go looking for, not something you use while logging a dose.
+  { view: 'whatsnew', label: "What's new", icon: 'history', blurb: 'Latest updates and history' },
   // Settings, which this app has never had: the backup lived under Reports because that is where
   // "save a copy" was built in v43.1, and there was nowhere else for it to go.
   { view: 'settings', label: 'Settings', icon: 'bkRestore', blurb: 'Backup, sharing, about' },
