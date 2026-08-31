@@ -264,7 +264,48 @@ for (const dev of DEVICES) {
   // THE MEDICATION EDITOR IS A SCREEN TOO, and it is where settings get typed. It was missed by the
   // first version of this scan, which walked only the five tabs -- so a release that CHANGED the
   // editor would have passed a render gate that never rendered it. Same blind spot, one level in.
-  const EXTRA = [{ name: 'med-editor', open: async page => {
+  // THE TWO SCREENS v61 ADDS. The first run of this scan after building them reported 50
+  // combinations CLEAN while never opening either -- a render gate that skips the thing under
+  // change is the exact failure this file exists to prevent, and it happened on its first outing.
+  const whatsNewPasses = [
+    { name: 'whatsnew', open: async page => {
+      const opened = await page.evaluate(() => {
+        const b = document.querySelector('[data-cal-menu-button]');
+        if (!b) return false; b.click(); return true;
+      });
+      if (!opened) return 'the menu button is not on screen';
+      await page.waitForTimeout(500);
+      const picked = await page.evaluate(() => {
+        const r = document.querySelector('[data-cal-drawer-item="whatsnew"]');
+        if (!r) return false; r.click(); return true;
+      });
+      if (!picked) return 'no What\u2019s-new row in the menu';
+      await page.waitForTimeout(700);
+      // Prove the screen rendered its entries, not just its heading.
+      return page.evaluate(() => {
+        if (!document.querySelector('[data-whatsnew-screen]')) return 'the history screen did not render';
+        const n = document.querySelectorAll('[data-whatsnew-entry]').length;
+        return n > 10 ? true : 'only ' + n + ' releases listed';
+      });
+    } },
+    { name: 'whatsnew-popup', open: async page => {
+      // Seeded and reloaded, because that is what an update actually is: the decision is made once
+      // at start-up, so no click can produce this state.
+      await page.evaluate(() => { try { localStorage.setItem('caretracker-seen-version', 'v0-older'); } catch (e) {} });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(2000);
+      return page.evaluate(() => {
+        const m = document.querySelector('[data-whatsnew-modal]');
+        if (!m) return 'the update notice did not appear';
+        return m.innerText.trim().length > 60 ? true : 'the notice rendered empty';
+      });
+    } }
+  ];
+  const EXTRA = [...whatsNewPasses, { name: 'med-editor',
+    verify: async page => (await page.evaluate(() => [...document.querySelectorAll('button')]
+      .some(b => /^(save|save changes|add medication)$/i.test((b.innerText || '').trim()))))
+      ? true : 'the medication editor did not open',
+    open: async page => {
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find(x => ((x.getAttribute('aria-label') || x.innerText || '').trim().toLowerCase()) === 'meds');
       if (b) b.click();
@@ -350,15 +391,17 @@ for (const dev of DEVICES) {
   // then the overlay screens
   for (const extra of EXTRA) {
     let opened = await extra.open(page);
-    if (opened) {
+    // PER-PASS VERIFICATION. This used to look for a Save button for EVERY overlay pass -- a marker
+    // that only exists in the medication editor -- so any new overlay screen would have been
+    // reported unreachable no matter how well it rendered. Each pass now proves its own screen, and
+    // returns a STRING saying what was wrong rather than a bare false.
+    if (opened === true && extra.verify) {
       await page.waitForTimeout(600);
-      // A click is not a screen: the editor must actually be on screen. Its Save control is the
-      // marker that exists only while it is open.
-      opened = await page.evaluate(() => [...document.querySelectorAll('button')]
-        .some(b => /^(save|save changes|add medication)$/i.test((b.innerText || '').trim())));
+      opened = await extra.verify(page);
     }
-    if (!opened) {
-      console.log('  COULD NOT OPEN ' + extra.name + ' at ' + dev.w + 'px — not scanned');
+    if (opened !== true) {
+      console.log('  COULD NOT OPEN ' + extra.name + ' at ' + dev.w + 'px — not scanned (' +
+        (typeof opened === 'string' ? opened : 'the screen could not be opened') + ')');
       unreachable++;
       continue;
     }
