@@ -159,8 +159,20 @@ Every one of these was learned from a check that passed while the product was br
 Keep these in STATUS.md until closed:
 - `deliverFile()` fails silently on iOS with no detection — needs Aaron's phone test to
   confirm any fix. Until confirmed, the backup is NOT called a backup.
-- `confirmTimeAndLog()` has no error handling — a refused dose write closes the modal as
-  if it worked. Next safety release.
+- ~~`confirmTimeAndLog()` has no error handling — a refused dose write closes the modal as
+  if it worked.~~ **CLOSED, and it was closed in v48** (`git log -S writeError`), not by any
+  work since. `addEntryDB()` catches the rejection, sets `state.writeError`, and the app
+  renders a red banner ABOVE everything including the missed-dose alert, which stays until
+  the caregiver taps OK; the rethrow means the success toast never fires. This note survived
+  ten releases after the thing it describes was fixed, which is its own hazard — it sent
+  work at an already-solved problem. Verify a standing exception before acting on it.
+  **What IS still open, found while checking the above:** the `multi` branch ("Take all")
+  loops `await addEntryDB()` per medication with the loop OUTSIDE any catch, so the first
+  refusal aborts the rest. Medications 1..k are saved, k+1..n are not, and the banner says
+  *"Nothing was lost — check your connection and log it again"* — which is true of the ones
+  that failed and wrong about the ones that saved. Re-logging then DOUBLE-logs the saved
+  ones. Needs its own small release, and unlike the note above this one has been verified
+  against the current file.
 - Reminder ledger built and tested (`harness/`) but not wired into the live workflow;
   v43.4+ silently drops ~1 in 6 anchored reminders on late cron runs.
 

@@ -1092,6 +1092,24 @@ worked. Reproduced identically on unpatched v45 and on the patched build, so v46
 introduced nor moved it. Same shape as the export buttons that reported success with no file.
 **This deserves its own small release and should be next.**
 
+> **CORRECTION, 2026-08-31 — this was fixed in v48 and the note stayed up for ten releases.**
+> `git log -S writeError -- index.html` puts it in **v48: honest write failures, 16px iOS floor,
+> and pm.py**. `addEntryDB()` now catches the rejection, sets `state.writeError`, and rethrows;
+> the app renders a red `role="alert"` banner **above everything, including the missed-dose
+> alert**, with a 44px OK button, and it stays until acknowledged rather than vanishing like a
+> toast. Because the rethrow happens at the `await`, the success toast never fires either. So
+> "the patient is told nothing" has not been true since v48. A stale standing exception is not
+> harmless — it points real work at a solved problem while the live one goes unlisted.
+>
+> **The live one, verified against the current file:** the `multi` branch (the "Take all"
+> button) runs `for (const id of ids) { await addEntryDB(en); }` with the loop outside any
+> catch. The first refusal throws out of the loop, so medications before it are saved and the
+> rest are never attempted — while the banner reads *"Nothing was lost — check your connection
+> and log it again."* That sentence is true of the failures and wrong about the successes, and
+> acting on it double-logs every medication that did save. The `symptom` branch has a smaller
+> version of the same shape: `removeEntryDB(editId)` then `logSymptom(...)`, so a refused
+> re-log after a successful delete loses the original entry. Both need one small release.
+
 ### Concurrency
 Convergence, not conflict detection. Two edits in the same second both write the whole list and the
 later wins; the snapshot listener keeps both phones current within a second or two. The only real
