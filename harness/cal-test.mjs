@@ -547,7 +547,7 @@ async function runFileChecks(suite, html) {
     assert(/sw\.js/.test(src) === false || !/open\([^)]*sw\.js/.test(src), 'the patch opens sw.js');
   });
 
-  await suite.run('FILE-sw-untouched', 'sw.js in the repo is byte-identical to the committed v43.3 blob', () => {
+  await suite.run('FILE-sw-untouched', 'sw.js in the repo is byte-identical to the committed blob, whatever release that is', () => {
     const out = execSync('git -C ' + REPO_DIR + ' status --porcelain -- sw.js', { encoding: 'utf-8' }).trim();
     assert(out === '', 'sw.js is modified in the working tree: ' + out);
   });

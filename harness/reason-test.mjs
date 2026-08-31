@@ -632,7 +632,7 @@ async function runChecks(html) {
     assert(html.includes('function mrReportBlock('), 'mrReportBlock missing');
   });
 
-  await S.run('FILE-app-version', 'APP_VERSION is untouched at v43.3', async () => {
+  await S.run('FILE-app-version', 'APP_VERSION is untouched, whatever release it names', async () => {
     // Version-agnostic: the point is that the patch leaves APP_VERSION alone and does not
     // duplicate it, never that the app is any particular version. Pinned, this went red on every
     // release after v43.3 for no defect.
