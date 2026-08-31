@@ -54,6 +54,11 @@ const MODE_FALSIFY = argv.includes('--falsify');
 const FILE_ARG = (() => { const i = argv.indexOf('--file'); return i >= 0 ? argv[i + 1] : null; })();
 const ONLY = (() => { const i = argv.indexOf('--only'); return i >= 0 ? argv[i + 1] : null; })();
 const APP_FILE = FILE_ARG || path.join(HERE, 'work', 'index.html');
+// Read once at module scope. The drawer-item count below needs the source, and reaching for the
+// `html` local inside main() put a ReferenceError INSIDE the assert -- so the gate went from
+// "pinned to a stale 6" to "throws before it measures anything", which is the same dead check
+// wearing a different hat. It reported a plausible-looking red either way.
+const APP_SRC = fs.existsSync(APP_FILE) ? fs.readFileSync(APP_FILE, 'utf-8') : '';
 const ALL_VIEWPORTS = [{ w: 375, h: 812, name: 'iPhone-375x812' }, { w: 390, h: 844, name: 'iPhone-390x844' }];
 // Falsification proves the CHECK works, not the layout; it runs on the narrowest phone only so a
 // 14-mutator sweep finishes in one sitting. Verification always runs both.
@@ -564,7 +569,11 @@ async function runRuntimeChecks(suite, browser, url, vp, net) {
 
     await suite.run('TAP-drawer-items@' + vp.name, tag + 'every drawer item is at least 44px tall', async () => {
       const boxes = await page.$$eval('[data-cal-drawer-item]', els => els.map(e => { const r = e.getBoundingClientRect(); return { w: r.width, h: r.height, v: e.getAttribute('data-cal-drawer-item') }; }));
-      assert(boxes.length === 6, 'expected 6 drawer items, found ' + boxes.length);
+      // COUNTED FROM THE APP, not pinned. This said 6; the menu has had 9 since v58, so the assert
+      // threw BEFORE the 44px loop it exists for -- the tap-target gate has not actually run since
+      // then, and its red looked like a real failure rather than a dead check. Found by the PM.
+      const expectedItems = (APP_SRC.match(/\{ view: '[a-z]+', label: /g) || []).length;
+      assert(boxes.length === expectedItems, 'expected ' + expectedItems + ' drawer items, found ' + boxes.length);
       for (const b of boxes) { assertGte(b.h, 44, tag + 'drawer item "' + b.v + '" height'); assertGte(b.w, 44, tag + 'drawer item "' + b.v + '" width'); }
     });
 

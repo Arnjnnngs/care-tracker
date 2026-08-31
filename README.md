@@ -123,6 +123,7 @@ When deploying new versions, bump the `CACHE` constant in `sw.js` (currently `ca
 
 ## Version History
 
+| v61 | Aug 31, 2026 | **You can see what changed.** Aaron: *"I wanted a section on caretracker under the ellipsis for latest updates or versioning. I also want something with a pop up when opening the app to say what new on the latest release."* A **What's new** page under the menu listing every release from v13, newest first, naming the version that phone runs; and a **notice on opening after an update** showing the newest release only. A fresh install gets no notice — the version is recorded silently, because with nothing stored the app cannot tell a new phone from one that has run for weeks. Per phone, not per person: two phones share this record, but "have I read this" is a fact about the phone in your hand. Armed once at start-up and painted only once loaded, so it never covers "Connecting…". The history is reconstructed from this file (v13–v43.3, v56–v61) and `STATUS.md` (v44–v55), and every entry is paired to its source in `outputs/CHANGELOG-SOURCES.md` — that file exists because "all entries were re-checked" was claimed twice and both times a reviewer found more errors within half an hour. **Eleven wrong entries were found across three review rounds**, all written from headline extraction rather than from reading the release; the last was introduced while correcting another entry in the same commit. Also fixed here, both pre-existing: the missed-dose banner's **Clear button was 30px** against the 44px iOS floor, live since v60; and `cal-test`'s drawer tap-target gate had been **dark since v58** (pinned to 6 menu items when there are 9, so it threw before the 44px loop it is named after). `APP_VERSION` → `v61`, `sw.js` CACHE → `caretracker-v61`. Gates: `harness/whatsnew-test.mjs` **23/23** reading the rendered DOM and real browser storage, falsified six ways; `para-test` 16/16; `missed-banner-test` 16/16; `cal-test` 69/70; render scan **80 of 80** combinations across ten widths. |
 | v60 | Aug 26, 2026 | **In-patient stays, and the Dexamethasone alarm that ran for three weeks.** Aaron reported that ending a hospital stay produced a wall of missed doses. It was **three separate defects**, and the in-patient logic was only one of them. **(1) Every line in that banner was Dexamethasone, twice a day, since 4 Aug.** `chemoOnly` — the flag marking a medication as taken only around treatment — was added to `DEFAULT_MEDS` *after* her device had saved its own medication list, and nothing ever backfilled a new property onto an already-saved medication (`mergeMissingDefaultMeds()` adds missing MEDS, not missing PROPERTIES, and `normalizeMedication()` then froze the absent flag to `false` forever). A chemo-only steroid was therefore tracked as an everyday medication — against the hardcoded 8 AM / 2 PM schedule its id gets in the dose logic. `backfillDefaultMedFlags()` now fills in any property a saved medication has never heard of, **absent-only**: an explicit `false` is the caregiver's choice and is never overwritten. **(2) The wrong chemo date was used for every day in history.** `chemoOffsetFor()` measured from the most recently *entered* chemo date rather than the one nearest the day being asked about, so logging a past treatment after a future one shifted the entire timeline. Her 4 Aug is **one day after** the 3 Aug treatment — a day that expects a **Morning dose only**, which she logged at 10:30 — but it measured as 20 days out. Duplicate chemo dates (her record has two for 24 Aug) now collapse to one treatment day. **(3) A half-day stay had no correct answer.** Suppression was all-or-nothing per calendar day, and every medication card became an unloggable *In-Patient (Restricted)* tile for the duration. Aaron: *"they gave the Dex during the morning, but in the evening I had to end in patient bc I couldn't enter the Dex for the evening."* Leave the stay open and the evening dose she took at home is invisible; end it early to log it and the hospital's morning doses are flagged missed — **the app required a false record either way**. Suppression is now decided **per dose window** (the hospital's if she was admitted at the moment that window opened), and **medications stay fully loggable during a stay** — the banner still makes the stay unmistakable. *Take all* is restored for the same reason. **Also:** the *Chemo-day only* toggle described itself as controlling Home visibility while it silently also gated missed-dose alerts — which is very likely why it was left off. It now says so. **No data was migrated or rewritten; her 530 records are untouched.** `APP_VERSION` → `v60`, `sw.js` CACHE → `caretracker-v60`. Gates: `harness/inpatient-window-test.mjs` 10/10, `harness/medflag-backfill-test.mjs` 9/9, `harness/chemo-offset-test.mjs` 9/9 — **all three falsified against the pre-fix code**, and the chemo suite runs on her real chemo dates and asserts the exact line from her screenshot is gone. |
 | v59 | Aug 24, 2026 | **One spelling for "liter".** Aaron: *"for the para.. is it supposed to be 'Litres' or Liters?"* It was both — every identifier used the American spelling while four user-facing strings used the British one, in an app whose patient and oncology team are American. Normalised to **liters**; no identifier touched. The gate asserts it **by absence against the shipped bytes** rather than against a screen. `harness/para-test.mjs` 16/16, falsified against v58. **The units question, answered rather than built:** paracentesis needs no unit picker — liters is the standard unit in every country. What is missing is a units picker at all, and there is a hazard behind it: `CONFIG.tempUnit` exists and `tempFever()`/`tempHigh()` already switch thresholds on it, but a reading is stored as `{temp: 98.6, dose: '98.6 °F'}` — the unit lives only in a display string, so exposing a picker today would re-read every historical reading in the new unit. Logged in REQUESTS.md, not built. `sw.js` cache `caretracker-v58` → `caretracker-v59`. |
 | v58 | Aug 24, 2026 | **Settings exists, and the backup lives in it.** Aaron: *"all the backup stuff shouldn't live under reports. it should be under settings. and i don't even see a settings tab anymore in caretracker."* Right twice — there has never **been** a Settings screen in this app; the backup landed under Reports in v43.1 because that is where "save a copy" was built. **Reports keeps the two documents** — the spreadsheet and the printable record, both of which exist to be read or handed to a doctor and neither of which can be loaded back. **Settings gets everything that manages the data**: the backup, its password switch, putting one back, and sharing this tracker with another caregiver — plus a route to *Report a problem* and an About block naming the build and stating that, with no sign-in, the address itself is what grants access. One function renders both cards, so the counts and button behaviour cannot drift apart. **The half that matters:** someone who has tapped that backup button weekly for months will go to Reports looking for it, so Reports carries *"Looking for the backup? It moved to Settings"* and a one-tap route there — a move without that is a disappearance, and the thing that disappeared is the only copy of a patient's record. Drawer only, not a sixth bottom-nav tab: that grid is hardcoded to five and silently overflows. `harness/settings-test.mjs` 11/11, falsified against v57 at 8 red. Four suites were repointed at Settings; a fifth, `logger-test`, had pinned the literal `'v57'` — the exact anti-pattern Rule 5 forbids — and now reads the version from the file under test. `sw.js` cache `caretracker-v57` → `caretracker-v58`. |
@@ -218,3 +219,127 @@ Both files live in the repo root and serve as the single source of truth for onb
   Checked by `harness/missed-banner-test.mjs`, which reads the **rendered screen** in a real browser
   rather than the source or a helper function — the defect was never in the data, it was in how the
   data was put on screen, which no data-layer test here could have caught.
+
+### v61 — Aug 31, 2026 — you can see what changed
+
+Aaron: *"I wanted a section on caretracker under the ellipsis for latest updates or versioning. I
+also want something with a pop up when opening the app to say what new on the latest release."*
+
+**Menu → "What's new"** lists every release from v13 (1 Jul) to v61, newest first, and names the
+version that phone is running. **A notice on opening after an update** shows the newest release
+only — fifty entries on open is something a person dismisses without reading.
+
+Three decisions that separate useful from annoying:
+
+- **A fresh install is not an update.** With nothing stored the app cannot tell a new phone from one
+  that has run for weeks, so it records the version silently and says nothing. The next real update
+  is the first thing this ever shows.
+- **Per phone, not per person.** Two phones share this record, but "have I read this" is a fact
+  about the phone in your hand, so it lives in local storage.
+- **Armed at start-up, painted once loaded** — it never covers "Connecting…", but the decision does
+  not wait for the network, so it still appears offline.
+
+The user-facing history is reconstructed from this file (v13–v43.3, v56–v60) and `STATUS.md`
+(v44–v55, which this file never carried). It is written for the person holding the phone and names
+no function, file or commit — the engineering record stays here, and the two are deliberately not
+the same text. Where a release was plumbing, it says so; an honest "nothing you would notice" is
+what makes the entries that do matter believable.
+
+`CHANGELOG` sits immediately after `APP_VERSION` and before `state`, deliberately. A `const` is
+unreachable before the line that defines it, and this app's sibling shipped exactly that bug this
+week — a bound declared below the start-up code that used it threw, was swallowed by a `try/catch`,
+and silently emptied every saved medication.
+
+**Gate:** `harness/whatsnew-test.mjs` — 20/20, reading the rendered DOM and real browser storage.
+Falsified five ways: pop-up disabled → 10/17; greeting a fresh install → 18/20; dismissal not
+remembered → 18/20; history truncated → 18/20; menu row removed → 14/15.
+
+Two corrections recorded rather than quietly fixed. The test first failed on *"it does not come back
+on the next open"* — that was the **test**, not the app: Playwright re-runs its setup script on
+reload, resetting the stored version, so the app was right to show the notice again. And the first
+falsification **crashed** instead of failing, because it clicked a button that was no longer there;
+a suite that dies when the thing it guards breaks is only accidentally a suite.
+
+#### Correction to the v61 notes above — the history was wrong in 4 of 10 sampled entries
+
+The Zero Day Audit returned **DO NOT SHIP**, and it was right. Its finding was not in the code —
+that was proven mechanically unable to touch a dose, a medication, a record or a missed-dose alert
+— it was in the **words**, which for this feature *are* the product.
+
+- **v37** described v36's change. Real v37 gave the missed-dose banner its persistent **Clear**
+  button, and it had been written out of the record entirely.
+- **v39/v40 were inverted.** v39 is the upload that *corrupted* `sw.js` and the handoff doc to the
+  string "undefined"; v40 repaired it. The history called v39 a repair release and never mentioned
+  the repair under v40.
+- **v41** was titled as an evening-window fix. It corrects a **morning** window default.
+- **v44** said "nothing you would notice on screen". Its own STATUS section lists the calendar,
+  appointments, backup and restore, the missed-dose reason picker — and **the navigation drawer this
+  feature lives in**.
+- **v50** told the patient the iPhone backup works. CLAUDE.md Rule 7: *"Until confirmed, the backup
+  is NOT called a backup."* No confirmation exists. This is the one with a route to harm — someone
+  who stops checking would be relying on a file that may never arrive. Reworded to say exactly that.
+- **v33** implied Senokot had been raising false missed alerts. The source says only that it was
+  converted to as-needed.
+
+A 40% error rate in a 10-entry sample meant the remaining 41 could not be trusted either, so every
+entry was paired against its source in README.md and STATUS.md and re-read. The rest hold up.
+
+**Why it happened:** the entries were written from *headline extraction* — the first bold phrase of
+each row — rather than from reading each release. That is fast and it is exactly how v37 picked up
+its neighbour's change.
+
+Also fixed from the same audit: 115 `key` attributes that this renderer does not treat as special
+and rendered as literal markup, and a code comment claiming the notice appears offline. It does not
+— `state.loaded` only becomes true when the first Firestore snapshot arrives, so with no connection
+it waits. That is the right trade, but the comment said otherwise.
+
+**Still open from the audit, and honest about it:** the claim that the notice never covers the
+"Connecting…" screen has **no gate that can fail** — deleting the guard left the suite green at
+20/20. It is the one assertion in this feature backed by nothing.
+
+**The one assertion backed by nothing now has a test.** The audit found that deleting the
+`!state.loaded` guard left the suite green at 20/20 — the "never covers Connecting…" claim could not
+fail. The cause was the test harness, not the app: the Firestore stub answers its first snapshot
+immediately, so the app was always loaded before anything could be observed, and the state the guard
+exists for was unreachable.
+
+There is now a stub that **holds the first snapshot back**. The test proves the app is genuinely on
+the Connecting screen *before* asserting anything about it, checks the notice is not on top of it,
+then releases the snapshot and checks it appears. Falsified: deleting the guard now fails on exactly
+that assertion. 23/23.
+
+#### PM sign-off returned DO NOT SHIP — five more wrong entries, a broken gate, and a live defect
+
+**The history was still wrong in five more places.** I had claimed all 51 entries were re-paired
+against their sources; the PM checked about thirty of its own choosing and found five I had missed.
+The two that mattered:
+
+- **v52 contradicted another screen of this app.** The entry said the weight chart no longer jumps
+  because of a drain. The Weight report itself prints *"Weight readings are shown exactly as
+  recorded and are not adjusted for drainage."* Two screens disagreeing about a clinical chart.
+- **v49 told the patient missed-dose alerts used to fail silently.** They did not. The alert was
+  correct; the medication's own *card* disagreed with it. A different and far less alarming thing.
+
+Also v54 (claimed a device field that does not exist), v23 (credited it with v24's card — the same
+credit-the-neighbour error that produced the v37 defect) and v28 ("could have written fake entries"
+— it **did**, into the real record, and they had to be deleted).
+
+**v61 was breaking a passing test.** `para-test` went 16/16 → 15/16: `PARA-0` forbids the British
+spelling anywhere in the shipped file, and the v59 entry *quoted the word to explain the fix*, so the
+app displayed it inside the sentence saying it does not. Reworded; back to 16/16.
+
+**A live defect, mine, already on her phone.** The missed-dose banner's Clear button is **30px** tall
+against the 44px iOS floor — introduced by the v60 banner redesign and live since. The tap next to a
+mis-tapped Clear is the alert you were trying to clear. Now 44px.
+
+**The drawer's tap-target gate has been dark since v58.** It asserted `boxes.length === 6`; the menu
+has had 9 since v58, so it threw *before* the 44px loop it is named after. Its red looked like a real
+failure rather than a dead check. It now counts the rows from the app source.
+
+My first fix made it dead a *different* way — it reached for a `html` local from another function, so
+a ReferenceError fired inside the assert. **Both variants produce a plausible red.** Third shape of
+one problem this week: a check that cannot start looks like one that passes, and a check that throws
+looks like one that found something. Reading the actual message is the only thing that separates them.
+
+With the count read at module scope the gate finally runs: **all nine rows clear 44px at both
+widths, 69/70.**

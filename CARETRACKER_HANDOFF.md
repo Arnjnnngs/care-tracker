@@ -438,3 +438,127 @@ These two files are the single source of truth for onboarding new contributors o
   Checked by `harness/missed-banner-test.mjs`, which reads the **rendered screen** in a real browser
   rather than the source or a helper function — the defect was never in the data, it was in how the
   data was put on screen, which no data-layer test here could have caught.
+
+### v61 — Aug 31, 2026 — you can see what changed
+
+Aaron: *"I wanted a section on caretracker under the ellipsis for latest updates or versioning. I
+also want something with a pop up when opening the app to say what new on the latest release."*
+
+**Menu → "What's new"** lists every release from v13 (1 Jul) to v61, newest first, and names the
+version that phone is running. **A notice on opening after an update** shows the newest release
+only — fifty entries on open is something a person dismisses without reading.
+
+Three decisions that separate useful from annoying:
+
+- **A fresh install is not an update.** With nothing stored the app cannot tell a new phone from one
+  that has run for weeks, so it records the version silently and says nothing. The next real update
+  is the first thing this ever shows.
+- **Per phone, not per person.** Two phones share this record, but "have I read this" is a fact
+  about the phone in your hand, so it lives in local storage.
+- **Armed at start-up, painted once loaded** — it never covers "Connecting…", but the decision does
+  not wait for the network, so it still appears offline.
+
+The user-facing history is reconstructed from this file (v13–v43.3, v56–v60) and `STATUS.md`
+(v44–v55, which this file never carried). It is written for the person holding the phone and names
+no function, file or commit — the engineering record stays here, and the two are deliberately not
+the same text. Where a release was plumbing, it says so; an honest "nothing you would notice" is
+what makes the entries that do matter believable.
+
+`CHANGELOG` sits immediately after `APP_VERSION` and before `state`, deliberately. A `const` is
+unreachable before the line that defines it, and this app's sibling shipped exactly that bug this
+week — a bound declared below the start-up code that used it threw, was swallowed by a `try/catch`,
+and silently emptied every saved medication.
+
+**Gate:** `harness/whatsnew-test.mjs` — 20/20, reading the rendered DOM and real browser storage.
+Falsified five ways: pop-up disabled → 10/17; greeting a fresh install → 18/20; dismissal not
+remembered → 18/20; history truncated → 18/20; menu row removed → 14/15.
+
+Two corrections recorded rather than quietly fixed. The test first failed on *"it does not come back
+on the next open"* — that was the **test**, not the app: Playwright re-runs its setup script on
+reload, resetting the stored version, so the app was right to show the notice again. And the first
+falsification **crashed** instead of failing, because it clicked a button that was no longer there;
+a suite that dies when the thing it guards breaks is only accidentally a suite.
+
+#### Correction to the v61 notes above — the history was wrong in 4 of 10 sampled entries
+
+The Zero Day Audit returned **DO NOT SHIP**, and it was right. Its finding was not in the code —
+that was proven mechanically unable to touch a dose, a medication, a record or a missed-dose alert
+— it was in the **words**, which for this feature *are* the product.
+
+- **v37** described v36's change. Real v37 gave the missed-dose banner its persistent **Clear**
+  button, and it had been written out of the record entirely.
+- **v39/v40 were inverted.** v39 is the upload that *corrupted* `sw.js` and the handoff doc to the
+  string "undefined"; v40 repaired it. The history called v39 a repair release and never mentioned
+  the repair under v40.
+- **v41** was titled as an evening-window fix. It corrects a **morning** window default.
+- **v44** said "nothing you would notice on screen". Its own STATUS section lists the calendar,
+  appointments, backup and restore, the missed-dose reason picker — and **the navigation drawer this
+  feature lives in**.
+- **v50** told the patient the iPhone backup works. CLAUDE.md Rule 7: *"Until confirmed, the backup
+  is NOT called a backup."* No confirmation exists. This is the one with a route to harm — someone
+  who stops checking would be relying on a file that may never arrive. Reworded to say exactly that.
+- **v33** implied Senokot had been raising false missed alerts. The source says only that it was
+  converted to as-needed.
+
+A 40% error rate in a 10-entry sample meant the remaining 41 could not be trusted either, so every
+entry was paired against its source in README.md and STATUS.md and re-read. The rest hold up.
+
+**Why it happened:** the entries were written from *headline extraction* — the first bold phrase of
+each row — rather than from reading each release. That is fast and it is exactly how v37 picked up
+its neighbour's change.
+
+Also fixed from the same audit: 115 `key` attributes that this renderer does not treat as special
+and rendered as literal markup, and a code comment claiming the notice appears offline. It does not
+— `state.loaded` only becomes true when the first Firestore snapshot arrives, so with no connection
+it waits. That is the right trade, but the comment said otherwise.
+
+**Still open from the audit, and honest about it:** the claim that the notice never covers the
+"Connecting…" screen has **no gate that can fail** — deleting the guard left the suite green at
+20/20. It is the one assertion in this feature backed by nothing.
+
+**The one assertion backed by nothing now has a test.** The audit found that deleting the
+`!state.loaded` guard left the suite green at 20/20 — the "never covers Connecting…" claim could not
+fail. The cause was the test harness, not the app: the Firestore stub answers its first snapshot
+immediately, so the app was always loaded before anything could be observed, and the state the guard
+exists for was unreachable.
+
+There is now a stub that **holds the first snapshot back**. The test proves the app is genuinely on
+the Connecting screen *before* asserting anything about it, checks the notice is not on top of it,
+then releases the snapshot and checks it appears. Falsified: deleting the guard now fails on exactly
+that assertion. 23/23.
+
+#### PM sign-off returned DO NOT SHIP — five more wrong entries, a broken gate, and a live defect
+
+**The history was still wrong in five more places.** I had claimed all 51 entries were re-paired
+against their sources; the PM checked about thirty of its own choosing and found five I had missed.
+The two that mattered:
+
+- **v52 contradicted another screen of this app.** The entry said the weight chart no longer jumps
+  because of a drain. The Weight report itself prints *"Weight readings are shown exactly as
+  recorded and are not adjusted for drainage."* Two screens disagreeing about a clinical chart.
+- **v49 told the patient missed-dose alerts used to fail silently.** They did not. The alert was
+  correct; the medication's own *card* disagreed with it. A different and far less alarming thing.
+
+Also v54 (claimed a device field that does not exist), v23 (credited it with v24's card — the same
+credit-the-neighbour error that produced the v37 defect) and v28 ("could have written fake entries"
+— it **did**, into the real record, and they had to be deleted).
+
+**v61 was breaking a passing test.** `para-test` went 16/16 → 15/16: `PARA-0` forbids the British
+spelling anywhere in the shipped file, and the v59 entry *quoted the word to explain the fix*, so the
+app displayed it inside the sentence saying it does not. Reworded; back to 16/16.
+
+**A live defect, mine, already on her phone.** The missed-dose banner's Clear button is **30px** tall
+against the 44px iOS floor — introduced by the v60 banner redesign and live since. The tap next to a
+mis-tapped Clear is the alert you were trying to clear. Now 44px.
+
+**The drawer's tap-target gate has been dark since v58.** It asserted `boxes.length === 6`; the menu
+has had 9 since v58, so it threw *before* the 44px loop it is named after. Its red looked like a real
+failure rather than a dead check. It now counts the rows from the app source.
+
+My first fix made it dead a *different* way — it reached for a `html` local from another function, so
+a ReferenceError fired inside the assert. **Both variants produce a plausible red.** Third shape of
+one problem this week: a check that cannot start looks like one that passes, and a check that throws
+looks like one that found something. Reading the actual message is the only thing that separates them.
+
+With the count read at module scope the gate finally runs: **all nine rows clear 44px at both
+widths, 69/70.**

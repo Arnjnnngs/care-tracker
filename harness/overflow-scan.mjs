@@ -233,7 +233,9 @@ const scanFn = function (vw) {
   return out;
 };
 
-let problems = 0, unreachable = 0;
+let problems = 0, unreachable = 0, scanned = 0;
+// Set from the EXTRA list, so the total cannot drift from the passes that exist.
+let EXTRA_COUNT = 0;
 const report = [];
 
 for (const dev of DEVICES) {
@@ -264,7 +266,48 @@ for (const dev of DEVICES) {
   // THE MEDICATION EDITOR IS A SCREEN TOO, and it is where settings get typed. It was missed by the
   // first version of this scan, which walked only the five tabs -- so a release that CHANGED the
   // editor would have passed a render gate that never rendered it. Same blind spot, one level in.
-  const EXTRA = [{ name: 'med-editor', open: async page => {
+  // THE TWO SCREENS v61 ADDS. The first run of this scan after building them reported 50
+  // combinations CLEAN while never opening either -- a render gate that skips the thing under
+  // change is the exact failure this file exists to prevent, and it happened on its first outing.
+  const whatsNewPasses = [
+    { name: 'whatsnew', open: async page => {
+      const opened = await page.evaluate(() => {
+        const b = document.querySelector('[data-cal-menu-button]');
+        if (!b) return false; b.click(); return true;
+      });
+      if (!opened) return 'the menu button is not on screen';
+      await page.waitForTimeout(500);
+      const picked = await page.evaluate(() => {
+        const r = document.querySelector('[data-cal-drawer-item="whatsnew"]');
+        if (!r) return false; r.click(); return true;
+      });
+      if (!picked) return 'no What\u2019s-new row in the menu';
+      await page.waitForTimeout(700);
+      // Prove the screen rendered its entries, not just its heading.
+      return page.evaluate(() => {
+        if (!document.querySelector('[data-whatsnew-screen]')) return 'the history screen did not render';
+        const n = document.querySelectorAll('[data-whatsnew-entry]').length;
+        return n > 10 ? true : 'only ' + n + ' releases listed';
+      });
+    } },
+    { name: 'whatsnew-popup', open: async page => {
+      // Seeded and reloaded, because that is what an update actually is: the decision is made once
+      // at start-up, so no click can produce this state.
+      await page.evaluate(() => { try { localStorage.setItem('caretracker-seen-version', 'v0-older'); } catch (e) {} });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(2000);
+      return page.evaluate(() => {
+        const m = document.querySelector('[data-whatsnew-modal]');
+        if (!m) return 'the update notice did not appear';
+        return m.innerText.trim().length > 60 ? true : 'the notice rendered empty';
+      });
+    } }
+  ];
+  const EXTRA = [...whatsNewPasses, { name: 'med-editor',
+    verify: async page => (await page.evaluate(() => [...document.querySelectorAll('button')]
+      .some(b => /^(save|save changes|add medication)$/i.test((b.innerText || '').trim()))))
+      ? true : 'the medication editor did not open',
+    open: async page => {
     await page.evaluate(() => {
       const b = [...document.querySelectorAll('button')].find(x => ((x.getAttribute('aria-label') || x.innerText || '').trim().toLowerCase()) === 'meds');
       if (b) b.click();
@@ -336,6 +379,7 @@ for (const dev of DEVICES) {
         overBy: Math.max(layout.inner, layout.doc) - dev.w, box: layout.doc + 'x-', ws: 'n/a' }] });
     }
 
+    scanned++;
     const found = await page.evaluate(scanFn, Math.max(dev.w, layout.inner));
 
     if (SHOTS) {
@@ -348,17 +392,20 @@ for (const dev of DEVICES) {
     }
   }
   // then the overlay screens
+  EXTRA_COUNT = EXTRA.length;
   for (const extra of EXTRA) {
     let opened = await extra.open(page);
-    if (opened) {
+    // PER-PASS VERIFICATION. This used to look for a Save button for EVERY overlay pass -- a marker
+    // that only exists in the medication editor -- so any new overlay screen would have been
+    // reported unreachable no matter how well it rendered. Each pass now proves its own screen, and
+    // returns a STRING saying what was wrong rather than a bare false.
+    if (opened === true && extra.verify) {
       await page.waitForTimeout(600);
-      // A click is not a screen: the editor must actually be on screen. Its Save control is the
-      // marker that exists only while it is open.
-      opened = await page.evaluate(() => [...document.querySelectorAll('button')]
-        .some(b => /^(save|save changes|add medication)$/i.test((b.innerText || '').trim())));
+      opened = await extra.verify(page);
     }
-    if (!opened) {
-      console.log('  COULD NOT OPEN ' + extra.name + ' at ' + dev.w + 'px — not scanned');
+    if (opened !== true) {
+      console.log('  COULD NOT OPEN ' + extra.name + ' at ' + dev.w + 'px — not scanned (' +
+        (typeof opened === 'string' ? opened : 'the screen could not be opened') + ')');
       unreachable++;
       continue;
     }
@@ -371,6 +418,7 @@ for (const dev of DEVICES) {
         kind: 'app needs ' + Math.max(layoutX.inner, layoutX.doc) + 'px on a ' + dev.w + 'px screen — it will scroll sideways',
         overBy: Math.max(layoutX.inner, layoutX.doc) - dev.w, box: layoutX.doc + 'x-', ws: 'n/a' }] });
     }
+    scanned++;
     const found = await page.evaluate(scanFn, Math.max(dev.w, layoutX.inner));
     if (SHOTS) {
       fs.mkdirSync(SHOTS, { recursive: true });
@@ -397,7 +445,13 @@ if (report.length) {
   console.log('  every screen clean at all ' + DEVICES.length + ' device widths (iOS and Android)');
 }
 if (errs.length) console.log('\n  PAGE ERRORS: ' + errs.length + '\n    ' + errs.slice(0,3).join('\n    '));
-console.log('\n' + (DEVICES.length * SCREENS.length) + ' screen/width combinations, ' + problems + ' overflowing element(s).');
+// COUNTED, NOT ASSUMED. This was DEVICES x SCREENS and therefore never counted the overlay passes
+// at all -- the medication editor, and now the two What's-new screens, were scanned and then left
+// out of the number reported. It said "50 combinations" while walking 80. A gate's own account of
+// what it covered has to come from what it actually did, or the number is decoration. (Same defect
+// found by the Zero Day Auditor in this file's ChemoWell twin, fixed there and not ported until now.)
+console.log('\n' + scanned + ' of ' + (DEVICES.length * (SCREENS.length + EXTRA_COUNT)) +
+  ' screen/width combinations scanned, ' + problems + ' overflowing element(s).');
 if (unreachable) {
   // A screen the scan could not reach is NOT a clean screen. Reporting it as one is how a render
   // gate ends up blessing a page nobody ever rendered -- which is exactly what happened here first.
