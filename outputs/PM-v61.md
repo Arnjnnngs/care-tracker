@@ -1,5 +1,5 @@
 # PM gate — v61 ("What's new")
-AUDITED-COMMIT: 535e05a0c322a564279e5206f916e2443ac89cbf
+AUDITED-COMMIT: f2f24f8d05c248b1ec685b354141d1d33e5ca97f
 VERDICT: SHIP
 
 > **Read this first — this report changed its mind, and the reason matters.**
@@ -63,6 +63,47 @@ That is the same failure mode for the third time. Which is why the last item bel
 README or STATUS line it came from. That was item 6 of my original list and it is the item that
 actually ends this loop — twice now, "all 51 were re-checked" has been followed by someone finding
 more errors in half an hour. It does not block the release. It should exist before the next one.
+
+---
+
+## 0b. Third round, at `f2f24f8` — the last blemish fixed, and the pairing record exists
+
+After I reversed to SHIP, the builder took the two things I left open and closed them both. I
+re-checked both rather than accept them.
+
+**The v59 "Help page" clause is gone.** It now reads *"the input box on Today, the warning if you
+type too large a number, the line on the card itself, and the Reports empty state."* I checked all
+four against the real v59 commit (`7f269a2`), which changed exactly four strings: the `Litres`
+input placeholder, the `Enter the litres drained (up to …)` toast, the `Litres drained, recorded
+separately` line on the paracentesis card, and the Reports empty state. **All four now correct.**
+
+**The pairing record now exists — `outputs/CHANGELOG-SOURCES.md` — and it holds up.** I asked for
+it twice; it would have been a poor joke to accept it on trust, so I verified it mechanically:
+
+- **51 rows for 51 entries.** Nothing in the app is missing from it; nothing in it is absent from
+  the app.
+- **Every app title in the record matches the app's actual `CHANGELOG` title** — 0 mismatches.
+- **Every quoted source snippet genuinely appears in the document it names** — 0 rows where the
+  quote could not be found in `README.md` or `STATUS.md`. (My first pass flagged 7; all 7 were my
+  own regex tripping over escaped table pipes, not defects in the record.)
+
+It also earned its keep on contact: it found that **v61 itself had no source row** — the release
+notes had been added as prose and no version-history row was ever written, so the newest entry in
+the patient's history was the one with nothing behind it. `README.md` now has a `v61` row; I
+confirmed it is there.
+
+**Final gate numbers at `f2f24f8`:** `whatsnew-test` **23/23** · `para-test` **16/16** ·
+`cal-test` **69/70** · `grep -ci litre index.html` → **0** · `python3 pm.py` **exit 2 — clear,
+warnings only, no blockers** · working tree clean.
+
+`cal-test`'s single red remains `FILE-app-version`, pinned to the literal `v43.3`. It is a stale
+patch precondition, it fails on every release since v43.3, and it is not v61's. Unpinning it is
+worth doing, but not by this release.
+
+**Twelve wrong entries were found across three review rounds, and the twelfth was introduced while
+fixing the eleventh.** That is the number worth remembering, not the ones that were fixed. The
+pairing record is the thing that makes the thirteenth findable by someone other than a reviewer
+with half an hour, and it should be regenerated and checked whenever an entry is added or changed.
 
 ---
 
