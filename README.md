@@ -295,3 +295,14 @@ it waits. That is the right trade, but the comment said otherwise.
 **Still open from the audit, and honest about it:** the claim that the notice never covers the
 "Connecting…" screen has **no gate that can fail** — deleting the guard left the suite green at
 20/20. It is the one assertion in this feature backed by nothing.
+
+**The one assertion backed by nothing now has a test.** The audit found that deleting the
+`!state.loaded` guard left the suite green at 20/20 — the "never covers Connecting…" claim could not
+fail. The cause was the test harness, not the app: the Firestore stub answers its first snapshot
+immediately, so the app was always loaded before anything could be observed, and the state the guard
+exists for was unreachable.
+
+There is now a stub that **holds the first snapshot back**. The test proves the app is genuinely on
+the Connecting screen *before* asserting anything about it, checks the notice is not on top of it,
+then releases the snapshot and checks it appears. Falsified: deleting the guard now fails on exactly
+that assertion. 23/23.

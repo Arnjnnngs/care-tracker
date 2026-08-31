@@ -50,6 +50,29 @@ export async function getDocs(){return snap(store.entries);}
 export function serverTimestamp(){return Date.now();}
 `;
 
+
+// A STUB THAT DOES NOT ANSWER YET. The ordinary stub fires its first snapshot immediately, so the
+// app is loaded before anything can be observed and the "never covers Connecting..." claim was
+// untestable -- deleting the guard left this suite green at 20/20, which the audit called out as
+// the one assertion here backed by nothing. This one holds the entries snapshot until the test
+// releases it, which is the only way to see the app in the state the guard exists for.
+const STUB_FS_SLOW = `
+const store={entries:[],prefs:{}};const eL=[],pL=[];let n=0;
+function snap(l){return{docs:l.map(e=>({id:e.id,data:()=>{const c=Object.assign({},e);delete c.id;return c;}}))};}
+globalThis.__release=function(){for(const cb of eL)cb(snap(store.entries));};
+export function getFirestore(){return{__db:true};}
+export function collection(){return{__kind:'col'};}
+export function doc(db,col,id){return{__kind:'doc',id:id};}
+export function query(){return{__kind:'q'};}
+export function orderBy(){return{};}
+export function onSnapshot(ref,cb){if(ref&&ref.__kind==='q'){eL.push(cb);return()=>{};}
+ pL.push(cb);cb({exists:()=>true,data:()=>store.prefs});return()=>{};}
+export async function addDoc(c,d){store.entries.push(Object.assign({id:'a'+(++n)},d));return{id:'a'+n};}
+export async function setDoc(){} export async function deleteDoc(){}
+export async function getDocs(){return snap(store.entries);}
+export function serverTimestamp(){return Date.now();}
+`;
+
 let pass = 0, fail = 0;
 function t(label, ok, detail) {
   if (ok) { pass++; console.log('  PASS  ' + label + (detail ? '  |  ' + detail : '')); }
@@ -212,6 +235,29 @@ console.log('\n6. It fits the narrowest phone');
     return bad;
   });
   t('no wording spills its box at 320px', spill.length === 0, spill.slice(0, 3).join(' | ') || 'clean');
+  await ctx.close();
+}
+
+console.log('\n7. It never covers the "Connecting..." screen');
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  await ctx.route('**/*', route => { const u = route.request().url();
+    if (u.includes('firebase-app.js')) return route.fulfill({status:200,contentType:'application/javascript',body:STUB_APP});
+    if (u.includes('firebase-firestore.js')) return route.fulfill({status:200,contentType:'application/javascript',body:STUB_FS_SLOW});
+    if (u.includes('firebase-messaging.js')) return route.fulfill({status:200,contentType:'application/javascript',body:STUB_MSG});
+    if (u.startsWith('http://127.0.0.1:' + PORT)) return route.continue();
+    return route.abort(); });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => { try { localStorage.setItem('caretracker-seen-version', 'v0-older'); } catch (e) {} });
+  await page.goto('http://127.0.0.1:' + PORT + '/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1800);
+  // The app is genuinely still connecting -- prove that before asserting anything about it.
+  const connecting = await page.evaluate(() => document.body.innerText.indexOf('Connecting') >= 0);
+  t('the app really is on the Connecting screen', connecting, '');
+  t('the update notice is NOT on top of it', !(await page.$('[data-whatsnew-modal]')), '');
+  await page.evaluate(() => globalThis.__release && globalThis.__release());
+  await page.waitForTimeout(1200);
+  t('and it appears as soon as the app is ready', !!(await page.$('[data-whatsnew-modal]')), '');
   await ctx.close();
 }
 
