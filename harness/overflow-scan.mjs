@@ -233,7 +233,9 @@ const scanFn = function (vw) {
   return out;
 };
 
-let problems = 0, unreachable = 0;
+let problems = 0, unreachable = 0, scanned = 0;
+// Set from the EXTRA list, so the total cannot drift from the passes that exist.
+let EXTRA_COUNT = 0;
 const report = [];
 
 for (const dev of DEVICES) {
@@ -377,6 +379,7 @@ for (const dev of DEVICES) {
         overBy: Math.max(layout.inner, layout.doc) - dev.w, box: layout.doc + 'x-', ws: 'n/a' }] });
     }
 
+    scanned++;
     const found = await page.evaluate(scanFn, Math.max(dev.w, layout.inner));
 
     if (SHOTS) {
@@ -389,6 +392,7 @@ for (const dev of DEVICES) {
     }
   }
   // then the overlay screens
+  EXTRA_COUNT = EXTRA.length;
   for (const extra of EXTRA) {
     let opened = await extra.open(page);
     // PER-PASS VERIFICATION. This used to look for a Save button for EVERY overlay pass -- a marker
@@ -414,6 +418,7 @@ for (const dev of DEVICES) {
         kind: 'app needs ' + Math.max(layoutX.inner, layoutX.doc) + 'px on a ' + dev.w + 'px screen — it will scroll sideways',
         overBy: Math.max(layoutX.inner, layoutX.doc) - dev.w, box: layoutX.doc + 'x-', ws: 'n/a' }] });
     }
+    scanned++;
     const found = await page.evaluate(scanFn, Math.max(dev.w, layoutX.inner));
     if (SHOTS) {
       fs.mkdirSync(SHOTS, { recursive: true });
@@ -440,7 +445,13 @@ if (report.length) {
   console.log('  every screen clean at all ' + DEVICES.length + ' device widths (iOS and Android)');
 }
 if (errs.length) console.log('\n  PAGE ERRORS: ' + errs.length + '\n    ' + errs.slice(0,3).join('\n    '));
-console.log('\n' + (DEVICES.length * SCREENS.length) + ' screen/width combinations, ' + problems + ' overflowing element(s).');
+// COUNTED, NOT ASSUMED. This was DEVICES x SCREENS and therefore never counted the overlay passes
+// at all -- the medication editor, and now the two What's-new screens, were scanned and then left
+// out of the number reported. It said "50 combinations" while walking 80. A gate's own account of
+// what it covered has to come from what it actually did, or the number is decoration. (Same defect
+// found by the Zero Day Auditor in this file's ChemoWell twin, fixed there and not ported until now.)
+console.log('\n' + scanned + ' of ' + (DEVICES.length * (SCREENS.length + EXTRA_COUNT)) +
+  ' screen/width combinations scanned, ' + problems + ' overflowing element(s).');
 if (unreachable) {
   // A screen the scan could not reach is NOT a clean screen. Reporting it as one is how a render
   // gate ends up blessing a page nobody ever rendered -- which is exactly what happened here first.
