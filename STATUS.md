@@ -84,12 +84,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v60 — **BUILT, NOT DEPLOYED.** v59 is what is live on her phone. |
-| **Commit** | v60 merged to `main` and pushed 2026-08-31; v61 on branch `claude/caretracker-chemowell-updates-k80ydk` |
+| **Version** | v61 |
+| **Commit** | v61 merged to `main` and pushed 2026-08-31 with Aaron's go-ahead |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `d78a078e06ce0e9b318061030f43ad35` |
 | **sw.js md5** | `a541136544d00c2f07c307269a008133` |
-| **State** | **v60 is LIVE on `main`** (merged and pushed 2026-08-31 with Aaron's go-ahead) — Home-card text overflow, the treatment-window label, and the missed-dose banner redesign. Not verified against the served page: this session cannot reach github.io, so the confirmation is that `main` carries `caretracker-v60`, not that a phone showed it. **v61 is built on the branch** — the What's new history and update notice — and has not been through the chain yet. |
+| **State** | **v61 is on `main`** — the What's new history under the ellipsis and the update notice. Also carries two pre-existing fixes: the missed-dose Clear button was 30px against the 44px iOS floor (live since v60), and `cal-test`'s drawer tap-target gate had been dark since v58. **Not verified against the served page** — this session cannot reach github.io, so the confirmation is that `main` carries `caretracker-v61`, not that a phone showed it. Rollback bundle for v60 in `outputs/rollback-v60/`. |
 
 ## AUDIT BLOCKER, 2026-08-29 — clearing a treatment date did not clear it
 
