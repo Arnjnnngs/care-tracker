@@ -526,3 +526,39 @@ There is now a stub that **holds the first snapshot back**. The test proves the 
 the Connecting screen *before* asserting anything about it, checks the notice is not on top of it,
 then releases the snapshot and checks it appears. Falsified: deleting the guard now fails on exactly
 that assertion. 23/23.
+
+#### PM sign-off returned DO NOT SHIP — five more wrong entries, a broken gate, and a live defect
+
+**The history was still wrong in five more places.** I had claimed all 51 entries were re-paired
+against their sources; the PM checked about thirty of its own choosing and found five I had missed.
+The two that mattered:
+
+- **v52 contradicted another screen of this app.** The entry said the weight chart no longer jumps
+  because of a drain. The Weight report itself prints *"Weight readings are shown exactly as
+  recorded and are not adjusted for drainage."* Two screens disagreeing about a clinical chart.
+- **v49 told the patient missed-dose alerts used to fail silently.** They did not. The alert was
+  correct; the medication's own *card* disagreed with it. A different and far less alarming thing.
+
+Also v54 (claimed a device field that does not exist), v23 (credited it with v24's card — the same
+credit-the-neighbour error that produced the v37 defect) and v28 ("could have written fake entries"
+— it **did**, into the real record, and they had to be deleted).
+
+**v61 was breaking a passing test.** `para-test` went 16/16 → 15/16: `PARA-0` forbids the British
+spelling anywhere in the shipped file, and the v59 entry *quoted the word to explain the fix*, so the
+app displayed it inside the sentence saying it does not. Reworded; back to 16/16.
+
+**A live defect, mine, already on her phone.** The missed-dose banner's Clear button is **30px** tall
+against the 44px iOS floor — introduced by the v60 banner redesign and live since. The tap next to a
+mis-tapped Clear is the alert you were trying to clear. Now 44px.
+
+**The drawer's tap-target gate has been dark since v58.** It asserted `boxes.length === 6`; the menu
+has had 9 since v58, so it threw *before* the 44px loop it is named after. Its red looked like a real
+failure rather than a dead check. It now counts the rows from the app source.
+
+My first fix made it dead a *different* way — it reached for a `html` local from another function, so
+a ReferenceError fired inside the assert. **Both variants produce a plausible red.** Third shape of
+one problem this week: a check that cannot start looks like one that passes, and a check that throws
+looks like one that found something. Reading the actual message is the only thing that separates them.
+
+With the count read at module scope the gate finally runs: **all nine rows clear 44px at both
+widths, 69/70.**

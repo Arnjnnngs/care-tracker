@@ -1072,8 +1072,8 @@ const CHANGELOG = [
       'The missed-dose alert was one long paragraph and is now a readable list: the number first, one line per dose, grouped by day, with older days folded away.',
       'A medication’s treatment-day window is now yours to set, instead of one drug’s schedule being hardcoded for everything.'
     ] },
-  { v: 'v59', date: 'Aug 24, 2026', title: 'One spelling for "liter"',
-    points: ['The app used both "liters" and "litres" in different places. It now uses one, everywhere.'] },
+  { v: 'v59', date: 'Aug 24, 2026', title: 'One spelling for the fluid unit',
+    points: ['The app used the American and British spellings of the same unit in different places -- the input box, a warning message, the Reports empty state and a Help page. It now uses one, everywhere.'] },
   { v: 'v58', date: 'Aug 24, 2026', title: 'Settings, and the backup lives in it',
     points: ['A Settings screen, which this app never had. Saving a copy of the records moved into it, instead of hiding under Reports.'] },
   { v: 'v57', date: 'Aug 22, 2026', title: 'The app writes down its own errors',
@@ -1085,27 +1085,27 @@ const CHANGELOG = [
     points: ['A saved copy of the records can be locked with a password before it is sent to anyone.'] },
   { v: 'v55', date: 'Aug 21, 2026', title: 'Restoring never leaves the medication list behind',
     points: ['Restoring from a saved file used to bring back the entries but silently skip the medication list. It no longer does, and it tells you what it restored.'] },
-  { v: 'v54', date: 'Aug 21, 2026', title: 'A saved file says where it came from',
+  { v: 'v54', date: 'Aug 21, 2026', title: 'A saved file tells you where it went',
     points: [
-      'A saved copy now records which phone and which day it came from, so two files can be told apart.',
-      'A second caregiver can be brought in without either phone losing anything.'
+      'Saving a copy used to say how many records were saved but never where the file had gone. It says where now.',
+      'A second caregiver can be given a copy without either phone losing anything.'
     ] },
   { v: 'v53', date: 'Aug 20, 2026', title: 'A new version actually reaches the phone',
     points: ['A fix could be live and correct on the server while the phone kept showing the old version, with no way to tell. The app now checks for a newer version each time it opens.'] },
   { v: 'v52', date: 'Aug 20, 2026', title: 'Paracentesis is its own record',
     points: [
-      'Fluid drained is recorded separately instead of being mixed into the weight trend.',
-      'The weight chart no longer jumps because of a drain.'
+      'Fluid drained is recorded on its own instead of being written in as a weight.',
+      'The weight chart shows readings exactly as recorded, with drains marked on it rather than subtracted from it.'
     ] },
   { v: 'v51', date: 'Aug 19, 2026', title: 'The end-of-day check-in asks about today',
     points: ['Bowel movement and appetite are asked once at the end of the day, about that day -- not the next morning about yesterday.'] },
-  { v: 'v50', date: 'Aug 19, 2026', title: 'Exports reach the iPhone',
+  { v: 'v50', date: 'Aug 19, 2026', title: 'A different way of handing over the saved file',
     points: [
       'Saving a copy used to fail on iPhone with no message at all. This release changed how the file is handed over -- but it has not been confirmed on an iPhone since, so check the file really arrives before relying on it.',
       'Two phones sharing the record no longer drift apart without saying so.'
     ] },
-  { v: 'v49', date: 'Aug 18, 2026', title: 'A missed dose can no longer hide behind "Waiting"',
-    points: ['A card could show "Waiting" over a dose that had actually been missed, so the alert never appeared.'] },
+  { v: 'v49', date: 'Aug 18, 2026', title: 'A card can no longer disagree with the alert',
+    points: ['The missed-dose alert was right, but the medication\u2019s own card still said "Waiting" for the same dose. Two screens saying different things about one dose is its own problem, even when neither is wrong.'] },
   { v: 'v48', date: 'Aug 18, 2026', title: 'Honest failures, and bigger text',
     points: [
       'If a dose fails to save, the app says so instead of closing the box as though it worked.',
@@ -1165,7 +1165,7 @@ const CHANGELOG = [
   { v: 'v29', date: 'Jul 17, 2026', title: 'The 48-hour edit lock is back',
     points: ['Entries older than 48 hours are protected again, after a temporary unlock.'] },
   { v: 'v28', date: 'Jul 17, 2026', title: 'Demo data removed',
-    points: ['A leftover demo function that could have written fake entries into the real record is gone.'] },
+    points: ['A leftover demo feature had written sample entries into the real record when the app found it empty. The feature is gone and those entries were deleted.'] },
   { v: 'v27', date: 'Jul 13, 2026', title: 'Yesterday’s misses show too',
     points: ['A dose missed late at night no longer disappeared from the alert at midnight.'] },
   { v: 'v26', date: 'Jul 12, 2026', title: 'Missed-dose alerts',
@@ -1175,7 +1175,7 @@ const CHANGELOG = [
   { v: 'v24', date: 'Jul 12, 2026', title: 'Home screen layout',
     points: ['Protonix and Senokot got their own cards; the shared card became "Evening meds".'] },
   { v: 'v23', date: 'Jul 12, 2026', title: 'Senokot added',
-    points: ['Added to the medication list with its own card.'] },
+    points: ['Added with 8 AM and 10 PM windows, taken as needed. "Take all" now records each medication\u2019s usual dose instead of leaving it blank.'] },
   { v: 'v22', date: 'Jul 12, 2026', title: 'Daily limits are enforced',
     points: ['A dose button that would take her over the daily limit is now blocked rather than warned about.'] },
   { v: 'v21', date: 'Jul 11, 2026', title: 'Tylenol limit, and safer logging',
@@ -3272,7 +3272,10 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           // actually has, before any of the detail below is read.
           h('div', { style: { fontWeight: '800', color: '#C0453B', fontSize: '15.5px', letterSpacing: '0.02em', textTransform: 'uppercase', minWidth: '0', overflowWrap: 'anywhere' } },
             bannerItems.length + ' missed dose' + (bannerItems.length > 1 ? 's' : '')),
-          h('button', { onClick: clearMissedDoses, 'data-missed-clear': 'true', style: { flexShrink: '0', minHeight: '30px', padding: '0 12px', borderRadius: '99px', background: 'rgba(192,69,59,0.14)', border: '1px solid rgba(192,69,59,0.4)', color: '#A13830', fontSize: '11.5px', fontWeight: '800' } }, 'Clear')
+          // 44px, the iOS floor. This came in with the v60 banner redesign at 30px and is LIVE on her phone
+          // now -- measured by the PM, not noticed by me. A control small enough to mis-tap is worse here
+          // than most places: the tap next to it is the alert you were trying to clear.
+          h('button', { onClick: clearMissedDoses, 'data-missed-clear': 'true', style: { flexShrink: '0', minHeight: '44px', padding: '0 12px', borderRadius: '99px', background: 'rgba(192,69,59,0.14)', border: '1px solid rgba(192,69,59,0.4)', color: '#A13830', fontSize: '11.5px', fontWeight: '800' } }, 'Clear')
         ),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '9px' } },
           ...shownDays.map(g => h('div', { key: g.when, style: { minWidth: '0' } },
