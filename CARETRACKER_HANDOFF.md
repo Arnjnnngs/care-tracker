@@ -478,3 +478,40 @@ on the next open"* — that was the **test**, not the app: Playwright re-runs it
 reload, resetting the stored version, so the app was right to show the notice again. And the first
 falsification **crashed** instead of failing, because it clicked a button that was no longer there;
 a suite that dies when the thing it guards breaks is only accidentally a suite.
+
+#### Correction to the v61 notes above — the history was wrong in 4 of 10 sampled entries
+
+The Zero Day Audit returned **DO NOT SHIP**, and it was right. Its finding was not in the code —
+that was proven mechanically unable to touch a dose, a medication, a record or a missed-dose alert
+— it was in the **words**, which for this feature *are* the product.
+
+- **v37** described v36's change. Real v37 gave the missed-dose banner its persistent **Clear**
+  button, and it had been written out of the record entirely.
+- **v39/v40 were inverted.** v39 is the upload that *corrupted* `sw.js` and the handoff doc to the
+  string "undefined"; v40 repaired it. The history called v39 a repair release and never mentioned
+  the repair under v40.
+- **v41** was titled as an evening-window fix. It corrects a **morning** window default.
+- **v44** said "nothing you would notice on screen". Its own STATUS section lists the calendar,
+  appointments, backup and restore, the missed-dose reason picker — and **the navigation drawer this
+  feature lives in**.
+- **v50** told the patient the iPhone backup works. CLAUDE.md Rule 7: *"Until confirmed, the backup
+  is NOT called a backup."* No confirmation exists. This is the one with a route to harm — someone
+  who stops checking would be relying on a file that may never arrive. Reworded to say exactly that.
+- **v33** implied Senokot had been raising false missed alerts. The source says only that it was
+  converted to as-needed.
+
+A 40% error rate in a 10-entry sample meant the remaining 41 could not be trusted either, so every
+entry was paired against its source in README.md and STATUS.md and re-read. The rest hold up.
+
+**Why it happened:** the entries were written from *headline extraction* — the first bold phrase of
+each row — rather than from reading each release. That is fast and it is exactly how v37 picked up
+its neighbour's change.
+
+Also fixed from the same audit: 115 `key` attributes that this renderer does not treat as special
+and rendered as literal markup, and a code comment claiming the notice appears offline. It does not
+— `state.loaded` only becomes true when the first Firestore snapshot arrives, so with no connection
+it waits. That is the right trade, but the comment said otherwise.
+
+**Still open from the audit, and honest about it:** the claim that the notice never covers the
+"Connecting…" screen has **no gate that can fail** — deleting the guard left the suite green at
+20/20. It is the one assertion in this feature backed by nothing.

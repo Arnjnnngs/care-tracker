@@ -1101,7 +1101,7 @@ const CHANGELOG = [
     points: ['Bowel movement and appetite are asked once at the end of the day, about that day -- not the next morning about yesterday.'] },
   { v: 'v50', date: 'Aug 19, 2026', title: 'Exports reach the iPhone',
     points: [
-      'Saving a copy failed silently on iPhone. It works now.',
+      'Saving a copy used to fail on iPhone with no message at all. This release changed how the file is handed over -- but it has not been confirmed on an iPhone since, so check the file really arrives before relying on it.',
       'Two phones sharing the record no longer drift apart without saying so.'
     ] },
   { v: 'v49', date: 'Aug 18, 2026', title: 'A missed dose can no longer hide behind "Waiting"',
@@ -1117,8 +1117,13 @@ const CHANGELOG = [
     points: ['Both phones can share one medication list, so a change made on one is not silently missing on the other.'] },
   { v: 'v45', date: 'Aug 16, 2026', title: 'A guided tour',
     points: ['A short walkthrough of the app, available any time from the menu.'] },
-  { v: 'v44', date: 'Aug 16, 2026', title: 'Groundwork',
-    points: ['Internal work with nothing you would notice on screen.'] },
+  { v: 'v44', date: 'Aug 16, 2026', title: 'Calendar, appointments, and the menu',
+    points: [
+      'A month calendar with appointments and dates worth a reminder.',
+      'The menu this app opens from -- the same one holding this page.',
+      'Saving a copy of the records, and putting one back.',
+      'A place to record why a dose was missed.'
+    ] },
   { v: 'v43.3', date: 'Aug 16, 2026', title: 'Three live faults fixed',
     points: ['Three problems that were live on the phone, all caused by the same underlying mistake in how the screen was drawn.'] },
   { v: 'v43.2', date: 'Aug 16, 2026', title: 'Late doses and false alarms',
@@ -1130,16 +1135,19 @@ const CHANGELOG = [
     points: ['A spreadsheet export and a printable report -- the first way this app ever had to get the records out of it.'] },
   { v: 'v42', date: 'Jul 22, 2026', title: 'Tested changes brought across',
     points: ['A batch of changes moved over from the test version after checking.'] },
-  { v: 'v41', date: 'Jul 20, 2026', title: 'Evening medication timing corrected',
-    points: ['A correction to the previous release’s Buspirone and Paroxetine window.'] },
+  { v: 'v41', date: 'Jul 20, 2026', title: 'Morning window timing corrected',
+    points: ['The previous release opened the new Buspirone and Paroxetine window across the whole morning. On Aaron’s feedback it now starts at a fixed 10 AM until Protonix is logged that day.'] },
   { v: 'v40', date: 'Jul 20, 2026', title: 'Buspirone and Paroxetine moved to the morning',
-    points: ['Both moved out of the 10 PM window into a new morning window alongside Protonix.'] },
-  { v: 'v39', date: 'Jul 20, 2026', title: 'Repair release',
-    points: ['A previous upload had damaged two files. This put them back.'] },
+    points: [
+      'Both moved out of the 10 PM window into a new morning window alongside Protonix.',
+      'Also repaired the two files the previous release had damaged during upload.'
+    ] },
+  { v: 'v39', date: 'Jul 20, 2026', title: 'A broken upload',
+    points: ['This release damaged two of the app’s files during upload. The app itself still worked, and it was put right in the next release.'] },
   { v: 'v38', date: 'Jul 19, 2026', title: 'Refresh only',
     points: ['Forced every phone to pick up the current version. Nothing changed on screen.'] },
-  { v: 'v37', date: 'Jul 19, 2026', title: 'Clearer dose buttons',
-    points: ['Tidied up the wording on the quick-log cards.'] },
+  { v: 'v37', date: 'Jul 19, 2026', title: 'A way to clear the missed-dose alert',
+    points: ['The missed-dose banner got a Clear button. Clearing it hides the misses you have already dealt with, on both phones, and it stays cleared -- a new miss still appears.'] },
   { v: 'v36', date: 'Jul 19, 2026', title: 'Duplicate wording removed',
     points: ['Cards said "Available" and "Available now" at the same time.'] },
   { v: 'v35', date: 'Jul 19, 2026', title: 'Clearer status on each card',
@@ -1147,7 +1155,7 @@ const CHANGELOG = [
   { v: 'v34', date: 'Jul 18, 2026', title: 'Chemo-day medication rules corrected',
     points: ['Zofran’s restriction and Dexamethasone’s window were both measuring the wrong days around treatment.'] },
   { v: 'v33', date: 'Jul 18, 2026', title: 'Senokot is as-needed',
-    points: ['Its fixed 8 AM and 10 PM windows were removed -- it is taken when needed, so it is no longer flagged as missed.'] },
+    points: ['Its fixed 8 AM and 10 PM windows were removed -- it is taken when needed, so the app no longer expects it at set times. Quick log offers 1 or 2 pills.'] },
   { v: 'v32', date: 'Jul 18, 2026', title: 'False missed alerts fixed',
     points: ['A dose logged the same day could still be reported as missed, because it was being matched to the wrong window.'] },
   { v: 'v31', date: 'Jul 18, 2026', title: 'Evening reminders match the app',
@@ -1222,8 +1230,10 @@ let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: n
 // Decided ONCE at start-up, not on every render: whether this phone has already seen this version.
 // Reading it per render would re-open the pop-up the moment anything else redrew the screen.
 // It is only PAINTED once state.loaded is true (see renderWhatsNewModal) so it never covers the
-// "Connecting..." overlay -- but the decision does not wait for the network, so it still appears on
-// a phone that opens offline.
+// "Connecting..." overlay. An earlier version of this comment claimed it "still appears on a phone
+// that opens offline". It does not, and the audit was right to call that out: state.loaded only
+// becomes true once the first Firestore snapshot arrives, so with no connection the notice waits.
+// That is the correct trade -- the alternative is an overlay on a screen that is not ready yet.
 state.whatsNewOpen = whatsNewShouldShow();
 let toastTimer = null;
 let unsub = null;
@@ -2561,13 +2571,13 @@ function renderGroupedMedsCard(title, meds, now) {
 // One entry renderer, shared by the full history screen and the pop-up, so the two can never drift
 // into describing the same release differently. `latest` only changes the styling of the top card.
 function whatsNewEntry(e, latest) {
-  return h('div', { key: e.v, 'data-whatsnew-entry': e.v, style: { background: latest ? 'rgba(170,83,117,0.10)' : 'rgba(255,255,255,0.55)', border: '1px solid ' + (latest ? 'rgba(170,83,117,0.32)' : 'rgba(212,104,138,0.14)'), borderRadius: '15px', padding: '13px 14px', minWidth: '0' } },
+  return h('div', { 'data-whatsnew-entry': e.v, style: { background: latest ? 'rgba(170,83,117,0.10)' : 'rgba(255,255,255,0.55)', border: '1px solid ' + (latest ? 'rgba(170,83,117,0.32)' : 'rgba(212,104,138,0.14)'), borderRadius: '15px', padding: '13px 14px', minWidth: '0' } },
     h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '3px' } },
       h('div', { style: { fontSize: '14.5px', fontWeight: '800', color: '#342530', letterSpacing: '-0.01em', minWidth: '0', overflowWrap: 'anywhere' } }, e.title),
       h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', flexShrink: '0' } }, e.v + ' \u00b7 ' + e.date)
     ),
     h('ul', { style: { margin: '7px 0 0', paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '5px' } },
-      ...(e.points || []).map((pt, i) => h('li', { key: String(i), style: { fontSize: '13.5px', lineHeight: '1.5', color: '#4A3742', overflowWrap: 'anywhere' } }, pt))
+      ...(e.points || []).map((pt) => h('li', { style: { fontSize: '13.5px', lineHeight: '1.5', color: '#4A3742', overflowWrap: 'anywhere' } }, pt))
     )
   );
 }

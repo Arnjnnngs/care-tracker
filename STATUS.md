@@ -87,7 +87,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **Version** | v60 — **BUILT, NOT DEPLOYED.** v59 is what is live on her phone. |
 | **Commit** | v60 merged to `main` and pushed 2026-08-31; v61 on branch `claude/caretracker-chemowell-updates-k80ydk` |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `c639b8c3320071d168913cd4001d43bf` |
+| **index.html md5** | `d51e3d4b6dd35b3fe2cfcf4e86d0c780` |
 | **sw.js md5** | `a541136544d00c2f07c307269a008133` |
 | **State** | **v60 is LIVE on `main`** (merged and pushed 2026-08-31 with Aaron's go-ahead) — Home-card text overflow, the treatment-window label, and the missed-dose banner redesign. Not verified against the served page: this session cannot reach github.io, so the confirmation is that `main` carries `caretracker-v60`, not that a phone showed it. **v61 is built on the branch** — the What's new history and update notice — and has not been through the chain yet. |
 
