@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -85,7 +85,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | | |
 |---|---|
 | **Version** | v64 |
-| **Commit** | v64 built 2026-09-01 on Aaron's go-ahead: *"then flicker"* |
+| **Commit** | `bb3dc50` — v64 **LIVE** 2026-09-01 on Aaron's go-ahead (*"push"*). Pages build for `bb3dc50` completed successfully; the `index.html` and `sw.js` blob SHAs on `main` are byte-identical to the built files. The live URL could NOT be fetched from the sandbox — this session's network policy denies `arnjnnngs.github.io` (403 on CONNECT), a new constraint worth knowing — so deployment was confirmed through the GitHub API instead of the usual cache-buster fetch. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `8b3076476f1235dcb05e935919b65f05` |
 | **sw.js md5** | `f7291bc3df43f02b9de8a4967bc952d5` |
