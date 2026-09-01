@@ -54,3 +54,30 @@ in the shipped file, and each was falsified before being believed.
 `repaint-test.mjs` is now **16/16**, and `tour-test --file` **60/70** — the two added checks pass,
 and the ten failures are the same pre-existing `--file` artefacts, identical on the shipped v63
 build.
+
+## The re-verify found two more, both in the test files
+
+`index.html` changed after the audit said SHIP, so the auditor went back over the delta only. It
+returned **SHIP** again, having reproduced every number in these notes itself rather than taking
+them — 16/16, 15/16 without the `try/finally`, `35s -> 32s`, `35s -> 35s`, and the ten `tour-test`
+`--file` failures byte-identical to the shipped v63 build. It also found two things worth fixing,
+neither of them in the app:
+
+**`repaint-test` §5 could not tell a live hook from a dead one.** The section forces `render()` to
+throw and checks the next tap still paints. Rename the injected flag so the app never throws, run
+against a build with the `try/finally` **removed**, and the whole suite went green — nothing
+asserted that the throw had actually happened. Now it does. Reproduced both ways here: real hook
+**17/17**; dead hook against the no-fix build **16/17**, with only the new assertion red.
+
+**A comment in `tour-test` stated something false, and it was my number.** It told the next reader
+that three "survives the tick" checks could no longer fail after v64. Measured: all three still go
+red when the guard term is deleted — `TICK-drawer-survives` 0/2, reproduced four times, plus
+`TYPE-appt-sheet-survives` and `TICK-no-repaint-under-tour`. The "0 rebuilds" figure is real but
+comes from a **frozen** clock; `tour-test` runs on the real one, where a minute turns inside its
+window often enough that a repaint lands. The comment is corrected, and the control stays — what
+is true is that those three now depend on a real minute happening to turn, which is weather rather
+than physics. A comment telling the next reader that three working checks cannot fail is an
+invitation to delete them.
+
+**Cost note:** `tour-test` now waits to a real minute boundary once per viewport — up to ~2 minutes
+added to a full run.

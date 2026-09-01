@@ -274,6 +274,12 @@ console.log('\n5. A throw inside a repaint must not strand the gate');
   const a = await boot();
   await a.page.evaluate(() => { globalThis.__throwAlways = true; });
   await new Promise(r => setTimeout(r, 1500));   // let at least one tick throw
+  // ASSERT THE SABOTAGE ACTUALLY FIRED. Without this line the whole section passes on a build with
+  // the try/finally REMOVED -- rename the injected flag so the app never throws and it still went
+  // 16/16 green, because nothing here checked that a throw had happened. Found by the Zero Day
+  // Auditor on the re-verify. A check that cannot tell a live hook from a dead one is not a check.
+  t('the forced throw actually fired', a.errs.some(e => /forced for the repaint suite/.test(e)),
+    a.errs.length + ' page error(s)');
   const before = await a.repaints();
   const opened = await a.page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find(x => /menu/i.test(x.getAttribute('aria-label') || ''));

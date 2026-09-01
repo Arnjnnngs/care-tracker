@@ -1048,17 +1048,21 @@ async function runRuntimeChecks(suite, browser, url, vp, net) {
     // rebuild an open drawer, sheet or tour. Until v64 that was a real test: the app rebuilt the
     // whole screen once a second, so 2.3 seconds guaranteed at least two repaints to survive.
     //
-    // v64 stops the repaints that change nothing a person could see. Inside a single minute, with
-    // no medication unlocking, the app now paints ZERO times in those 2.3 seconds — so the canary
-    // survives whether or not the guard is there, and each of those three checks passes on its own
-    // for the wrong reason. The Zero Day Auditor proved it: deleting !state.drawerOpen from the tick
-    // guard gives 3 rebuilds in 2.6s on the previous build (check goes red, as designed) and 0 on
-    // this one (check passes with the guard gone).
+    // v64 stops the repaints that change nothing a person could see, which THINS that margin —
+    // but does not remove it, and the first version of this comment claimed it did. IT WAS WRONG,
+    // and the correction is the point of writing it down: deleting !state.drawerOpen from the tick
+    // guard on the v64 build still turns TICK-drawer-survives red (0/2, "the tick rebuilt the
+    // drawer"), reproduced four times, and TYPE-appt-sheet-survives and TICK-no-repaint-under-tour
+    // with it. The "0 rebuilds in 2.3s" figure is real but comes from a FROZEN clock; this suite
+    // runs on the real one, where a minute turns inside the window often enough that a repaint
+    // lands. So all three checks still fail when they should. A comment telling the next reader
+    // that three working checks cannot fail is an invitation to delete them.
     //
-    // The BEHAVIOUR is still protected, by FILE-tick-guard-composed here and by the identical
-    // byte-exact assertion in pm.py — the guard line cannot change without both going red. What was
-    // lost is the runtime evidence, and this control restores the part that can be had cheaply: it
-    // proves the app still repaints at all. A screen that never repaints would make every "survives
+    // What IS true is that the margin is now weather, not physics: those three depend on a real
+    // minute happening to turn. So the BEHAVIOUR is carried by FILE-tick-guard-composed here and by
+    // the identical byte-exact assertion in pm.py — the guard line cannot change without both going
+    // red — and this control adds the part that can be had cheaply and deterministically: proof
+    // that the app still repaints at all. A screen that never repaints would make every "survives
     // the tick" check above vacuous AND would be a far worse defect than the one v64 fixed.
     //
     // It measures the DISPLAYED CLOCK, not "some element was replaced". The equivalent control in
