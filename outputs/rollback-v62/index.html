@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v62';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,13 +1092,6 @@ const APP_VERSION = 'v63';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v63', date: 'Sep 1, 2026', title: '\u201cTake all\u201d really does take them all',
-    points: [
-      'It could log some of your medications, quietly skip the rest, and then tell you nothing had saved at all \u2014 so you logged the saved ones a second time.',
-      'Each medication is now saved on its own. One failure cannot cancel the others.',
-      'If some save and some don\u2019t, it names both, and tells you not to re-log the ones already in.',
-      'And if something on the card is skipped because it isn\u2019t due yet, it says which one.'
-    ] },
   { v: 'v62', date: 'Sep 1, 2026', title: 'The update notice actually appears',
     points: [
       'This notice was added last time, and then didn\u2019t show up. The app mistook every phone that already had CareTracker for a brand-new one, and stayed quiet.',
@@ -1940,51 +1933,17 @@ async function confirmTimeAndLog() {
     await addEntryDB(entry);
     setToast('Paracentesis ' + paraFmtLiters(v) + ' L logged at ' + fmtTime(ts));
   } else if (m.type === 'multi') {
-    // ONE REFUSED WRITE USED TO CANCEL EVERY DOSE AFTER IT, AND THEN LIE ABOUT IT.
-    //
-    // Aaron, 2026-09-01: "it would only log 1 of 2 meds or something like that. that has been
-    // annoying me for a long time." Reproduced in a browser with a save refused part-way through
-    // Take all: two doses were written, three were not, and the red banner said "That didn't save.
-    // Nothing was lost -- check your connection and log it again." Two doses HAD been saved. A
-    // caregiver following that instruction logs them a second time, and a dose that appears twice
-    // in a medication record is not a cosmetic error.
-    //
-    // The loop body is now its own try/catch, so one refusal can no longer cancel the doses behind
-    // it, and what the caregiver is told is built from what actually happened rather than from what
-    // was attempted.
     const ids = m.medIds;
     setState({ timeModal: null });
-    const savedNames = [], failedNames = [];
     for (const id of ids) {
       const md = state.meds.find(x => x.id === id);
       const d0 = md && md.doses ? md.doses[0] : null;
       const en = { medId: id, dose: d0 ? d0.label : null, mg: d0 ? (d0.mg || 0) : 0, ts };
       if (d0 && d0.pills) en.pills = d0.pills;
-      try { await addEntryDB(en); savedNames.push(nameOf(id)); }
-      catch (err) { failedNames.push(nameOf(id)); }
+      await addEntryDB(en);
     }
-    // The skipped ones: everything on the card that Take all did not even attempt, because it was
-    // not due. Excluding them is right -- logging a dose through a gap timer or a daily ceiling is
-    // exactly what those rules exist to stop -- but doing it SILENTLY is what made "Take all" read
-    // as broken. The card lists six medications, the button says "Take all (5)", and nothing ever
-    // said which one was left behind.
-    const groupIds = Array.isArray(m.groupIds) ? m.groupIds : ids;
-    const skippedNames = groupIds.filter(id => ids.indexOf(id) < 0).map(id => nameOf(id));
-    if (failedNames.length && savedNames.length) {
-      // THE CASE THE OLD MESSAGE GOT BACKWARDS. Some are in, some are not. This must never say
-      // "nothing was lost", and it must name both sides, because the only wrong move here is
-      // re-logging the ones that already saved.
-      setState({ writeError: savedNames.join(', ') + (savedNames.length === 1 ? ' was' : ' were') +
-        ' logged. ' + failedNames.join(', ') + (failedNames.length === 1 ? ' was' : ' were') +
-        ' NOT. Log only the missing one' + (failedNames.length === 1 ? '' : 's') +
-        ' again \u2014 the rest are already saved.' });
-    } else if (failedNames.length) {
-      setState({ writeError: 'None of those saved. Nothing was lost \u2014 check your connection and log them again.' });
-    } else {
-      setToast(savedNames.length + ' med' + (savedNames.length === 1 ? '' : 's') + ' logged at ' + fmtTime(ts) +
-        (skippedNames.length ? ' \u00b7 ' + skippedNames.join(', ') + ' not due yet' : ''));
-    }
-    setTimeout(() => { if (savedNames.length && ids.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
+    setToast(ids.length + ' meds logged at ' + fmtTime(ts));
+    setTimeout(() => { if (ids.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
   } else if (m.type === 'marker') {
     setState({ timeModal: null });
     await addEntryDB({ medId: m.medId, dose: null, mg: 0, ts });
@@ -2614,7 +2573,7 @@ function renderGroupedMedsCard(title, meds, now) {
       // 'Take all' was hidden during a stay for the same reason the cards were replaced, and it
       // is restored for the same reason they were: a caregiver home for the evening on a half-day
       // stay needs it most, not least.
-      (dueMeds.length >= 2) ? h('button', { onClick: () => setState({ timeModal: { type: 'multi', medIds: dueMeds.map(m => m.id), groupIds: meds.map(m => m.id), timeValue: nowLocalISO() } }), style: { minHeight: '40px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Take all (' + dueMeds.length + ')') : null
+      (dueMeds.length >= 2) ? h('button', { onClick: () => setState({ timeModal: { type: 'multi', medIds: dueMeds.map(m => m.id), timeValue: nowLocalISO() } }), style: { minHeight: '40px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Take all (' + dueMeds.length + ')') : null
     ),
     h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', overflow: 'hidden', marginTop: '11px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       ...meds.map((med, i) => {

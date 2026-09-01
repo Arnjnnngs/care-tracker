@@ -9,7 +9,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** August 16, 2026
-> **Current version:** v62 (the update notice now reaches a phone that upgraded across it)
+> **Current version:** v63 ("Take all" logs every medication it can, and says what it did)
 
 ---
 

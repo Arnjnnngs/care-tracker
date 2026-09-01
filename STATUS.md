@@ -84,12 +84,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v62 |
-| **Commit** | v62 built 2026-09-01 on Aaron's go-ahead — the smaller of the two fixes he asked to see separately |
+| **Version** | v63 |
+| **Commit** | v63 built 2026-09-01 on Aaron's go-ahead: *"do fix all first. that has been annoying me for a long time."* |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `2234b4ab63a012d02e8e681993d5ca93` |
-| **sw.js md5** | `ad247c33f32bc6d9b168d3310dbdb1cd` |
-| **State** | **v62 — the update notice actually appears.** Aaron, the morning after v61: *"I did notice that caretracker didn't do a popup when it opened with features."* He was right. v61 read "no record of a last-seen version" as "brand-new phone" and stayed quiet — but that record was **introduced in v61**, so every existing phone was read as new and shown nothing, on the very release that added the notice. A read-only snapshot at the top of the module now records whether the phone already holds any other CareTracker data; if it does, a missing record means this phone upgraded across the change. Also fixes any phone that SKIPS a release. `whatsnew-test` 28/28 with a new named section for the skipped-release case; render scan 80/80 CLEAN with the pop-up and Home read at 320px. Rollback bundle for v61 in `outputs/rollback-v61/`. |
+| **index.html md5** | `c5826e5bd5817b334bc1916dea7e263a` |
+| **sw.js md5** | `ae1dfe0d7b8399b732ccf7a0ce1dec28` |
+| **State** | **v63 — "Take all" really does take them all.** Aaron: *"it would only log 1 of 2 meds or something like that."* Reproduced in a browser against the shipped v62 build: with one medication refused mid-way through five, **one** dose was saved and four were abandoned, and the red banner said *"Nothing was lost — check your connection and log it again"* while a dose had in fact been written. Following that re-logs a dose that is already in the record. Each medication is now written in its own try/catch; the message is built from what actually happened; and a medication skipped for not being due is named rather than dropped in silence. `takeall-test` 19/19, red at 13/19 against the live v62 build. Rollback bundle for v62 in `outputs/rollback-v62/`. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 
