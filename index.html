@@ -7729,16 +7729,26 @@ setInterval(() => {
   // The line below is pinned BYTE-FOR-BYTE by pm.py and by tour-test, medsync-test and cal-test --
   // it is composed from four separate patches and every one of them asserts it exactly. So the
   // repaint gate is set around it rather than written into it.
+  // WRAPPED IN try/finally SO A THROW CANNOT LEAVE THE FLAG STUCK ON. Found by the Zero Day
+  // Auditor: if render() throws, the exception escapes this interval callback and tickRepaint stays
+  // true -- after which EVERY render, including the one a caregiver's tap triggers, is subject to
+  // the signature gate. Measured with a forced throw: the next tap inside the same minute painted
+  // nothing at all and was silently dropped. It self-heals on the following tick, and the auditor
+  // found no reachable way to make render() throw today -- but "no reachable way today" is not a
+  // guarantee, and removing the whole class costs one line.
   tickRepaint = true;
+  try {
   if (!state.timeModal && !state.apptSheet && !state.drawerOpen && !state.tour && !isEditing) render();
   // Skipping render() during a tour is what stops the spotlight jumping, but the page underneath
   // can still reflow with no repaint at all -- a sync landing, an image settling, the keyboard
   // closing.  Re-glue the highlight to its target instead of leaving it on stale coordinates.
   else if (state.tour) positionTour(false);
+  } finally {
   // Reset AFTER the whole if/else-if chain. Putting it directly under the pinned line severed the
   // chain from its `else if (state.tour)` branch -- a SyntaxError, caught by the parse check before
   // it went anywhere, and a reminder that the pinned line is not a statement on its own.
-  tickRepaint = false;
+    tickRepaint = false;
+  }
   checkNotifications();
 }, 1000);
 render();

@@ -1042,6 +1042,42 @@ async function runRuntimeChecks(suite, browser, url, vp, net) {
       await page.evaluate(() => { window.scrollTo(0, 0); });
     });
 
+    // POSITIVE CONTROL, ADDED IN v64, AND THE THREE CHECKS ABOVE NEED IT.
+    //
+    // Each of those waits ~2.3 seconds and asserts a canary survived, to prove the tick did not
+    // rebuild an open drawer, sheet or tour. Until v64 that was a real test: the app rebuilt the
+    // whole screen once a second, so 2.3 seconds guaranteed at least two repaints to survive.
+    //
+    // v64 stops the repaints that change nothing a person could see. Inside a single minute, with
+    // no medication unlocking, the app now paints ZERO times in those 2.3 seconds — so the canary
+    // survives whether or not the guard is there, and each of those three checks passes on its own
+    // for the wrong reason. The Zero Day Auditor proved it: deleting !state.drawerOpen from the tick
+    // guard gives 3 rebuilds in 2.6s on the previous build (check goes red, as designed) and 0 on
+    // this one (check passes with the guard gone).
+    //
+    // The BEHAVIOUR is still protected, by FILE-tick-guard-composed here and by the identical
+    // byte-exact assertion in pm.py — the guard line cannot change without both going red. What was
+    // lost is the runtime evidence, and this control restores the part that can be had cheaply: it
+    // proves the app still repaints at all. A screen that never repaints would make every "survives
+    // the tick" check above vacuous AND would be a far worse defect than the one v64 fixed.
+    //
+    // It measures the DISPLAYED CLOCK, not "some element was replaced". The equivalent control in
+    // cal-test was first written the second way and PASSED against a build sabotaged to freeze the
+    // screen permanently, because something else repaints during the wait.
+    await rt('TICK-positive-control' + tag, 'the app still repaints: the displayed clock advances across a minute boundary', async () => {
+      const readClock = () => page.evaluate(() => {
+        const h = document.querySelector('header');
+        return h ? ((h.innerText || '').match(/\d{1,2}:\d{2}\s*(AM|PM)?/i) || [''])[0] : 'NO HEADER';
+      });
+      const before = await readClock();
+      assert(/\d/.test(before), 'no clock in the header to measure: ' + before);
+      await page.waitForTimeout(60000 - (Date.now() % 60000) + 2500);
+      const after = await readClock();
+      assert(after !== before,
+        'the displayed clock did not move across a minute boundary (' + before + ' -> ' + after +
+        ') — the screen is stale, and every "survives the tick" check above is vacuous');
+    });
+
     await rt('SCRIM-blocks-app' + tag, 'the backdrop stops taps reaching the app underneath', async () => {
       await startTour(page);
       await advanceTo(page, 2);

@@ -55,6 +55,18 @@ let raw = fs.readFileSync(APP_FILE, 'utf8');
 const CLOCK_SRC = 'function simNow() { return Date.now(); }';
 if (raw.indexOf(CLOCK_SRC) < 0) { console.error('REFUSING: simNow() is not the shape this suite drives.'); process.exit(3); }
 raw = raw.replace(CLOCK_SRC, 'function simNow() { return (globalThis.__clock || Date.now()); }');
+// A SECOND HOOK, so a throw inside render() can be forced on demand. The auditor found that if
+// render() throws, the exception escapes the interval callback and tickRepaint stays true -- after
+// which every render, including a caregiver's tap, is silently subject to the signature gate. The
+// fix is a try/finally; this is what proves the fix does anything. paintSignature() is called from
+// inside render() on the tick path, so throwing there throws where it matters.
+const SIG_SRC = 'function paintSignature() {';
+if (raw.indexOf(SIG_SRC) < 0) { console.error('REFUSING: paintSignature() is not the shape this suite drives.'); process.exit(3); }
+// THROWS FOR AS LONG AS THE FLAG IS SET, not once. A single throw does not strand anything: the
+// NEXT tick runs a second later, completes normally, and clears tickRepaint on its way out -- so a
+// test that waits before tapping measures a state that has already healed. The first version of
+// this check did exactly that and passed against a build with the try/finally removed.
+raw = raw.replace(SIG_SRC, SIG_SRC + ' if (globalThis.__throwAlways) { throw new Error("forced for the repaint suite"); }');
 
 let pass = 0, fail = 0;
 const t = (name, cond, detail) => {
@@ -204,7 +216,77 @@ console.log('\n3. A medication unlocks when it is DUE, not at the next minute bo
   await a.close();
 }
 
-console.log('\n4. A user action still repaints immediately');
+console.log('\n4. The one thing on screen that counts in SECONDS keeps counting');
+{
+  // THE ONLY SECONDS-GRANULAR DISPLAY IN THE APP, AND THIS SUITE SHIPPED WITHOUT COVERING IT.
+  // Found by the Zero Day Auditor: replacing the signature's seconds term with a constant froze
+  // the "Opens in 2m 30s" countdown while every check here stayed green. A release whose whole
+  // subject is "the screen must not go stale" left the one thing that ticks in seconds unguarded.
+  //
+  // The countdown lives in the override prompt -- tap a locked medication and the app offers to log
+  // it early, showing how long is left. That prompt is the sole caller of fmtCountdown().
+  const a = await boot();
+  const openOverride = await a.page.evaluate(() => {
+    // The locked card's own control opens the prompt. Scoped to the card, not the page: a
+    // page-wide button search picks up whatever the header offers first.
+    // Smallest element that holds the name, its locked status, AND a button. Requiring the button
+    // matters: the smallest element carrying just the name and status is a text row with no
+    // control in it at all, which is what the first version of this selector found.
+    let card = null;
+    for (const el of document.querySelectorAll('main *')) {
+      const txt = el.innerText || '';
+      if (!/Gap One/.test(txt) || !/Waiting|Opens/i.test(txt)) continue;
+      if (!el.querySelector('button')) continue;
+      if (!card || txt.length < (card.innerText || '').length) card = el;
+    }
+    if (!card) return 'no locked Gap One card with a control on it';
+    const b = [...card.querySelectorAll('button')].pop();
+    b.click();
+    return true;
+  });
+  t('the locked medication offers to log it early', openOverride === true, String(openOverride));
+  await new Promise(r => setTimeout(r, 900));
+  const countdown = () => a.page.evaluate(() => {
+    const m = (document.querySelector('main') || {}).innerText || '';
+    const hit = m.match(/\b\d+m\s*\d+s\b|\b\d+s\b/);
+    return hit ? hit[0] : '(no countdown on screen)';
+  });
+  const c1 = await countdown();
+  t('a seconds-level countdown is on screen', /\d/.test(c1), c1);
+  // Three seconds later it must read differently. Same minute throughout, so ONLY the seconds term
+  // of the signature can cause this repaint -- which is exactly what is being pinned.
+  await a.setClock(START + 3000);
+  await new Promise(r => setTimeout(r, 2500));
+  const c2 = await countdown();
+  t('it counts down while the prompt is open, inside the same minute', c2 !== c1, c1 + ' -> ' + c2);
+  await a.close();
+}
+
+console.log('\n5. A throw inside a repaint must not strand the gate');
+{
+  // WITHOUT THE try/finally THIS IS A SILENTLY DROPPED TAP. tickRepaint is set true around the
+  // tick's render call; if that render throws, the exception escapes the interval callback and the
+  // flag is never cleared. Every render afterwards -- including the one a caregiver's tap causes --
+  // then goes through the signature gate, and inside the same minute the signature has not changed,
+  // so the tap paints nothing at all. Measured by the Zero Day Auditor at 0 rebuilds for the first
+  // tap after a forced throw. It self-heals on the next tick, which is precisely what makes it the
+  // kind of defect nobody reproduces and everybody doubts.
+  const a = await boot();
+  await a.page.evaluate(() => { globalThis.__throwAlways = true; });
+  await new Promise(r => setTimeout(r, 1500));   // let at least one tick throw
+  const before = await a.repaints();
+  const opened = await a.page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /menu/i.test(x.getAttribute('aria-label') || ''));
+    if (!b) return false; b.click(); return true;
+  });
+  t('the menu button was found', opened, '');
+  await new Promise(r => setTimeout(r, 900));
+  const after = await a.repaints();
+  t('a tap still paints after a repaint threw', after > before, before + ' -> ' + after);
+  await a.close();
+}
+
+console.log('\n6. A user action still repaints immediately');
 {
   const a = await boot();
   const before = await a.repaints();

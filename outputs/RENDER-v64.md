@@ -32,3 +32,25 @@ proving the "survives the tick" checks are not vacuous — is unchanged, but it 
 checked it had been replaced, and **that passed against a build sabotaged to freeze the screen
 permanently**, because some other path repaints during the wait. Vacuous is the one thing a
 positive control may not be.
+
+## After the audit — three additions, none of them layout
+
+The Zero Day Audit returned **SHIP** and then named three things worth folding in. All three are
+in the shipped file, and each was falsified before being believed.
+
+1. **The tick is wrapped in `try/finally`.** If `render()` ever threw, the exception escaped the
+   interval callback and left the repaint flag stuck on — after which every render, including the
+   one a caregiver's tap triggers, went through the signature gate. Measured with a forced throw:
+   the next tap inside the same minute painted **nothing at all**. It self-healed on the following
+   tick and the auditor found no reachable way to make `render()` throw today, but the class costs
+   one line to remove. Falsified by taking the `try/finally` back out: `repaint-test` drops to
+   **15/16**.
+2. **The seconds countdown is now tested.** It was the one branch of the signature that worked and
+   was guarded by nothing. Real build: the *"Opens in …"* prompt counts `35s -> 32s`. Frozen
+   signature: `35s -> 35s`.
+3. **`tour-test` got its own `TICK-positive-control`.** Same reasoning as `cal-test`'s: without it,
+   its "survives the tick" checks could pass on an app that never repaints at all.
+
+`repaint-test.mjs` is now **16/16**, and `tour-test --file` **60/70** — the two added checks pass,
+and the ten failures are the same pre-existing `--file` artefacts, identical on the shipped v63
+build.
