@@ -62,7 +62,7 @@ const STUB_MSG = `export function getMessaging(){throw new Error('off');}
 export async function getToken(){return null;} export function onMessage(){return()=>{};}`;
 // refuseFor names the medication whose write is refused. Every write is recorded, in order.
 const stubFs = (refuseFor) => `
-const store={entries:[],prefs:{}};const eL=[],pL=[];let n=0;const writes=[];
+const store={entries:${JSON.stringify(SEED_ENTRIES)},prefs:{}};const eL=[],pL=[];let n=0;const writes=[];
 const REFUSE=${JSON.stringify(refuseFor)};
 function snap(l){return{docs:l.map(e=>({id:e.id,data:()=>{const c=Object.assign({},e);delete c.id;return c;}}))};}
 globalThis.__writes=()=>writes.slice();
@@ -92,8 +92,36 @@ const SEED_MEDS = { version: 1, archivedMeds: [], meds: [
   { id: 'evening-b', name: 'Evening B', type: 'win', groupedEvening: true, groupedMorning: false,
     doses: [{ label: '10 mg', mg: 10 }], windows: [{ start: 0, end: 24, name: 'All day' }] },
   { id: 'evening-c', name: 'Evening C', type: 'win', groupedEvening: true, groupedMorning: false,
-    doses: [{ label: '5 mg', mg: 5 }], windows: [{ start: 0, end: 24, name: 'All day' }] }
+    doses: [{ label: '5 mg', mg: 5 }], windows: [{ start: 0, end: 24, name: 'All day' }] },
+  // NEVER DUE, DETERMINISTICALLY. The skipped-medication check used to lean on the app's own Iron
+  // being outside its window -- which made the suite WALL-CLOCK DEPENDENT: run it at 22:30 and
+  // Iron is due, nothing is skipped, and the check goes red on a perfectly good build. This one
+  // is a gap-timer medication with a dose already in the store, so it is locked at every hour of
+  // the day and "not due" is a property of the fixture rather than of when the suite happens to run.
+  { id: 'evening-locked', name: 'Evening Locked', type: 'gap', groupedEvening: true, groupedMorning: false,
+    gapH: 12, doses: [{ label: '1 tablet', mg: 0 }] },
+  // THE APP'S OWN IRON, forced due at every hour. afterLog() special-cases only iron/protonix/
+  // tylenol, so the Iron + Protonix advisory can only be exercised with the real 'iron' id. Left to
+  // its default 22:00-24:00 window it is not due for most of the day, so it was never attempted,
+  // so refusing it did nothing and the "no advisory for a refused dose" check could not fire at
+  // all -- it passed against a build with the guard deliberately broken.
+  // Every key that matters is set EXPLICITLY here: backfillDefaultMedFlags only fills keys that are
+  // ABSENT, so naming groupedMorning and windows keeps this out of the Morning card and out of the
+  // default window.
+  { id: 'iron', name: 'Iron', type: 'win', groupedEvening: true, groupedMorning: false, quickLog: false,
+    doses: [{ label: '1 tablet', mg: 0 }], windows: [{ start: 0, end: 24, name: 'All day' }] }
 ]};
+// The dose that keeps Evening Locked locked. Seeded into the store before the app reads it.
+const SEED_ENTRIES = [
+  // Keeps Evening Locked gap-locked, so "not due" is a property of the fixture and not of the hour
+  // the suite happens to run at.
+  { medId: 'evening-locked', dose: '1 tablet', mg: 0, ts: Date.now() - 60000 },
+  // A RECENT PROTONIX DOSE, so the Iron + Protonix advisory in afterLog() can actually fire. Without
+  // it that advisory needs a nearby Protonix entry, finds none, and stays silent no matter what --
+  // so the check for "no advisory about a refused dose" passed against a build where the guard was
+  // deliberately broken. A check that cannot fire is a check that cannot fail.
+  { medId: 'protonix', dose: '40 mg', mg: 40, ts: Date.now() - 30 * 60000 }
+];
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--no-sandbox'] });
 
@@ -141,7 +169,10 @@ async function takeAll(refuseFor) {
   const out = await page.evaluate(() => ({
     writes: globalThis.__writes().map(w => w.medId),
     toast: (document.querySelector('[role="status"]') || {}).innerText || '',
-    banner: ((document.querySelector('[role="alert"]') || {}).innerText || '').replace(/\s+/g, ' ').trim()
+    banner: ((document.querySelector('[role="alert"]') || {}).innerText || '').replace(/\s+/g, ' ').trim(),
+    // The Iron + Protonix advisory afterLog() raises. It must never appear for a dose that was
+    // REFUSED -- it would be warning about timing between a dose in the record and one that is not.
+    ironWarning: /Iron \+ Protonix timing/.test(document.body.innerText || '')
   }));
   await ctx.close(); server.close();
   return { ...out, tapped, confirmed, errs };
@@ -153,7 +184,11 @@ console.log('\n1. Nothing refused — every due medication is logged, and anythi
   t('the Take all button is on the Evening card', !!r.tapped, r.tapped ? r.tapped.label : 'not found');
   t('the confirmation opened', r.confirmed, '');
   const mine = r.writes.filter(id => String(id).indexOf('evening-') === 0);
-  t('all three seeded medications were written', mine.length === 3, r.writes.join(', '));
+  t('the three DUE medications were written', mine.length === 3, r.writes.join(', '));
+  // The gap-locked one must be absent: Take all is right to leave it out. The defect was never
+  // that it skipped -- it was that it skipped without saying so.
+  t('the gap-locked medication was correctly NOT written',
+    mine.indexOf('evening-locked') < 0, mine.join(', '));
   t('the caregiver is told it worked', /logged/i.test(r.toast), r.toast || '(no toast)');
   t('no write-failure banner appears when nothing failed', !r.banner, r.banner || '(none)');
   // THE SILENT-SKIP DEFECT. The app's own Iron rides along in this fixture and is never due at the
@@ -162,8 +197,8 @@ console.log('\n1. Nothing refused — every due medication is logged, and anythi
   // `!/not due/.test(toast) || /not due yet/.test(toast)`, which is satisfied by a toast that
   // never mentions it at all -- so it passed on the broken build too. A check with an escape
   // clause is a check that cannot fail.
-  t('a medication left out because it is not due is NAMED, not dropped in silence',
-    /not due yet/.test(r.toast), r.toast || '(no toast)');
+  t('the medication left out because it is not due is NAMED, not dropped in silence',
+    /Evening Locked/.test(r.toast) && /not due yet/.test(r.toast), r.toast || '(no toast)');
   t('no page errors', r.errs.length === 0, r.errs.join(' / '));
 }
 
@@ -186,13 +221,57 @@ console.log('\n3. And it must never claim nothing was saved when something was')
   // THE SENTENCE THAT CAUSED THE HARM. "Nothing was lost -- log it again" sent the caregiver back
   // to re-log doses that were already written.
   t('it does NOT say nothing was lost', !/nothing was lost/i.test(r.banner), r.banner);
-  t('it names the medication that failed', /Evening B/.test(r.banner), r.banner);
-  t('it names at least one that succeeded', /Evening A|Evening C/.test(r.banner), r.banner);
+  // WHICH SIDE EACH NAME IS ON, not merely that it appears. THIS IS THE CHECK THE RELEASE RESTS ON
+  // AND THE FIRST VERSION DID NOT MAKE IT. The auditor swapped only the two name lists, so the
+  // banner named the refused medication as saved and the three saved ones as failed --
+  // "Evening B was logged. Evening A, Evening C, Compazine were NOT. Log only the missing one
+  // again." That instructs the caregiver to re-log three doses ALREADY IN THE RECORD, which is the
+  // exact harm this release exists to stop, and the suite stayed 19/19 GREEN because it only asked
+  // whether the names appeared anywhere in the sentence.
+  // The banner reads "<saved> were logged. <failed> were NOT. ..." so the saved side ends at
+  // "were/was logged." and the failed side runs from there to "were/was NOT". Splitting on
+  // "was NOT" alone put the FAILED name at the tail of the saved side, because the name comes
+  // before those words -- a parsing slip that made this check fail on a correct build.
+  const bannerText = r.banner;
+  const mLogged = bannerText.match(/\b(?:were|was) logged\./);
+  const loggedPart = mLogged ? bannerText.slice(0, mLogged.index) : '';
+  const rest = mLogged ? bannerText.slice(mLogged.index + mLogged[0].length) : bannerText;
+  const mNot = rest.match(/\b(?:were|was) NOT\b/);
+  const notPart = mNot ? rest.slice(0, mNot.index) : '';
+  t('the medication that FAILED is named on the failed side, not the saved side',
+    /Evening B/.test(notPart) && !/Evening B/.test(loggedPart),
+    'saved side: "' + loggedPart.trim() + '"  |  failed side: "' + notPart.trim() + '"');
+  t('the medications that SAVED are named on the saved side, not the failed side',
+    /Evening A/.test(loggedPart) && !/Evening A/.test(notPart), 'saved side: "' + loggedPart.trim() + '"');
+  t('exactly one medication is reported as failed, because exactly one was',
+    (notPart.match(/Evening [A-Z]/g) || []).length === 1, notPart.trim());
   t('it tells the caregiver not to re-log the saved ones',
     /already saved|only the missing/i.test(r.banner), r.banner);
+  // THE SKIP MUST BE NAMED HERE TOO. skippedNames was originally built once and used only in the
+  // all-saved branch, so the silent skip this release exists to remove survived in exactly the
+  // failure case the release is about -- while the notice a patient reads claimed it unqualified.
+  // Dropping the tail from the failure paths left the suite fully green; this is what catches it.
+  t('a medication skipped for not being due is named on the FAILURE path too',
+    /Evening Locked/.test(r.banner) && /not due yet/.test(r.banner), r.banner);
 }
 
-console.log('\n4. Everything refused — then "nothing was lost" is TRUE and may be said');
+console.log('\n4. A clinical advisory must never fire for a dose that was refused');
+{
+  // Iron is one of the app's own evening medications and rides along in this fixture. afterLog()
+  // raises an Iron + Protonix timing advisory. It used to be gated on
+  // `savedNames.length && ids.includes('iron')` -- "something saved" AND "iron was attempted",
+  // which is not "iron saved". With Iron refused and the others written it warned about the timing
+  // of a dose that is not in the record. On the previous build the throw skipped the line
+  // entirely, so the fix introduced it. Found by the Zero Day Auditor.
+  const r = await takeAll('iron');
+  t('Iron really was refused', r.writes.indexOf('iron') < 0, r.writes.join(', '));
+  t('something else really did save, so the guard is under load',
+    r.writes.filter(id => String(id).indexOf('evening-') === 0).length > 0, r.writes.join(', '));
+  t('no Iron advisory is raised about a dose that was refused', !r.ironWarning,
+    r.ironWarning ? 'the Iron + Protonix advisory appeared for a dose that is not in the record' : '');
+}
+
+console.log('\n5. Everything refused — then "nothing was lost" is TRUE and may be said');
 {
   // EVERY write refused. This is the ONLY case where "nothing was lost" is true, and it must still
   // be said here -- the fix must not replace one wrong message with another.

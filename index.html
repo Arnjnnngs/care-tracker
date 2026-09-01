@@ -1954,13 +1954,13 @@ async function confirmTimeAndLog() {
     // was attempted.
     const ids = m.medIds;
     setState({ timeModal: null });
-    const savedNames = [], failedNames = [];
+    const savedNames = [], failedNames = [], savedIds = [];
     for (const id of ids) {
       const md = state.meds.find(x => x.id === id);
       const d0 = md && md.doses ? md.doses[0] : null;
       const en = { medId: id, dose: d0 ? d0.label : null, mg: d0 ? (d0.mg || 0) : 0, ts };
       if (d0 && d0.pills) en.pills = d0.pills;
-      try { await addEntryDB(en); savedNames.push(nameOf(id)); }
+      try { await addEntryDB(en); savedNames.push(nameOf(id)); savedIds.push(id); }
       catch (err) { failedNames.push(nameOf(id)); }
     }
     // The skipped ones: everything on the card that Take all did not even attempt, because it was
@@ -1970,6 +1970,14 @@ async function confirmTimeAndLog() {
     // said which one was left behind.
     const groupIds = Array.isArray(m.groupIds) ? m.groupIds : ids;
     const skippedNames = groupIds.filter(id => ids.indexOf(id) < 0).map(id => nameOf(id));
+    // NAMED ON EVERY PATH, not just the happy one. skippedNames used to be built and then used only
+    // in the all-saved branch, so the silent skip this release exists to fix survived in exactly
+    // the failure case the release is about -- while the notice a patient reads claimed it
+    // unqualified. Found by the Zero Day Auditor.
+    const skippedTail = skippedNames.length
+      ? ' ' + skippedNames.join(', ') + (skippedNames.length === 1 ? ' was' : ' were') + ' not due yet and ' +
+        (skippedNames.length === 1 ? 'was' : 'were') + ' not attempted.'
+      : '';
     if (failedNames.length && savedNames.length) {
       // THE CASE THE OLD MESSAGE GOT BACKWARDS. Some are in, some are not. This must never say
       // "nothing was lost", and it must name both sides, because the only wrong move here is
@@ -1977,14 +1985,23 @@ async function confirmTimeAndLog() {
       setState({ writeError: savedNames.join(', ') + (savedNames.length === 1 ? ' was' : ' were') +
         ' logged. ' + failedNames.join(', ') + (failedNames.length === 1 ? ' was' : ' were') +
         ' NOT. Log only the missing one' + (failedNames.length === 1 ? '' : 's') +
-        ' again \u2014 the rest are already saved.' });
+        ' again \u2014 the rest are already saved.' + skippedTail });
     } else if (failedNames.length) {
-      setState({ writeError: 'None of those saved. Nothing was lost \u2014 check your connection and log them again.' });
+      setState({ writeError: 'None of those saved. Nothing was lost \u2014 check your connection and log them again.' + skippedTail });
     } else {
+      // CLEAR ANY STALE FAILURE BANNER. Everything asked for went in, so a banner left over from an
+      // earlier attempt would still be telling the caregiver to "log them again" for doses that
+      // are now in the record -- the same false instruction this release exists to remove.
+      setState({ writeError: null });
       setToast(savedNames.length + ' med' + (savedNames.length === 1 ? '' : 's') + ' logged at ' + fmtTime(ts) +
         (skippedNames.length ? ' \u00b7 ' + skippedNames.join(', ') + ' not due yet' : ''));
     }
-    setTimeout(() => { if (savedNames.length && ids.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
+    // KEYED ON THE DOSE THAT ACTUALLY SAVED. `savedNames.length && ids.includes('iron')` means
+    // "something saved" AND "iron was attempted" -- not "iron saved". With Iron refused and the
+    // others written, that raised the Iron/Protonix advisory about a dose that is not in the
+    // record. On v62 the throw skipped this line entirely, so it was a regression introduced by
+    // the fix. Found by the Zero Day Auditor.
+    setTimeout(() => { if (savedIds.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
   } else if (m.type === 'marker') {
     setState({ timeModal: null });
     await addEntryDB({ medId: m.medId, dose: null, mg: 0, ts });
