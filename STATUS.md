@@ -87,9 +87,9 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **Version** | v63 |
 | **Commit** | v63 built 2026-09-01 on Aaron's go-ahead: *"do fix all first. that has been annoying me for a long time."* |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `c5826e5bd5817b334bc1916dea7e263a` |
+| **index.html md5** | `14376a577dd9d2c461469faca3d13e94` |
 | **sw.js md5** | `ae1dfe0d7b8399b732ccf7a0ce1dec28` |
-| **State** | **v63 — "Take all" really does take them all.** Aaron: *"it would only log 1 of 2 meds or something like that."* Reproduced in a browser against the shipped v62 build: with one medication refused mid-way through five, **one** dose was saved and four were abandoned, and the red banner said *"Nothing was lost — check your connection and log it again"* while a dose had in fact been written. Following that re-logs a dose that is already in the record. Each medication is now written in its own try/catch; the message is built from what actually happened; and a medication skipped for not being due is named rather than dropped in silence. `takeall-test` 19/19, red at 13/19 against the live v62 build. Rollback bundle for v62 in `outputs/rollback-v62/`. |
+| **State** | **v63 — "Take all" really does take them all.** Aaron: *"it would only log 1 of 2 meds or something like that."* Reproduced in a browser against the shipped v62 build: with one medication refused mid-way through five, **one** dose was saved and four were abandoned, and the red banner said *"Nothing was lost — check your connection and log it again"* while a dose had in fact been written. Following that re-logs a dose that is already in the record. Each medication is now written in its own try/catch; the message is built from what actually happened; and a medication skipped for not being due is named rather than dropped in silence. `takeall-test` **25/25**, and 17 passed / 8 red against the live v62 build. The audit refused the first attempt on three findings — the worst being that the suite passed with the banner naming saved and failed medications **backwards**, which would tell a caregiver to re-log doses already in the record. Rollback bundle for v62 in `outputs/rollback-v62/`. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 
