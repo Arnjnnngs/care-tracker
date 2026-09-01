@@ -91,6 +91,23 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **sw.js md5** | `ad247c33f32bc6d9b168d3310dbdb1cd` |
 | **State** | **v62 — the update notice actually appears.** Aaron, the morning after v61: *"I did notice that caretracker didn't do a popup when it opened with features."* He was right. v61 read "no record of a last-seen version" as "brand-new phone" and stayed quiet — but that record was **introduced in v61**, so every existing phone was read as new and shown nothing, on the very release that added the notice. A read-only snapshot at the top of the module now records whether the phone already holds any other CareTracker data; if it does, a missing record means this phone upgraded across the change. Also fixes any phone that SKIPS a release. `whatsnew-test` 28/28 with a new named section for the skipped-release case; render scan 80/80 CLEAN with the pop-up and Home read at 320px. Rollback bundle for v61 in `outputs/rollback-v61/`. |
 
+## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
+
+On a phone whose storage can be **read but not written** — quota-full, or read-only — the What's
+new notice reappears on **every open**, because `whatsNewMarkSeen()` cannot record the version and
+the app therefore never learns it has been shown. Confirmed genuinely new in v62 by running the
+same probe against `outputs/rollback-v61/index.html`, where it does not happen.
+
+No data is at risk and nothing is lost; it is an annoyance on a phone that is already in a bad
+state. Left alone deliberately: the honest fix is an in-memory "already shown this session" flag,
+which is a behaviour change on a path nobody can currently reproduce on a real device. Written down
+so the next person finds it rather than rediscovers it.
+
+The auditor also probed eight hostile-storage cases against the shipped build — `key()` throwing,
+`localStorage` throwing on access, 5,000 junk keys, hostile key names including `__proto__`,
+`getItem` throwing, `setItem` throwing — and in every one Home came up with all 8 medication cards
+and zero page errors.
+
 ## v62 — WHAT IS DELIBERATELY NOT IN IT
 
 Aaron, 2026-09-01: *"do separately. do the smallest first and then let me know once its done.

@@ -119,12 +119,26 @@ async function openApp(seenVersion, priorData) {
   } else {
     await page.addInitScript(() => { try { localStorage.removeItem('caretracker-seen-version'); } catch (e) {} });
   }
-  // A PHONE THAT HAS BEEN HERE BEFORE. Any other caretracker-* key is the evidence, and a saved
-  // medication list is the one every returning phone realistically has. Written before the page
-  // script runs, because the whole point is that the snapshot happens before anything else does.
-  if (priorData) {
+  // A PHONE THAT HAS BEEN HERE BEFORE. Any other caretracker-* key is the evidence.
+  //
+  // WHICH key is seeded matters, and an earlier version of this comment got it wrong. It claimed a
+  // saved medication list was "the one every returning phone realistically has". The Zero Day
+  // Auditor measured the actual start-up writes and it is not: a start-up writes only
+  // caretracker-seen-version and caretracker-device-id-v1. The medication config is written ONLY
+  // when somebody edits the medication list. So a phone that has run for weeks without ever
+  // touching the med list has a device-id and no config — and seeding only the config left this
+  // suite green while the fix was broken for exactly that phone, twice over: dropping device-id
+  // from the snapshot, and narrowing the snapshot to the config key alone, both stayed 28/28.
+  // The guard was hollow for the case it was written to protect. So it now runs BOTH.
+  if (priorData === 'config') {
     await page.addInitScript(() => { try {
       localStorage.setItem('caretracker-medication-config-v1', JSON.stringify({ version: 1, meds: [], archivedMeds: [] }));
+    } catch (e) {} });
+  } else if (priorData) {
+    // The realistic returning phone: a device id and nothing else. This is the seed that catches
+    // a snapshot narrowed to the wrong key.
+    await page.addInitScript(() => { try {
+      localStorage.setItem('caretracker-device-id-v1', 'dev-test-0001');
     } catch (e) {} });
   } else {
     await page.addInitScript(() => { try {
@@ -273,7 +287,7 @@ console.log('\n7. It never covers the "Connecting..." screen');
   await ctx.close();
 }
 
-console.log('\n9. A phone that SKIPPED a release still gets told what changed');
+console.log('\n8. A phone that SKIPPED a release still gets told what changed');
 // THE CASE THAT WOULD HAVE CAUGHT THE v61 MISS, and the reason it is written out separately.
 // v61 read "no seen-version record" as "brand new phone" and stayed silent. But that record was
 // INTRODUCED in v61, so every phone that already had CareTracker took the new-phone branch on its
@@ -290,6 +304,15 @@ console.log('\n9. A phone that SKIPPED a release still gets told what changed');
   const stored = await page.evaluate(() => localStorage.getItem('caretracker-seen-version'));
   t('and the version is stamped so it is asked once, not every load', stored === appVersion, String(stored));
   t('no page errors while deciding', errs.length === 0, errs.join(' / '));
+  await ctx.close();
+}
+{
+  // THE SAME PHONE, EVIDENCED BY A SAVED MEDICATION LIST INSTEAD. Both keys must count, because a
+  // snapshot that recognises only one of them is broken for every phone carrying the other.
+  const { ctx, page, errs } = await openApp(undefined, 'config');
+  t('a returning phone evidenced by a saved medication list is also shown the notice',
+    !!(await page.$('[data-whatsnew-modal]')), '');
+  t('no page errors on that path either', errs.length === 0, errs.join(' / '));
   await ctx.close();
 }
 {
