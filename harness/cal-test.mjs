@@ -902,11 +902,36 @@ async function runRuntimeChecks(suite, browser, url, vp, net) {
     });
 
     // ---- positive control: the repaint really is running ----------------------------------------
-    await suite.run('TICK-positive-control@' + vp.name, tag + 'with no dialog open the app DOES repaint every second', async () => {
-      await page.evaluate(() => { const el = document.querySelector('header'); if (el) el.__calTick = 'header'; });
-      await page.waitForTimeout(2600);
-      const alive = await page.evaluate(() => { const el = document.querySelector('header'); return el ? el.__calTick : 'MISSING'; });
-      assert(alive !== 'header', 'the clock tick never repainted — every "survives the tick" check above would be vacuous');
+    // THE ASSERTION CHANGED WITH v64, THE PURPOSE DID NOT. This control exists so the "survives the
+    // tick" checks above cannot be vacuous: if the app never repaints at all, proving that a dialog
+    // survives a repaint proves nothing. That is still exactly what it proves.
+    //
+    // What changed is the trigger. Until v64 the app rebuilt the entire screen once a second
+    // forever, so marking an element and waiting 2.6 seconds was enough. v64 stops the repaints
+    // that change nothing a person could see -- measured at ten rebuilds per ten idle seconds
+    // before, zero after -- so "every second" is no longer the contract and asserting it would pin
+    // the defect rather than the behaviour. The contract now is that the app repaints when
+    // something visible WOULD change, and the cheapest visible change is the clock turning over.
+    //
+    // So this waits for the next minute boundary, computed exactly rather than slept past: at most
+    // ~61 seconds, and it fails if the repaint never lands.
+    await suite.run('TICK-positive-control@' + vp.name, tag + 'with no dialog open the displayed clock DOES advance', async () => {
+      // ASSERTS THE CLOCK TEXT, NOT "SOMETHING REPAINTED". The first rewrite of this control marked
+      // the header element and checked it had been replaced -- and that PASSED against a build whose
+      // repaint gate was sabotaged to freeze the screen permanently, because some other path
+      // repaints during the ~61 second wait. It was vacuous, which is the one thing a positive
+      // control must never be. What a person actually sees is the time on the header, so that is
+      // what is measured: it must differ across a minute boundary.
+      const readClock = () => page.evaluate(() => {
+        const h = document.querySelector('header');
+        return h ? ((h.innerText || '').match(/\d{1,2}:\d{2}\s*(AM|PM)?/i) || [''])[0] : 'NO HEADER';
+      });
+      const before = await readClock();
+      assert(/\d/.test(before), 'no clock found in the header to measure: ' + before);
+      const waitMs = 60000 - (Date.now() % 60000) + 2500;
+      await page.waitForTimeout(waitMs);
+      const after = await readClock();
+      assert(after !== before, 'the displayed clock did not move across a minute boundary (' + before + ' -> ' + after + ') — the screen is stale, and every "survives the tick" check above would be vacuous');
     });
 
     await suite.run('CONSOLE-clean@' + vp.name, tag + 'no console errors and no uncaught exceptions', async () => {

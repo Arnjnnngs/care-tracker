@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v64';
+const APP_VERSION = 'v63';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,12 +1092,6 @@ const APP_VERSION = 'v64';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v64', date: 'Sep 1, 2026', title: 'The screen stops flickering',
-    points: [
-      'The app was throwing the whole screen away and redrawing it once a second, forever. About 59 times out of 60, nothing on it had changed.',
-      'It was not the syncing between phones \u2014 with syncing off entirely it still redrew ten times in ten seconds.',
-      'It now redraws only when something would actually look different. The clock still keeps time, and a medication still unlocks the moment it is due.'
-    ] },
   { v: 'v63', date: 'Sep 1, 2026', title: '\u201cTake all\u201d really does take them all',
     points: [
       'It could log some of your medications, quietly skip the rest, and then tell you nothing had saved at all \u2014 so you logged the saved ones a second time.',
@@ -1294,42 +1288,6 @@ let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: n
 // becomes true once the first Firestore snapshot arrives, so with no connection the notice waits.
 // That is the correct trade -- the alternative is an overlay on a screen that is not ready yet.
 state.whatsNewOpen = whatsNewShouldShow();
-// ONCE A SECOND THIS APP THREW THE WHOLE SCREEN AWAY AND BUILT IT AGAIN.
-//
-// Aaron, 2026-09-01: "caretracker screen flickers to often on my Samsung. I assume bc it's trying
-// to stay live with my phone and Brandi's iphone." The sync was not involved. Measured with
-// Firestore stubbed and completely silent: TEN full rebuilds in ten seconds, one per second, with
-// main-thread stalls of 20ms on a modest fixture and 30ms with six months of history -- so it gets
-// worse the longer the record grows, which is why it became noticeable rather than always being so.
-//
-// AND ROUGHLY 59 OF EVERY 60 REBUILDS CHANGED NOTHING AT ALL. Nothing on the resting screen shows
-// seconds: every clock in this file is toLocaleTimeString with hour and minute only. The one
-// seconds-level display, fmtCountdown(), has exactly one caller -- the "Opens in 2m 30s. Log it
-// early anyway?" override prompt, which is transient and only appears after tapping a locked card.
-//
-// So the tick still runs every second (checkNotifications() rides on it and must), but it only
-// REPAINTS when something a person could see would actually differ. The signature below is what
-// "would actually differ" means, and it is deliberately not just the clock:
-//   - the minute, which covers every displayed time, the date, and the missed-dose windows;
-//   - which medications are locked, so a card unlocks at the exact moment it becomes available
-//     rather than waiting for the top of the next minute;
-//   - the second, but ONLY while the override prompt is open, because that is the one place a
-//     countdown ticks in seconds.
-// status() is pure -- no setState, no render, no storage -- so asking it once a second is safe;
-// it is far cheaper than the rebuild it prevents.
-let tickRepaint = false;
-let lastPaintSig = null;
-function paintSignature() {
-  const minute = Math.floor(state.now / 60000);
-  let locks = '';
-  try {
-    const meds = state.meds || [];
-    for (let i = 0; i < meds.length; i++) locks += status(meds[i]).locked ? '1' : '0';
-  } catch (err) { return String(state.now); }
-  // A different value every second while the countdown is on screen, so it keeps counting.
-  const secs = state.override ? Math.floor(state.now / 1000) : 0;
-  return minute + '|' + locks + '|' + secs;
-}
 let toastTimer = null;
 let unsub = null;
 let unsubPrefs = null;
@@ -2781,23 +2739,6 @@ function renderContent(now, mg, pct, tyColor, ceiling) {
 }
 
 function render() {
-  // THE ONCE-A-SECOND REPAINT, SKIPPED WHEN NOTHING VISIBLE WOULD CHANGE. This guard applies ONLY
-  // to the tick's own call -- tickRepaint is set around that one line and nowhere else -- so every
-  // render driven by a user action, a Firestore snapshot, or start-up is untouched and always
-  // paints. See paintSignature() above for what counts as a visible change.
-  if (tickRepaint) {
-    const sig = paintSignature();
-    if (sig === lastPaintSig) return;
-    lastPaintSig = sig;
-  }
-  // NO `else` BRANCH, and that is deliberate rather than an omission. The first version re-based
-  // lastPaintSig to null on every non-tick render, on the reasoning that a state change should make
-  // the next tick compare against a fresh baseline. Removing it left every check in
-  // harness/repaint-test.mjs green, so I worked out why instead of inventing a test for it: a render
-  // driven by a state change never consults the signature at all -- it repaints unconditionally --
-  // and by the next tick the signature already reflects whatever that change did. The branch could
-  // not affect what is on screen. A sabotage that changes nothing is a green that proves nothing, and
-  // defensive code no check can justify is one more thing for the next person to reason about.
   const root = document.getElementById('root');
   const now = state.now;
   const tylenolMedication = state.meds.find(med => med.id === 'tylenol');
@@ -7726,19 +7667,11 @@ setInterval(() => {
   // isEditing from the reason patch, and !state.tour is this one.  Dropping any single term ships
   // a once-a-second repaint that destroys the control somebody is currently touching -- the
   // appointment sheet losing focus mid-sentence is a defect this project has already shipped.
-  // The line below is pinned BYTE-FOR-BYTE by pm.py and by tour-test, medsync-test and cal-test --
-  // it is composed from four separate patches and every one of them asserts it exactly. So the
-  // repaint gate is set around it rather than written into it.
-  tickRepaint = true;
   if (!state.timeModal && !state.apptSheet && !state.drawerOpen && !state.tour && !isEditing) render();
   // Skipping render() during a tour is what stops the spotlight jumping, but the page underneath
   // can still reflow with no repaint at all -- a sync landing, an image settling, the keyboard
   // closing.  Re-glue the highlight to its target instead of leaving it on stale coordinates.
   else if (state.tour) positionTour(false);
-  // Reset AFTER the whole if/else-if chain. Putting it directly under the pinned line severed the
-  // chain from its `else if (state.tour)` branch -- a SyntaxError, caught by the parse check before
-  // it went anywhere, and a reminder that the pinned line is not a statement on its own.
-  tickRepaint = false;
   checkNotifications();
 }, 1000);
 render();
