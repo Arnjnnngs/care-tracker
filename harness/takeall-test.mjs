@@ -63,7 +63,8 @@ export async function getToken(){return null;} export function onMessage(){retur
 // refuseFor names the medication whose write is refused. Every write is recorded, in order.
 const stubFs = (refuseFor) => `
 const store={entries:${JSON.stringify(SEED_ENTRIES)},prefs:{}};const eL=[],pL=[];let n=0;const writes=[];
-const REFUSE=${JSON.stringify(refuseFor)};
+let REFUSE=${JSON.stringify(refuseFor)};
+globalThis.__setRefuse=(v)=>{REFUSE=v;};
 function snap(l){return{docs:l.map(e=>({id:e.id,data:()=>{const c=Object.assign({},e);delete c.id;return c;}}))};}
 globalThis.__writes=()=>writes.slice();
 export function getFirestore(){return{__db:true};}
@@ -74,7 +75,7 @@ export function orderBy(){return{};}
 export function onSnapshot(ref,cb){if(ref&&ref.__kind==='q'){eL.push(cb);cb(snap(store.entries));return()=>{};}
  pL.push(cb);cb({exists:()=>true,data:()=>store.prefs});return()=>{};}
 export async function addDoc(c,d){
-  if(REFUSE && (REFUSE==='__all__' || (d && d.medId===REFUSE))) throw new Error('PERMISSION_DENIED (simulated)');
+  if(REFUSE && (REFUSE==='__all__' || (d && String(REFUSE).split(',').indexOf(d.medId)>=0))) throw new Error('PERMISSION_DENIED (simulated)');
   writes.push(JSON.parse(JSON.stringify(d)));store.entries.push(Object.assign({id:'a'+(++n)},d));
   for(const cb of eL)cb(snap(store.entries));return{id:'a'+n};}
 export async function setDoc(){} export async function deleteDoc(){}
@@ -199,6 +200,14 @@ console.log('\n1. Nothing refused — every due medication is logged, and anythi
   // clause is a check that cannot fail.
   t('the medication left out because it is not due is NAMED, not dropped in silence',
     /Evening Locked/.test(r.toast) && /not due yet/.test(r.toast), r.toast || '(no toast)');
+  // AND ONLY THE ONES ACTUALLY SKIPPED. Asking whether the right name is PRESENT is half a check;
+  // the other half is whether wrong names are ABSENT. The auditor changed the filter to a map and
+  // got "5 meds logged ... Evening A, Evening B, Evening C, Evening Locked, Iron, Compazine not due
+  // yet" -- five logged and six named as not due, in one sentence -- and the suite stayed 25/25.
+  // Same shape as the backwards-banner blocker one round earlier: presence checks pass on nonsense.
+  const notDuePart = (r.toast.split(/·/)[1] || '');
+  t('and the "not due" list names ONLY medications that were not logged',
+    !/Evening A|Evening B|Evening C\b/.test(notDuePart), 'not-due clause: "' + notDuePart.trim() + '"');
   t('no page errors', r.errs.length === 0, r.errs.join(' / '));
 }
 
@@ -271,7 +280,63 @@ console.log('\n4. A clinical advisory must never fire for a dose that was refuse
     r.ironWarning ? 'the Iron + Protonix advisory appeared for a dose that is not in the record' : '');
 }
 
-console.log('\n5. Everything refused — then "nothing was lost" is TRUE and may be said');
+console.log('\n5. A stale failure banner must not survive a retry that worked');
+{
+  // NEW BEHAVIOUR IN THIS COMMIT AND IT HAD NO TEST -- deleting the clear left the suite fully
+  // green, which the auditor found. A banner left over from a failed attempt keeps telling the
+  // caregiver to "log them again" for doses that are now in the record: the same false instruction
+  // this release exists to remove, just one attempt later.
+  const server = http.createServer((rq, rs) => {
+    if (rq.url.startsWith('/index.html')) { rs.writeHead(200, {'Content-Type':'text/html'}); rs.end(raw); return; }
+    rs.writeHead(204); rs.end();
+  }).listen(0, '127.0.0.1');
+  await new Promise(r => server.once('listening', r));
+  const PORT = server.address().port;
+  const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  await ctx.route('**/*', route => { const u = route.request().url();
+    if (u.includes('firebase-app.js')) return route.fulfill({status:200,contentType:'application/javascript',body:STUB_APP});
+    if (u.includes('firebase-firestore.js')) return route.fulfill({status:200,contentType:'application/javascript',body:stubFs('evening-b,evening-c')});
+    if (u.includes('firebase-messaging.js')) return route.fulfill({status:200,contentType:'application/javascript',body:STUB_MSG});
+    if (u.startsWith('http://127.0.0.1:' + PORT)) return route.continue();
+    return route.abort(); });
+  const page = await ctx.newPage();
+  await page.addInitScript(meds => {
+    try { localStorage.setItem('caretracker-medication-config-v1', JSON.stringify(meds)); } catch (e) {}
+    try { localStorage.setItem('caretracker-seen-version', 'already-seen'); } catch (e) {}
+  }, SEED_MEDS);
+  await page.goto('http://127.0.0.1:' + PORT + '/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2200);
+  const press = () => page.evaluate(() => {
+    const sec = [...document.querySelectorAll('main section')].find(s => /EVENING MEDS/i.test(s.innerText || ''));
+    if (!sec) return false;
+    const b = [...sec.querySelectorAll('button')].find(x => (x.innerText || '').trim().toLowerCase().startsWith('take all'));
+    if (!b) return false; b.click(); return true;
+  });
+  const confirm = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => (x.innerText || '').trim() === 'Confirm');
+    if (!b) return false; b.click(); return true;
+  });
+  const bannerNow = () => page.evaluate(() => ((document.querySelector('[role="alert"]') || {}).innerText || '').replace(/\s+/g, ' ').trim());
+  await press(); await page.waitForTimeout(800); await confirm(); await page.waitForTimeout(1500);
+  const first = await bannerNow();
+  // TWO refused on the first attempt, not one, so two medications are still due for the retry --
+  // Take all only appears at two or more. With one refused the button was gone and the retry could
+  // not be exercised at all, which is a check that cannot fire rather than a check that fails.
+  t('the first attempt leaves a failure banner up', /were NOT|was NOT/.test(first), first || '(none)');
+  // Now let everything through and take all again.
+  await page.evaluate(() => globalThis.__setRefuse(null));
+  const pressed2 = await press();
+  t('Take all is still available for the retry', pressed2, '');
+  if (pressed2) {
+    await page.waitForTimeout(800); await confirm(); await page.waitForTimeout(1600);
+    const second = await bannerNow();
+    t('the stale banner is gone after a retry that fully succeeded', !second,
+      second ? 'still saying: "' + second + '"' : '');
+  }
+  await ctx.close(); server.close();
+}
+
+console.log('\n6. Everything refused — then "nothing was lost" is TRUE and may be said');
 {
   // EVERY write refused. This is the ONLY case where "nothing was lost" is true, and it must still
   // be said here -- the fix must not replace one wrong message with another.

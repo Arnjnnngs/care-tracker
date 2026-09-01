@@ -1,156 +1,116 @@
-AUDITED-COMMIT: a755845
-VERDICT: DO NOT SHIP
+AUDITED-COMMIT: 0b79027
+VERDICT: SHIP
 
-# Zero Day Audit — care-tracker v63 ("Take all")
+# Zero Day Audit — care-tracker v63, second pass
 
-**In one line:** the fix itself is real and works — with a medication refused mid-way, every
-other dose now saves and the message finally matches the record — but two things are still
-wrong in the shipped app, and the new test cannot fail on the exact mistake this release
-exists to prevent. All four items below are a handful of lines. **The core change is safer
-than what is live today; it should ship as soon as they are closed.**
+**In one line:** all three blockers are genuinely fixed, and — the part that matters — each one
+is now guarded by a check I broke myself and watched go red for the right reason. Nothing in
+this build tells a caregiver anything untrue about the medication record. What is left is two
+checks that still cannot fail and one half-finished documentation correction. Neither is a
+defect in the app; both are the "hypothetical future regression" category, and I am saying so
+plainly rather than dressing them up as blockers.
 
-Everything below is a measurement from a run I actually did, in a browser, against stubbed
-Firebase. Brandi's real Firestore was never reachable from any of it.
+## First, a correction to my own last report
 
----
+My round-1 advisory A5 said the release "exists only in a sandbox" because `origin/main` was
+still on the previous commit. That was wrong. The work is pushed — to
+`origin/claude/caretracker-chemowell-updates-k80ydk`, which is in sync with its remote. Rule 0
+durability is satisfied; the commits are on GitHub. What is true is only that they are not on
+`main` yet, so the live site still serves the previous release, which is what a pre-ship audit
+should expect. `pm.py`'s unpushed-commit check reads the branch's real upstream and is working
+correctly — I checked, because a dark check there would have been serious.
 
-## What is genuinely fixed (verified)
+## The three blockers, re-broken and re-measured
 
-| Scenario | Live build today | This build |
+Every number below is from a run I did in this tree today. Sabotage was applied only to copies
+outside the repo and each one was diffed against the original to prove it applied before I drew
+any conclusion from a result.
+
+| What I broke | Suite | Red on |
 |---|---|---|
-| One medication refused out of four | **1 dose written, 3 abandoned**, plus an uncaught page error | **3 written, 1 refused** — nothing behind the refusal is lost |
-| The message in that case | *"That didn't save. Nothing was lost — log it again."* (a dose HAD saved) | *"Evening A, Evening C, Compazine were logged. Evening B was NOT. Log only the missing one again — the rest are already saved."* |
-| Everything refused | Same wrong-in-context sentence | *"None of those saved. Nothing was lost…"* — the one case where it is true |
-| A medication left off because it is not due | Silent | Named in the toast |
+| Swap which name list is reported as saved (round-1 Blocker 1) | **22/25** | All three side-checks — the failed name on the wrong side, the saved names on the wrong side, and the count |
+| Drop the skipped tail from both failure paths (Blocker 2) | **24/25** | The named failure-path check |
+| Revert the advisory to "something saved AND iron attempted" (Blocker 3) | **24/25** | "no Iron advisory is raised about a dose that was refused" |
+| Record `savedIds` *before* the write instead of after | **24/25** | Same check — the ordering is guarded too, which was not claimed |
+| Restore the old loop with no per-medication catch | **18/25** | Seven checks, including the banner sides collapsing to empty |
+| The shipped v62 build | **17 passed / 8 red** | Exactly as stated |
 
-`harness/takeall-test.mjs` **19/19** on this build. Against the shipped v62 build in
-`outputs/rollback-v62/` (md5 matches the one STATUS.md records for v62): **13 passed, 6 red**,
-red on exactly the right checks. Adjacent suites re-run and unaffected: `logger-test` 19/19,
-`whatsnew-test` 30/30, `missed-banner-test` 16/16. `pm.py` exits 2 — one warning, pinned
-version literals in six OLDER suites, none of them touched by this release.
+The banner parse is correct. I pushed on the shapes you asked about: the saved side is taken
+from the text before the first "were/was logged.", the failed side from there to "were/was
+NOT", and I confirmed the skipped tail lands well past both, so "Evening Locked" can never be
+counted as a failed medication even though it matches the counting pattern. On the swap it went
+red on all three, not one.
 
-I could not find any way to lose or duplicate a dose in the new loop. Every medication is
-written in its own try/catch; a refusal is recorded and the loop continues; nothing is
-retried, so no double write. That was the main thing I was looking for and it holds.
+I also confirmed the three fixture repairs genuinely fire rather than being asserted:
 
----
+- **Wall-clock dependence is gone.** The skipped medication is now a gap-locked one with a dose
+  seeded in the store, so it is locked at every hour. Last round I ran the suite with the clock
+  fixed at 22:30 and the *correct* build failed; that is no longer possible.
+- **The advisory check can now fire.** Reverting the guard makes the Iron + Protonix advisory
+  actually appear and the check actually fails. Without the seeded Protonix dose it could not
+  have.
+- **Iron is genuinely attempted.** The button reads `Take all (5)` and Iron appears in the
+  writes when nothing is refused, so refusing it is a real refusal and not a no-op.
+- **The fixture trap is closed.** I listed every grouped card and checked each for Iron:
+  `MORNING MEDS` does not contain it, `EVENING MEDS` does. `backfillDefaultMedFlags` copies
+  only keys the saved medication does not already have, and the fixture names `groupedMorning`
+  and `windows` explicitly, so it cannot pull either in.
 
-## BLOCKER 1 — the new test passes with the message exactly backwards
+## Two checks that still cannot fail
 
-This is the most serious finding, and it is in the test, not the app.
+Both are gaps in the suite. **The shipped app is correct in both cases** — I am reporting what
+would not be caught if it stopped being correct.
 
-I took the correct build and swapped only which list of names goes where in the banner, so
-that it names the medication that FAILED as saved and the three that SAVED as failed. The
-banner then read:
+**1. The skipped tail can name medications that were just logged, and the suite stays green.**
+I changed `groupIds.filter(id => ids.indexOf(id) < 0)` to `groupIds.map(...)`, so the tail names
+everything on the card. The toast became:
 
-> *"Evening B was logged. Evening A, Evening C, Compazine was NOT. Log only the missing one
-> again — the rest are already saved."*
+> *"5 meds logged at 2:13 AM · Evening A, Evening B, Evening C, Evening Locked, Iron, Compazine
+> not due yet"*
 
-Three doses were in the record; the app told the caregiver to log all three again, and to
-leave alone the one that never saved. That is a worse version of the harm this release was
-written to remove. **The suite stayed 19/19 green.**
+— five logged, six named as not due, in one sentence. The banner did the same, naming four
+medications as logged and then saying those same four "were not due yet and were not attempted."
+**25/25 green.** This is the same shape as the round-1 blocker: the check asks whether the right
+name is *present*, not whether wrong names are *absent*. One clause on the existing assertion
+closes it — that no medication named in the logged side also appears in the skipped tail.
 
-The reason is that section 3 asks whether the medication names appear *anywhere* in the
-banner text, not whether they are on the right side of it. Both regexes match an inverted
-message. The fix is to assert on position — that the failed name appears after "NOT", or
-simply that the text before "logged." does not contain the refused medication's name.
+**2. The stale-banner fix has no test at all.** Removing `setState({ writeError: null })` from
+the success branch leaves the suite **25/25 green**. That line is a real behaviour change in this
+commit — it is what stops a red banner from surviving a successful retry and telling a caregiver
+to re-log doses that are now in the record — and nothing in the suite would notice it going away.
+The scenario needs a second Take all in the same page with the refusal lifted; I built exactly
+that as a probe last round, so it is a known-workable shape.
 
-Falsification evidence, all runs done today against a scratch copy outside the repo:
+## Prose
 
-| Sabotage | Result | Right reason? |
-|---|---|---|
-| Restore the old bare `await` (no per-medication catch) | **14/19 RED** | Yes — "the refused medication did not cancel the ones after it" |
-| Partial-failure banner made to say "Nothing was lost" | **18/19 RED** | Yes — the one sentence that caused the harm |
-| Skipped medication dropped from the toast | **18/19 RED** | Yes |
-| `groupIds` removed from the Take all button | **18/19 RED** | Yes — the new field is load-bearing |
-| Every dose written twice | **18/19 RED** | Yes — duplicates are caught |
-| **Saved and failed names swapped in the banner** | **19/19 GREEN** | **No — this is the hole** |
-| `afterLog` guard removed | **19/19 GREEN** | No — never exercised (see Blocker 3) |
+- **The README correction is half done.** Line 52 now points at the `CACHE` constant instead of
+  naming a version, and explains why. But line 119 still reads *"bump the `CACHE` constant in
+  `sw.js` (currently `caretracker-v40`)"* — the second stale instance from my last report,
+  twenty-three releases out of date, sitting a few lines below text that says the audit caught
+  this. Same one-line fix as line 52.
+- **The numbers now match.** "17 passed / 8 red against the live v62 build" — I measured 17/25
+  with 8 failures. `takeall` 25/25, `whatsnew` 30/30, `missed-banner` 16/16, `settings` 11/11,
+  `para` 16/16, `eod` 11/11, `logger` 19/19 all confirmed. `overflow-scan` 80/80 CLEAN, which I
+  re-ran myself because this commit made the banner longer. `pm.py` clear with the one
+  pre-existing warning about pinned version literals in six older suites. STATUS.md's md5 for
+  `index.html` matches the file.
+- **`outputs/RENDER-v63.md` was not regenerated.** Its screenshots and its description of the
+  message text are from the previous commit, before the skipped tail was appended to the banner.
+  The scan result still holds — I re-ran it — but the file describes shorter copy than the one
+  that ships.
 
-## BLOCKER 2 — "it says which one was skipped" is only true when nothing fails
+## One pre-existing limit worth stating, not a blocker
 
-The in-app What's new notice a patient reads says:
-
-> *"And if something on the card is skipped because it isn't due yet, it says which one."*
-
-The README row, STATUS.md and the commit message make the same unqualified claim. In the
-code, `skippedNames` is computed once and then used in **only the all-saved branch**. On both
-failure paths it is discarded.
-
-Measured: with Iron on the Evening card and not due, and one medication refused, the banner
-was *"Evening A, Evening C, Compazine were logged. Evening B was NOT…"* — Iron is not
-mentioned anywhere. So on the failure path the app is back to the silent skip that this
-release names as defect (3), and the caregiver sees four medications on the card and three in
-the message with no explanation for the fourth. That is the "it only logged some of them"
-confusion Aaron reported, surviving in the case the release is actually about.
-
-One line: append the same `· X not due yet` clause to both failure branches, or narrow the
-notice copy.
-
-## BLOCKER 3 — a clinical warning can now fire for a dose that was refused
-
-New in this commit. The follow-up call is guarded by
-`if (savedNames.length && ids.includes('iron'))` — "something saved" and "Iron was *attempted*",
-not "Iron saved". `savedNames` holds display names, so it cannot answer the question that is
-actually being asked.
-
-Measured, with Iron due and Iron's write refused while the others succeeded: Iron is absent
-from the writes, the banner correctly says Iron was NOT logged — **and the Iron follow-up
-still ran.** In practice that can raise the amber *"Iron + Protonix timing"* advice, or a
-daily-limit warning, about a dose that is not in the record. No data is written and no dose is
-lost, but it is a false statement about the record in a release whose whole subject is not
-making false statements about the record. On the live build this could not happen: the throw
-skipped that line entirely.
-
-Fix: collect saved **ids** alongside the names and test `savedIds.includes('iron')`.
-
----
-
-## Advisories (not blockers)
-
-**A1 — the skipped-medication check goes red for two hours a day on a healthy build.** It
-depends on the app's own Iron riding into the fixture through the defaults and not being due
-at the moment the suite runs. Iron's window is 22:00–24:00, so I re-ran the suite with the
-page clock fixed at 22:30 and the correct build failed that check — no medication was left
-out, so nothing was named, and the assertion cannot tell that from a regression. It is also
-coupled to a default medication the suite's own header warns against seeding. Pin the clock,
-or seed a medication that is deterministically not due and assert on that name.
-
-**A2 — a red banner survives a successful retry, still telling the caregiver to log again.**
-Pre-existing, not introduced here, and one line from being fixed. Measured: all writes
-refused → *"None of those saved… log them again."* The caregiver retries, all four doses save,
-the success toast appears and fades — and the red banner is still on screen saying to log them
-again. A third attempt duplicates. The success branches never clear `writeError`. Given this
-release is specifically about not telling a caregiver to re-log a saved dose, it belongs with
-this change: `setState({ writeError: null })` next to the success toast.
-
-**A3 — "13/19 RED against the live v62 build" reads as thirteen failures.** It is thirteen
-passes and six failures. STATUS.md's phrasing ("red at 13/19") is fine; the README row and the
-commit message are not.
-
-**A4 — pre-existing doc rot, unrelated to this release.** README still names the service worker
-cache as `caretracker-v41` in one place and `caretracker-v40` in another; both are many
-releases stale. `CARETRACKER_HANDOFF.md` still says "Last updated: August 16, 2026" while its
-version line was updated in this commit.
-
-**A5 — process.** The release commit is not on the remote: `origin/main` is still the previous
-commit. Under Rule 0 this work exists only in a sandbox that has rolled back nine times.
-
-## Things I attacked that turned out fine
-
-- `groupIds` missing from an older modal — guarded by `Array.isArray`, falls back to the
-  attempted list, and the time modal is in-memory only, so there is no restored-state path.
-- A medication named as skipped that was actually logged — not reachable; anything in the
-  attempted list is filtered out of the skipped list.
-- A medication with no dose defined (Compazine) — writes cleanly with a null dose.
-- Duplicate writes — the suite does catch these; I broke it and it went red.
-- Whether the banner set inside the write helper fights the one set by the caller — the
-  caller's runs last and wins in every case, and the survivor is the honest one.
+The banner tells the caregiver to re-log whatever the client saw rejected. If a write is
+committed by the server but the acknowledgement is lost on the way back, the app records it as
+failed and the instruction to log it again would produce a duplicate. That is inherent to a
+write without an idempotency key, it is unchanged by this release, and it is far narrower than
+the defect being fixed — but it is the one remaining path to a double-logged dose.
 
 ## Method
 
-All sabotage was applied to copies under a scratch directory outside the repo and run with
-`--file`. Each sabotage was verified applied by re-reading the changed block before drawing any
-conclusion from a green. The repo working tree is unmodified: `git status` clean, `index.html`
-md5 `c5826e5b…` matching what STATUS.md records, and a grep for every sabotage string finds
-nothing in the tree.
+Seven sabotages, each applied to a copy under a scratch directory outside the repo and run with
+`--file`, each verified applied by diffing the changed block before any conclusion was drawn
+from a green. The repo working tree is unmodified apart from this report: `git status` clean,
+`index.html` md5 `14376a57…` matching STATUS.md, and a search for every sabotage string finds
+nothing in the tree. No commits, no pushes, nothing outside this repository touched.
