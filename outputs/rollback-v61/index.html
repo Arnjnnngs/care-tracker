@@ -47,40 +47,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, getDocs, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 
-// HAS THIS PHONE BEEN HERE BEFORE? Captured at the very top of the module, before ANY other code
-// runs, because several things below write their own localStorage keys during start-up and a
-// snapshot taken after them cannot tell "this phone has history" from "this phone just created a
-// key a moment ago". Read-only: it writes nothing and cannot change what the app does.
-//
-// WHY IT EXISTS. v61 added the What's new notice and decided "no record of a last-seen version"
-// meant a brand-new install, and stayed quiet -- greeting a first-time user with a list of changes
-// is meaningless. But that record was INTRODUCED in v61, so every phone that already had
-// CareTracker had no record on its first v61 open, was read as brand new, silently stamped, and
-// shown nothing. The one release where the notice could never fire is the release that added it.
-// Aaron reported it the next morning: "caretracker didn't do a popup when it opened with features."
-//
-// harness/whatsnew-test.mjs asserted that exact behaviour and passed 23/23. It pinned what I
-// intended. The intent was wrong for the changeover, and a check that confirms your intent cannot
-// tell you your intent is wrong -- which is why the case that matters here is a phone SKIPPING a
-// release, and why it is now its own named test.
-const DEVICE_HAS_PRIOR_DATA = (() => {
-  try {
-    if (typeof localStorage === 'undefined') return false;
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      // Any CareTracker key EXCEPT the seen-version marker itself. Its absence is the question
-      // being asked, so counting it as evidence would be circular.
-      // HONEST NOTE: that exclusion is defensive, not load-bearing, and I checked rather than
-      // assumed. Removing it leaves the suite at 28/28 — because this snapshot runs before
-      // whatsNewMarkSeen() ever writes that key, so on the only path that reaches this branch the
-      // key is genuinely absent either way. A sabotage that changes nothing is a green that proves
-      // nothing; recorded as such instead of counted as a passing check.
-      if (k && k.indexOf('caretracker-') === 0 && k !== 'caretracker-seen-version') return true;
-    }
-    return false;
-  } catch (err) { return false; }
-})();
-
 // Firebase config — using FuelForge project, isolated collection
 const firebaseConfig = {
   apiKey: "AIzaSyCHn2cS3uDB4mvFMJcV-Z3QCK0kp2y11Y0",
@@ -1073,7 +1039,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v61';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,12 +1058,6 @@ const APP_VERSION = 'v62';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v62', date: 'Sep 1, 2026', title: 'The update notice actually appears',
-    points: [
-      'This notice was added last time, and then didn\u2019t show up. The app mistook every phone that already had CareTracker for a brand-new one, and stayed quiet.',
-      'Fixed. After an update you\u2019ll now get a short note about what changed \u2014 and a phone that skips a version gets it too.',
-      'A genuinely new phone is still left alone, because a list of changes means nothing on your first day.'
-    ] },
   { v: 'v61', date: 'Aug 31, 2026', title: 'You can see what changed',
     points: [
       'A "What\u2019s new" page under the menu, listing every update to CareTracker with the newest first.',
@@ -1258,13 +1218,7 @@ function whatsNewMarkSeen() { medsyncLsSet(WHATS_NEW_KEY, APP_VERSION); }
 // update is the first thing this ever shows.
 function whatsNewShouldShow() {
   const seen = whatsNewSeenVersion();
-  // NO RECORD MEANS TWO DIFFERENT THINGS, and v61 could not tell them apart.
-  //   A phone that has never run CareTracker  -> genuinely new, say nothing.
-  //   A phone that HAS run it, from before this marker existed, or that skipped the release that
-  //   would have written it -> an upgrade, and the update notice is exactly what it should see.
-  // DEVICE_HAS_PRIOR_DATA separates them: any other CareTracker key on this phone means it has
-  // been here before. Still stamp the version either way, so this is asked once and not every load.
-  if (!seen) { whatsNewMarkSeen(); return DEVICE_HAS_PRIOR_DATA; }
+  if (!seen) { whatsNewMarkSeen(); return false; }
   return seen !== APP_VERSION;
 }
 

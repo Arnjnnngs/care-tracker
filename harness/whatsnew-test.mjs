@@ -103,7 +103,7 @@ await page.waitForTimeout(1500);
 // SEED A VERSION THIS PHONE HAS ALREADY SEEN, so the app is in the state that matters: an existing
 // install picking up an update. Written before the page script runs -- afterwards is too late,
 // the decision is made once at start-up.
-async function openApp(seenVersion) {
+async function openApp(seenVersion, priorData) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
   await ctx.route('**/*', route => { const u = route.request().url();
     if (u.includes('firebase-app.js')) return route.fulfill({status:200,contentType:'application/javascript',body:STUB_APP});
@@ -118,6 +118,18 @@ async function openApp(seenVersion) {
     await page.addInitScript(v => { try { localStorage.setItem('caretracker-seen-version', v); } catch (e) {} }, seenVersion);
   } else {
     await page.addInitScript(() => { try { localStorage.removeItem('caretracker-seen-version'); } catch (e) {} });
+  }
+  // A PHONE THAT HAS BEEN HERE BEFORE. Any other caretracker-* key is the evidence, and a saved
+  // medication list is the one every returning phone realistically has. Written before the page
+  // script runs, because the whole point is that the snapshot happens before anything else does.
+  if (priorData) {
+    await page.addInitScript(() => { try {
+      localStorage.setItem('caretracker-medication-config-v1', JSON.stringify({ version: 1, meds: [], archivedMeds: [] }));
+    } catch (e) {} });
+  } else {
+    await page.addInitScript(() => { try {
+      Object.keys(localStorage).forEach(k => { if (k.indexOf('caretracker-') === 0 && k !== 'caretracker-seen-version') localStorage.removeItem(k); });
+    } catch (e) {} });
   }
   await page.goto('http://127.0.0.1:' + PORT + '/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1800);
@@ -258,6 +270,35 @@ console.log('\n7. It never covers the "Connecting..." screen');
   await page.evaluate(() => globalThis.__release && globalThis.__release());
   await page.waitForTimeout(1200);
   t('and it appears as soon as the app is ready', !!(await page.$('[data-whatsnew-modal]')), '');
+  await ctx.close();
+}
+
+console.log('\n9. A phone that SKIPPED a release still gets told what changed');
+// THE CASE THAT WOULD HAVE CAUGHT THE v61 MISS, and the reason it is written out separately.
+// v61 read "no seen-version record" as "brand new phone" and stayed silent. But that record was
+// INTRODUCED in v61, so every phone that already had CareTracker took the new-phone branch on its
+// first v61 open and was shown nothing -- on the very release that added the notice. Aaron reported
+// it the next morning. Section 3 below asserts the fresh-install case and passed 23/23 throughout,
+// because it pinned what I intended; the intent was wrong for the changeover.
+// The same thing still bites any phone that skips a release: cached on an old build, jumps two
+// versions, has no record, and is read as new. That is what this section holds.
+{
+  const { ctx, page, errs } = await openApp(undefined, true);
+  const modal = await page.$('[data-whatsnew-modal]');
+  t('a returning phone with no seen-version record IS shown the notice', !!modal,
+    modal ? '' : 'silent — this is the v61 miss, and the case a skipped release still hits');
+  const stored = await page.evaluate(() => localStorage.getItem('caretracker-seen-version'));
+  t('and the version is stamped so it is asked once, not every load', stored === appVersion, String(stored));
+  t('no page errors while deciding', errs.length === 0, errs.join(' / '));
+  await ctx.close();
+}
+{
+  // AND THE OTHER SIDE OF IT, or the fix would just be "always show it": a genuinely new phone,
+  // with no CareTracker data of any kind, must still be left alone.
+  const { ctx, page, errs } = await openApp(undefined, false);
+  t('a genuinely new phone is still NOT greeted with an update notice',
+    !(await page.$('[data-whatsnew-modal]')), '');
+  t('no page errors on a first run either', errs.length === 0, errs.join(' / '));
   await ctx.close();
 }
 

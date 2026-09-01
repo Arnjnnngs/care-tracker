@@ -9,7 +9,7 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** August 16, 2026
-> **Current version:** v60 (built, not deployed — v59 is live)
+> **Current version:** v62 (the update notice now reaches a phone that upgraded across it)
 
 ---
 

@@ -84,12 +84,22 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v61 |
-| **Commit** | v61 merged to `main` and pushed 2026-08-31 with Aaron's go-ahead |
+| **Version** | v62 |
+| **Commit** | v62 built 2026-09-01 on Aaron's go-ahead — the smaller of the two fixes he asked to see separately |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `d78a078e06ce0e9b318061030f43ad35` |
-| **sw.js md5** | `a541136544d00c2f07c307269a008133` |
-| **State** | **v61 is on `main`** — the What's new history under the ellipsis and the update notice. Also carries two pre-existing fixes: the missed-dose Clear button was 30px against the 44px iOS floor (live since v60), and `cal-test`'s drawer tap-target gate had been dark since v58. **Not verified against the served page** — this session cannot reach github.io, so the confirmation is that `main` carries `caretracker-v61`, not that a phone showed it. Rollback bundle for v60 in `outputs/rollback-v60/`. |
+| **index.html md5** | `2234b4ab63a012d02e8e681993d5ca93` |
+| **sw.js md5** | `ad247c33f32bc6d9b168d3310dbdb1cd` |
+| **State** | **v62 — the update notice actually appears.** Aaron, the morning after v61: *"I did notice that caretracker didn't do a popup when it opened with features."* He was right. v61 read "no record of a last-seen version" as "brand-new phone" and stayed quiet — but that record was **introduced in v61**, so every existing phone was read as new and shown nothing, on the very release that added the notice. A read-only snapshot at the top of the module now records whether the phone already holds any other CareTracker data; if it does, a missing record means this phone upgraded across the change. Also fixes any phone that SKIPS a release. `whatsnew-test` 28/28 with a new named section for the skipped-release case; render scan 80/80 CLEAN with the pop-up and Home read at 320px. Rollback bundle for v61 in `outputs/rollback-v61/`. |
+
+## v62 — WHAT IS DELIBERATELY NOT IN IT
+
+Aaron, 2026-09-01: *"do separately. do the smallest first and then let me know once its done.
+then we will do the other on my command so I can see both at different times."*
+
+So v62 carries the What's-new fix **only**. The `Take all` partial-write defect — it saves some
+medications, then reports that nothing saved, and re-tapping double-logs the ones that worked
+(see the correction under v46) — is built separately and ships on Aaron's word, so he can see
+each change land on its own rather than guessing which one did what.
 
 ## AUDIT BLOCKER, 2026-08-29 — clearing a treatment date did not clear it
 
