@@ -1092,11 +1092,11 @@ const APP_VERSION = 'v65';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v65', date: 'Sep 2, 2026', title: 'The flickering is actually fixed now',
+  { v: 'v65', date: 'Sep 2, 2026', title: 'Another go at the flickering screen',
     points: [
-      'Last update stopped the app redrawing itself every second. That was a real problem, but it was not the flicker you were seeing \u2014 that one was about three times a second.',
-      'Every card, the header, the bottom bar and the menu had a frosted-glass effect that the phone had to re-blur every time anything moved. The menu was worst, because the glass was stacked two deep.',
-      'The frosted glass is gone. Nothing else about the layout changed, and the menu now draws every frame instead of dropping a quarter of them.'
+      'The last update stopped the app redrawing itself once a second. That was worth doing, but it was not the flickering being reported \u2014 that was happening about three times a second.',
+      'Almost every panel in the app had a frosted-glass effect, and the phone had to redo the frosting every time anything moved. The menu was the worst of it, because the glass was two layers deep there.',
+      'The frosting has been taken off the cards, the header and the bottom bar. It is still there behind the menu and the pop-ups, where it is what makes them look like they are floating. Nothing has moved or changed shape.'
     ] },
   { v: 'v64', date: 'Sep 1, 2026', title: 'The screen stops flickering',
     points: [

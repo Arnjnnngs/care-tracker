@@ -22,6 +22,16 @@
  * Everything else sat on the page's smooth pink gradient, where blurring a gradient returns the
  * same gradient -- so removing those blurs is visually a no-op and costs nothing to lose.
  *
+ * WHAT THE HOME JANK CHECK CAN AND CANNOT DO. It passes against v64 as well as v65, so it is not
+ * what protects Home -- the layer COUNT check is (18 blurred elements on v64, 0 here). It is not
+ * dead, though: the auditor made it go red twice, with a main-thread stall (122 frames, 60 janky)
+ * and with v64's blurs cranked to 60px (160 frames, 21 janky). It is INSENSITIVE, not incapable --
+ * headless Chromium's software compositor does not cost what a Galaxy's does at blur(16px). Keep
+ * it for the severe case; do not read a pass from it as "Home is smooth on a phone".
+ *
+ * FRAME COUNTS ARE NOT DETERMINISTIC. Repeated runs of the same build give 134-139 frames and
+ * 41-48 janky for v64. The gap between builds is enormous and stable; any single number is not.
+ *
  * SAFETY: all three gstatic Firebase modules stubbed, every other request aborted. Brandi's real
  * Firestore is never reachable from this file.
  *
@@ -103,12 +113,22 @@ await page.addInitScript((v) => { try { localStorage.setItem('caretracker-seen-v
 await page.goto('http://127.0.0.1:' + PORT + '/index.html', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(2500);
 
+// A SCRIM IS CLASSIFIED BY ITS SHAPE, NOT BY A DATA ATTRIBUTE. The first version keyed off
+// data-cal-drawer-overlay and data-mr-overlay -- but the time-modal and appointment-sheet scrims
+// carry no data attribute at all, so opening either would have counted a legitimate kept blur as a
+// stray one and failed this suite for the wrong reason. Found by the Zero Day Auditor. A scrim is
+// what it looks like: a fixed, full-viewport layer that covers the screen.
 const countGlass = () => page.evaluate(() => {
   const out = [];
   for (const el of document.querySelectorAll('*')) {
     const cs = getComputedStyle(el);
     const bf = cs.backdropFilter || cs.webkitBackdropFilter;
-    if (bf && bf !== 'none') out.push((el.getAttribute('data-cal-drawer-overlay') || el.getAttribute('data-mr-overlay')) ? 'scrim' : 'other');
+    if (!bf || bf === 'none') continue;
+    const r = el.getBoundingClientRect();
+    const isScrim = cs.position === 'fixed'
+      && r.width >= innerWidth - 1 && r.height >= innerHeight - 1
+      && r.left <= 1 && r.top <= 1;
+    out.push(isScrim ? 'scrim' : 'other');
   }
   return out;
 });

@@ -27,8 +27,11 @@ itself. Both of those needed different checks.
 
 | build | frames rendered | frames over 32ms |
 |---|---|---|
-| v64 (what he has) | **134** | **47** |
-| v65 | **181** | **0** |
+| v64 (what he had) | **129-139** | **41-51** |
+| v65 | **181-182** | **0** |
+
+Repeated runs vary. The gap is enormous and stable; any single number is not, and the first
+version of this file quoted one as though it were exact.
 
 ## What was kept
 
@@ -40,7 +43,17 @@ same gradient, so removing those blurs is visually a no-op.
 ## An honest limit of the new suite
 
 `harness/glass-test.mjs` is 7/7 here and 4/7 against v64. But **its Home jank check passes on v64
-too** — headless Chromium's software compositor does not reproduce what Aaron's phone does while
-scrolling Home. Home is therefore guarded by the *layer count* check (18 blurred elements on v64,
-0 on v65), not by a frame measurement. That is a real gap and it is written down rather than
-papered over.
+too** — headless Chromium's software compositor does not cost what Aaron's phone does at
+`blur(16px)`. Home is therefore guarded by the *layer count* check (18 blurred elements on v64, 0
+on v65), not by a frame measurement.
+
+**It is insensitive, not dead**, and the first version of this file undersold it: the auditor made
+it go red twice — with a main-thread stall (122 frames, 60 janky) and with v64's blurs cranked to
+60px (160/21). Keep it for the severe case; never read a pass from it as "Home is smooth on a
+phone".
+
+**The scrim classifier was outright wrong and is fixed.** It recognised scrims by two `data-`
+attributes — but the time-modal and appointment-sheet scrims carry no attribute at all, so opening
+either would have counted a legitimately kept blur as a stray one and failed the suite for the
+wrong reason. A scrim is now identified by its shape: a fixed, full-viewport layer. Still 7/7 here
+and 4/7 against v64 afterwards.
