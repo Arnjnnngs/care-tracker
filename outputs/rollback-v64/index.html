@@ -878,7 +878,7 @@ function medsyncAgo(at) {
 
 // ---- Screens ----
 
-const MEDSYNC_CARD_STYLE = { background: 'rgba(255,255,255,0.66)', borderRadius: '17px', padding: '14px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
+const MEDSYNC_CARD_STYLE = { background: 'rgba(255,255,255,0.66)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '17px', padding: '14px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
 const MEDSYNC_BTN_STYLE = { width: '100%', minHeight: '48px', padding: '12px 14px', borderRadius: '13px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '800', lineHeight: '1.25', boxShadow: 'inset 0 -2px 0 rgba(121,57,84,0.35)', cursor: 'pointer' };
 const MEDSYNC_BTN_QUIET = { width: '100%', minHeight: '48px', padding: '12px 14px', borderRadius: '13px', background: 'rgba(255,255,255,0.62)', color: '#6E5261', border: '1px solid rgba(212,104,138,0.22)', fontSize: '14px', fontWeight: '800', lineHeight: '1.25', cursor: 'pointer' };
 
@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v64';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,12 +1092,6 @@ const APP_VERSION = 'v65';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v65', date: 'Sep 2, 2026', title: 'The flickering is actually fixed now',
-    points: [
-      'Last update stopped the app redrawing itself every second. That was a real problem, but it was not the flicker you were seeing \u2014 that one was about three times a second.',
-      'Every card, the header, the bottom bar and the menu had a frosted-glass effect that the phone had to re-blur every time anything moved. The menu was worst, because the glass was stacked two deep.',
-      'The frosted glass is gone. Nothing else about the layout changed, and the menu now draws every frame instead of dropping a quarter of them.'
-    ] },
   { v: 'v64', date: 'Sep 1, 2026', title: 'The screen stops flickering',
     points: [
       'The app was throwing the whole screen away and redrawing it once a second, forever. About 59 times out of 60, nothing on it had changed.',
@@ -2616,7 +2610,7 @@ function renderHeader(now) {
   const name = (CONFIG.patientName || '').trim();
   const title = name ? (name + '’s Meds') : 'CareTracker';
   const dateLabel = new Date(now).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-  return h('header', { style: { position: 'sticky', top: '0', zIndex: '20', background: 'rgba(255,240,243,1)', borderBottom: '1px solid rgba(212,104,138,0.16)', padding: '12px 16px', boxShadow: '0 4px 22px rgba(180,130,150,0.10)' } },
+  return h('header', { style: { position: 'sticky', top: '0', zIndex: '20', background: 'rgba(255,240,243,0.88)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderBottom: '1px solid rgba(212,104,138,0.16)', padding: '12px 16px', boxShadow: '0 4px 22px rgba(180,130,150,0.10)' } },
     h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px' } },
       // The only route to the Calendar. 44x44 exactly -- it is the smallest control on the busiest
       // screen and it is hit one-handed while holding something else.
@@ -2651,7 +2645,7 @@ function renderBottomNav() {
     { key: 'inpatient', label: 'In-Patient', icon: 'hospital' },
     { key: 'symptoms', label: 'Symptoms', icon: 'notes' }
   ];
-  return h('nav', { 'aria-label': 'Primary navigation', style: { position: 'fixed', zIndex: '35', left: '0', right: '0', bottom: '0', background: 'rgba(255,249,251,1)', borderTop: '1px solid rgba(212,104,138,0.18)', boxShadow: '0 -8px 30px rgba(121,72,96,0.10)', padding: '8px 10px calc(8px + env(safe-area-inset-bottom))' } },
+  return h('nav', { 'aria-label': 'Primary navigation', style: { position: 'fixed', zIndex: '35', left: '0', right: '0', bottom: '0', background: 'rgba(255,249,251,0.92)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderTop: '1px solid rgba(212,104,138,0.18)', boxShadow: '0 -8px 30px rgba(121,72,96,0.10)', padding: '8px 10px calc(8px + env(safe-area-inset-bottom))' } },
     h('div', { style: { maxWidth: '720px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '4px' } },
       ...items.map(item => {
         const active = state.view === item.key;
@@ -2681,7 +2675,7 @@ function renderGroupedMedsCard(title, meds, now) {
       // stay needs it most, not least.
       (dueMeds.length >= 2) ? h('button', { onClick: () => setState({ timeModal: { type: 'multi', medIds: dueMeds.map(m => m.id), groupIds: meds.map(m => m.id), timeValue: nowLocalISO() } }), style: { minHeight: '40px', padding: '0 16px', borderRadius: '11px', background: '#AA5375', color: '#fff', fontSize: '13.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, 'Take all (' + dueMeds.length + ')') : null
     ),
-    h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', overflow: 'hidden', marginTop: '11px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', overflow: 'hidden', marginTop: '11px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       ...meds.map((med, i) => {
         // The dead "In-Patient (Restricted)" tile that used to be returned here is GONE (2026-08-26).
         // It replaced every medication card with an unloggable element for the whole stay, so a
@@ -2817,17 +2811,17 @@ function render() {
     h('div', { style: { position: 'fixed', top: '40%', left: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,150,180,0.10) 0%, transparent 70%)', pointerEvents: 'none', zIndex: '0', transform: 'translateX(-50%)' } }),
     renderHeader(now),
     h('main', { style: { position: 'relative', zIndex: '1', maxWidth: '720px', margin: '0 auto', padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: '18px' } }, ...renderContent(now, mg, pct, tyColor, ceiling)),
-    state.toast ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'fixed', bottom: 'calc(96px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', background: 'rgba(60,30,50,0.96)', color: '#fff', padding: '12px 20px', borderRadius: '18px', fontSize: '14px', fontWeight: '600', lineHeight: '1.35', boxShadow: '0 10px 28px rgba(120,60,90,0.2), 0 0 0 1px rgba(255,255,255,0.3)', zIndex: '50', maxWidth: 'calc(100vw - 32px)', width: 'max-content', textAlign: 'center', whiteSpace: 'normal', overflowWrap: 'anywhere' } }, state.toast) : null,
+    state.toast ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'fixed', bottom: 'calc(96px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', padding: '12px 20px', borderRadius: '18px', fontSize: '14px', fontWeight: '600', lineHeight: '1.35', boxShadow: '0 10px 28px rgba(120,60,90,0.2), 0 0 0 1px rgba(255,255,255,0.3)', zIndex: '50', maxWidth: 'calc(100vw - 32px)', width: 'max-content', textAlign: 'center', whiteSpace: 'normal', overflowWrap: 'anywhere' } }, state.toast) : null,
     renderTimeModal(),
     renderCalDrawer(),
     renderWhatsNewModal(),
     renderApptSheet(),
     (state.view === 'reports' && state.reportsView) ? h('div', { style: { position: 'fixed', zIndex: '34', left: '0', right: '0', bottom: 'calc(78px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', pointerEvents: 'none' } },
-      h('button', { onClick: () => setState({ reportsView: null }), style: { pointerEvents: 'auto', minHeight: '42px', padding: '0 18px', borderRadius: '99px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(60,30,50,0.88)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '800', boxShadow: '0 10px 28px rgba(120,60,90,0.22)' } }, '↩ Back')
+      h('button', { onClick: () => setState({ reportsView: null }), style: { pointerEvents: 'auto', minHeight: '42px', padding: '0 18px', borderRadius: '99px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(60,30,50,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', fontWeight: '800', boxShadow: '0 10px 28px rgba(120,60,90,0.22)' } }, '↩ Back')
     ) : null,
     renderMissReasonSheet(),
     renderBottomNav(),
-    !state.loaded ? h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(255,240,243,1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '100' } },
+    !state.loaded ? h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(255,240,243,0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '100' } },
       h('div', { style: { textAlign: 'center' } },
         h('div', { style: { fontSize: '24px', fontWeight: '800', color: '#AA5375', marginBottom: '8px' } }, 'CareTracker'),
         h('div', { style: { fontSize: '14px', color: '#7D6974' } }, 'Connecting...')
@@ -2874,8 +2868,8 @@ function renderTimeModal() {
   const medForPain = m.type === 'med' ? state.meds.find(x => x.id === m.medId) : null;
   const showPainScale = !!(medForPain && medForPain.painScale);
 
-  return h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.42)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '60', padding: '20px' }, onClick: (e) => { if (e.target === e.currentTarget) setState({ timeModal: null }); } },
-    h('div', { style: { background: 'rgba(255,245,248,0.96)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '24px 22px', width: '320px', maxWidth: '100%', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  return h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '60', padding: '20px' }, onClick: (e) => { if (e.target === e.currentTarget) setState({ timeModal: null }); } },
+    h('div', { style: { background: 'rgba(255,245,248,0.96)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '24px 22px', width: '320px', maxWidth: '100%', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { fontSize: '16px', fontWeight: '800', marginBottom: '22px', textAlign: 'center', letterSpacing: '-0.01em' } }, title),
       m.type === 'symptom' ? h('div', { style: { marginBottom: '16px' } },
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' } }, 'Symptom'),
@@ -3187,8 +3181,8 @@ function renderMissReasonSheet() {
     ? when.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + fmtTime(s.ts)
     : '';
   const busyAttr = s.busy ? { disabled: 'disabled' } : {};
-  return h('div', { 'data-mr-overlay': 'true', onClick: (ev) => { if (ev.target === ev.currentTarget && !s.busy) mrCloseSheet(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.42)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '62', padding: '18px' } },
-    h('div', { 'data-mr-sheet': 'true', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a reason', style: { background: 'rgba(255,245,248,1)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '22px 20px', width: '340px', maxWidth: '100%', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  return h('div', { 'data-mr-overlay': 'true', onClick: (ev) => { if (ev.target === ev.currentTarget && !s.busy) mrCloseSheet(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '62', padding: '18px' } },
+    h('div', { 'data-mr-sheet': 'true', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a reason', style: { background: 'rgba(255,245,248,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '22px 20px', width: '340px', maxWidth: '100%', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, nameOf(s.medId) + (s.windowName ? ' · ' + s.windowName : '')),
       dateLine ? h('div', { className: 'mono', style: { fontSize: '12.5px', color: '#7D6974', marginTop: '2px' } }, dateLine) : null,
       h('div', { style: { fontSize: '18px', fontWeight: '800', letterSpacing: '-0.01em', color: '#3D2B3A', marginTop: '10px' } }, 'Add a reason'),
@@ -3670,7 +3664,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // removal in the Meds section actually take effect here: usedRecently() reads logged
   // entries only and never consulted the medication config, so before this the card outlived
   // the medication by 7 days no matter what the Meds section said.
-  if (medIsOnActiveList('tylenol') && usedRecently('tylenol')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  if (medIsOnActiveList('tylenol') && usedRecently('tylenol')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Acetaminophen · today'),
@@ -3692,7 +3686,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   const imoMax = 4;
   const imoPct = Math.min(100, imoPills / imoMax * 100);
   const imoColor = imoPills >= imoMax ? '#C0453B' : imoPills >= 3 ? '#9A6419' : '#AA5375';
-  if (medIsOnActiveList('imodium') && usedRecently('imodium')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  if (medIsOnActiveList('imodium') && usedRecently('imodium')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Imodium · today'),
@@ -3714,7 +3708,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   const lidoMax = 4;
   const lidoPct = Math.min(100, lidoApps / lidoMax * 100);
   const lidoColor = lidoApps >= lidoMax ? '#C0453B' : lidoApps >= 3 ? '#9A6419' : '#AA5375';
-  if (medIsOnActiveList('lidocaine') && usedRecently('lidocaine')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  if (medIsOnActiveList('lidocaine') && usedRecently('lidocaine')) parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Lidocaine · today'),
@@ -3733,7 +3727,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // Temperature + Weight row
   parts.push(h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: '12px' } },
     // Temperature
-    h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' } },
         h('div', null,
           h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Temperature'),
@@ -3747,7 +3741,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       )
     ),
     // Weight
-    h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' } },
         h('div', null,
           h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Weight'),
@@ -3768,7 +3762,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       const pSub = pLast
         ? ('Last drain ' + fmtInpatientDate(pLast.ts) + ' · ' + paraFmtLiters(pLast.liters) + ' L')
         : 'Liters drained, recorded separately';
-      return h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      return h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' } },
           h('div', null,
             h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Paracentesis'),
@@ -3791,7 +3785,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
     daysUntil === 1 ? new Date(dayStart(chemoTs)).toLocaleDateString([], { weekday: 'long', month: 'numeric', day: 'numeric' }) + ' · TOMORROW' :
     daysUntil === 0 ? 'TODAY' :
     'Last chemo ' + new Date(dayStart(chemoTs)).toLocaleDateString([], { weekday: 'long', month: 'numeric', day: 'numeric' });
-  parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  parts.push(h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Chemo schedule'),
@@ -3884,7 +3878,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       );
     }
 
-    return h('div', { style: { background: st.chemoBlock ? 'rgba(192,69,59,0.09)' : 'rgba(255,255,255,0.55)', border: '1px solid ' + (st.chemoBlock ? 'rgba(192,69,59,0.3)' : 'rgba(212,104,138,0.12)'), borderRadius: '16px', padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    return h('div', { style: { background: st.chemoBlock ? 'rgba(192,69,59,0.09)' : 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid ' + (st.chemoBlock ? 'rgba(192,69,59,0.3)' : 'rgba(212,104,138,0.12)'), borderRadius: '16px', padding: '10px 11px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       // Header row
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
         h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '4px', minWidth: '0', flex: '1', flexWrap: 'wrap' } },
@@ -3962,7 +3956,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '11px' } },
         ...journalGroups.map(g => h('div', null,
           h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#7D6974', marginBottom: '8px' } }, g.label),
-          h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+          h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
             ...g.items.map((e, i) => e.missed ? missedRow(e, i) : h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },
               h('div', { className: 'mono', style: { fontSize: '13px', color: '#8A6479', minWidth: '66px' } }, fmtTime(e.ts)),
               h('div', { style: { flex: '1' } },
@@ -3977,7 +3971,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
           )
         ))
       ) :
-      h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', marginTop: '11px', lineHeight: '1.5' } }, 'No doses logged yet today.\nUse the buttons above to log the first one.')
+      h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', marginTop: '11px', lineHeight: '1.5' } }, 'No doses logged yet today.\nUse the buttons above to log the first one.')
   ));
 
   return parts;
@@ -4192,7 +4186,7 @@ function renderMedicationEditor() {
   const form = state.medEditor.form;
   const scheduled = form.type === 'win';
   const title = state.medEditor.mode === 'add' ? 'Add medication' : 'Edit medication';
-  return h('section', { style: { background: 'rgba(255,252,253,0.78)', border: '1px solid rgba(170,83,117,0.28)', borderRadius: '20px', padding: '16px', boxShadow: '0 10px 34px rgba(121,72,96,0.12), inset 0 1px 0 rgba(255,255,255,0.82)' } },
+  return h('section', { style: { background: 'rgba(255,252,253,0.78)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(170,83,117,0.28)', borderRadius: '20px', padding: '16px', boxShadow: '0 10px 34px rgba(121,72,96,0.12), inset 0 1px 0 rgba(255,255,255,0.82)' } },
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' } },
       h('div', null,
         h('div', { style: { fontSize: '18px', fontWeight: '800', color: '#342530', letterSpacing: '-0.02em' } }, title),
@@ -4245,7 +4239,7 @@ function renderMedicationManager(now) {
       h('div', { style: { fontSize: '12px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8E3D61' } }, 'Home screen order'),
       h('div', { style: { fontSize: '11.5px', color: '#6E5261', marginTop: '3px', lineHeight: '1.35' } }, 'Sets the order these individual medication cards appear in Home’s Quick Log grid. Grouped Morning/Evening meds aren’t included here.')
     ),
-    h('div', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', overflow: 'hidden', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
+    h('div', { style: { background: 'rgba(255,255,255,0.60)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', overflow: 'hidden', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
       ...reorderable.map((med, i) => {
         // h() falls back to el.setAttribute(k, v) for unrecognized attrs, and setAttribute('disabled',
         // false) still sets the attribute (browsers treat any presence of `disabled` as disabled,
@@ -4268,7 +4262,7 @@ function renderMedicationManager(now) {
   ) : null;
   const cards = sortedMeds.map(med => {
     const deleting = state.confirmDeleteMed === med.id;
-    return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
+    return h('article', { style: { background: 'rgba(255,255,255,0.60)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
         h('div', { style: { minWidth: '0', flex: '1' } },
           h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, med.name),
@@ -4355,7 +4349,7 @@ function renderReportsMenu(now) {
     h('div', { 'data-tour-reports': 'true', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
       ...reportTypes.map(type => {
         const report = reportDescriptor(type, now);
-        return h('button', { onClick: () => openReport(type), style: { width: '100%', minHeight: '92px', display: 'flex', alignItems: 'center', gap: '13px', padding: '14px', textAlign: 'left', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', border: '1px solid rgba(212,104,138,0.16)', color: '#342530', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
+        return h('button', { onClick: () => openReport(type), style: { width: '100%', minHeight: '92px', display: 'flex', alignItems: 'center', gap: '13px', padding: '14px', textAlign: 'left', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', color: '#342530', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
           h('span', { style: { width: '44px', height: '44px', borderRadius: '14px', background: 'rgba(170,83,117,0.12)', color: '#AA5375', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } }, appIcon(report.icon, 22)),
           h('span', { style: { display: 'block', flex: '1', minWidth: '0' } },
             h('span', { style: { display: 'block', fontSize: '16px', fontWeight: '800', letterSpacing: '-0.015em' } }, report.label),
@@ -4446,7 +4440,7 @@ function renderSaveRecordsCard(now, mode) {
       ) : label);
   };
   return h('section', { style: { marginTop: '2px' } },
-    h('div', { 'data-records-card': forSettings ? 'settings' : 'reports', style: { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
+    h('div', { 'data-records-card': forSettings ? 'settings' : 'reports', style: { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
       h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '13px' } },
         h('span', { style: { width: '44px', height: '44px', borderRadius: '14px', marginTop: '1px', background: 'rgba(170,83,117,0.12)', color: '#AA5375', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } }, appIcon(forSettings ? 'bkRestore' : 'download', 22)),
         h('span', { style: { display: 'block', flex: '1', minWidth: '0' } },
@@ -4516,7 +4510,7 @@ function renderBackupPointerRow() {
 // silently overflows it. Calendar lives the same way for the same reason.
 // ------------------------------------------------------------------------------------------------
 function renderSettings(now) {
-  const cardStyle = { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
+  const cardStyle = { padding: '14px', borderRadius: '18px', background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
   const nLog = ctLogRead().length;
   return [
     h('section', null,
@@ -4977,8 +4971,8 @@ function calDrawerGo(view) {
 
 function renderCalDrawer() {
   if (!state.drawerOpen) return null;
-  return h('div', { 'data-cal-drawer-overlay': 'true', onClick: (e) => { if (e.target === e.currentTarget) calCloseDrawer(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.42)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: '70', display: 'flex', justifyContent: 'flex-start' } },
-    h('div', { 'data-cal-drawer': 'true', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Menu', tabindex: '-1', ref: (el) => calFocusOnce(el, () => calDrawerNeedsFocus, () => { calDrawerNeedsFocus = false; }), style: { width: '286px', maxWidth: '86vw', height: '100%', overflowY: 'auto', background: 'rgba(255,245,248,1)', borderRight: '1px solid rgba(212,104,138,0.18)', boxShadow: '0 0 60px rgba(120,60,90,0.22)', padding: 'calc(14px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom))', outline: 'none' } },
+  return h('div', { 'data-cal-drawer-overlay': 'true', onClick: (e) => { if (e.target === e.currentTarget) calCloseDrawer(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: '70', display: 'flex', justifyContent: 'flex-start' } },
+    h('div', { 'data-cal-drawer': 'true', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Menu', tabindex: '-1', ref: (el) => calFocusOnce(el, () => calDrawerNeedsFocus, () => { calDrawerNeedsFocus = false; }), style: { width: '286px', maxWidth: '86vw', height: '100%', overflowY: 'auto', background: 'rgba(255,245,248,0.98)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderRight: '1px solid rgba(212,104,138,0.18)', boxShadow: '0 0 60px rgba(120,60,90,0.22)', padding: 'calc(14px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom))', outline: 'none' } },
       h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '0 4px 12px' } },
         h('div', { style: { fontSize: '15px', fontWeight: '800', letterSpacing: '-0.02em', color: '#342530' } }, 'Menu'),
         h('button', { 'data-cal-drawer-close': 'true', type: 'button', onClick: calCloseDrawer, 'aria-label': 'Close menu', style: { width: '44px', height: '44px', flexShrink: '0', borderRadius: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.10)', color: '#AA5375' } }, appIcon('calClose', 19))
@@ -5159,8 +5153,8 @@ function renderApptSheet() {
   const heading = editing ? 'Edit appointment' : 'Add appointment';
   // maxHeight + overflowY, not a taller card: at 375x812 with the keyboard up, a card that grows
   // past the viewport pushes Save below the fold with no way to reach it.
-  return h('div', { onClick: (e) => { if (e.target === e.currentTarget && !s.busy) calCloseApptSheet(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.42)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '80', padding: '20px' } },
-    h('div', { 'data-cal-sheet': editing ? 'edit' : 'add', role: 'dialog', 'aria-modal': 'true', 'aria-label': heading, tabindex: '-1', ref: (el) => calFocusOnce(el, () => calSheetNeedsFocus, () => { calSheetNeedsFocus = false; }), style: { background: 'rgba(255,245,248,1)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '22px 20px', width: '320px', maxWidth: '100%', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', outline: 'none', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  return h('div', { onClick: (e) => { if (e.target === e.currentTarget && !s.busy) calCloseApptSheet(); }, style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '80', padding: '20px' } },
+    h('div', { 'data-cal-sheet': editing ? 'edit' : 'add', role: 'dialog', 'aria-modal': 'true', 'aria-label': heading, tabindex: '-1', ref: (el) => calFocusOnce(el, () => calSheetNeedsFocus, () => { calSheetNeedsFocus = false; }), style: { background: 'rgba(255,245,248,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '22px 20px', width: '320px', maxWidth: '100%', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', outline: 'none', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { fontSize: '16px', fontWeight: '800', marginBottom: '18px', textAlign: 'center', letterSpacing: '-0.01em', color: '#342530' } }, heading),
 
       h('div', { style: { marginBottom: '14px' } },
@@ -5310,7 +5304,7 @@ function renderCalendarView(now) {
     );
   };
 
-  const cardStyle = { background: 'rgba(255,255,255,0.63)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
+  const cardStyle = { background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', boxShadow: '0 4px 18px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' };
 
   return [
     h('section', { 'data-cal-view-header': 'true' },
@@ -6536,7 +6530,7 @@ function renderHistory(now) {
   });
 
   if (historyDays.length === 0) {
-    return [h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No history yet.')];
+    return [h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No history yet.')];
   }
 
   return [h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
@@ -6545,7 +6539,7 @@ function renderHistory(now) {
         h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.03em', textTransform: 'uppercase', color: '#8A6479' } }, d.label),
         h('div', { className: 'mono', style: { fontSize: '12px', color: d.summary.includes('MISSED') ? '#C0453B' : '#7D6974', fontWeight: d.summary.includes('MISSED') ? '700' : '400' } }, d.summary)
       ),
-      h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         ...(() => {
           const rows = [];
           d.items.forEach((e, i) => {
@@ -6577,7 +6571,7 @@ function renderHistory(now) {
 function renderCycle(now) {
   const cycleActiveNow = cycleActive();
   const cycleDayN = daysSinceCycleStart();
-  const card = h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  const card = h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Menstrual Cycle'),
@@ -6598,11 +6592,11 @@ function renderCycle(now) {
   const history = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Cycle History'),
     periods.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-      ...periods.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '15px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      ...periods.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '15px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('span', { style: { flexShrink: '0', width: '10px', height: '10px', borderRadius: '50%', background: p.end === null ? '#AA5375' : '#9B5B8A', display: 'inline-block' } }),
         h('div', { style: { fontSize: '15px', fontWeight: '700', color: '#3D2B3A' } }, fmtCyclePeriod(p))
       ))
-    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No periods logged yet.')
+    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No periods logged yet.')
   );
 
   return [card, history];
@@ -6617,7 +6611,7 @@ function renderAppetite(now) {
   const history = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Appetite History'),
     entries.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-      ...entries.map(e => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      ...entries.map(e => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('span', { style: { flexShrink: '0', width: '10px', height: '10px', marginTop: '6px', borderRadius: '50%', background: e.value === 'normal' ? '#0F9D6B' : e.value === 'little' ? '#C77800' : '#C0453B', display: 'inline-block' } }),
         h('div', { style: { flex: '1', minWidth: '0' } },
           h('div', { style: { fontSize: '15px', fontWeight: '700', color: '#3D2B3A' } }, new Date(e.ts).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ' — ' + (APPETITE_LABELS[e.value] || e.value)),
@@ -6625,7 +6619,7 @@ function renderAppetite(now) {
         ),
         removeBtn(e)
       ))
-    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No appetite entries logged yet.')
+    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No appetite entries logged yet.')
   );
 
   return [history];
@@ -6638,14 +6632,14 @@ function renderBowelMovementReport(now) {
   const history = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Bowel Movement History'),
     entries.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-      ...entries.map(e => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      ...entries.map(e => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('span', { style: { flexShrink: '0', width: '10px', height: '10px', marginTop: '6px', borderRadius: '50%', background: BOWEL_ISSUE_VALUES.has(e.value) ? '#C0453B' : e.value === 'very_little' ? '#C77800' : '#0F9D6B', display: 'inline-block' } }),
         h('div', { style: { flex: '1', minWidth: '0' } },
           h('div', { style: { fontSize: '15px', fontWeight: '700', color: '#3D2B3A' } }, new Date(e.ts).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ' — ' + (BOWEL_MOVEMENT_LABELS[e.value] || e.value))
         ),
         removeBtn(e)
       ))
-    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No bowel movement entries logged yet.')
+    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No bowel movement entries logged yet.')
   );
 
   return [history];
@@ -6656,7 +6650,7 @@ function renderInPatient(now) {
   const ipDayN = daysSinceInpatientStart();
   const cur = currentInpatientPeriod();
   const confirming = !!state.confirmUndoInpatient;
-  const card = h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(154,100,25,0.25)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  const card = h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(154,100,25,0.25)', borderRadius: '18px', padding: '16px 17px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'In-Patient Status'),
@@ -6681,11 +6675,11 @@ function renderInPatient(now) {
   const history = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'In-Patient History'),
     periods.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-      ...periods.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(154,100,25,0.25)', borderRadius: '16px', padding: '15px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      ...periods.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(154,100,25,0.25)', borderRadius: '16px', padding: '15px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('span', { style: { flexShrink: '0', width: '10px', height: '10px', borderRadius: '50%', background: p.end === null ? '#9A6419' : '#B08A50', display: 'inline-block' } }),
         h('div', { style: { fontSize: '15px', fontWeight: '700', color: '#3D2B3A' } }, fmtInpatientPeriod(p))
       ))
-    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No in-patient stays logged yet.')
+    ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No in-patient stays logged yet.')
   );
 
   return [card, history];
@@ -6696,7 +6690,7 @@ const SYMPTOM_COLORS = { nausea: '#9A6419', vomiting: '#C0453B', diarrhea: '#C04
 function symptomRow(e) {
   const color = SYMPTOM_COLORS[e.symptomType] || '#AA5375';
   const editing = false;
-  return h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '16px', padding: '13px 15px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  return h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '16px', padding: '13px 15px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
       h('div', { style: { minWidth: '0', flex: '1' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
@@ -6792,7 +6786,7 @@ async function ctSaveReportFile() {
 }
 
 function renderReportView(now) {
-  const card = { background: 'rgba(255,255,255,0.63)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '18px', padding: '14px', marginTop: '12px' };
+  const card = { background: 'rgba(255,255,255,0.63)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '18px', padding: '14px', marginTop: '12px' };
   const list = ctLogRead().slice().reverse();
   const errors = list.filter((e) => e.kind === 'error');
   const mine = list.filter((e) => e.kind !== 'error');
@@ -6891,7 +6885,7 @@ function renderSymptoms(now) {
   );
   const list = entries.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
     ...entries.map(e => symptomRow(e))
-  ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No symptoms or reactions logged yet.\nTap + to add one.');
+  ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No symptoms or reactions logged yet.\nTap + to add one.');
   return [header, list];
 }
 
@@ -6901,14 +6895,14 @@ function renderSymptoms(now) {
 function renderParacentesis(now) {
   const list = paracentesisResolved();
   if (!list.length) {
-    return [h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } },
+    return [h('div', { style: { background: 'rgba(255,255,255,0.4)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } },
       'No paracentesis procedures logged yet.\nLog the liters drained from the card on Today.')];
   }
   const total = paraTotalLiters(list);
   const avg = total / list.length;
   const daysSince = Math.floor((dayStart(now) - dayStart(list[0].ts)) / 86400000);
   const sinceLabel = daysSince <= 0 ? 'Today' : daysSince === 1 ? '1 day' : (daysSince + ' days');
-  const statCard = (label, value) => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  const statCard = (label, value) => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#7D6974', marginBottom: '6px' } }, label),
     h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: '#3D2B3A' } }, value)
   );
@@ -6920,7 +6914,7 @@ function renderParacentesis(now) {
   const note = h('div', { style: { background: 'rgba(170,83,117,0.08)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '14px', padding: '12px 14px', fontSize: '12.5px', color: '#6E5261', lineHeight: '1.5' } },
     'Averaging ' + paraFmtLiters(avg) + ' L per procedure. These are recorded separately from weight — the Weight report still shows what the scale actually said, with a marker on each drain date.');
   const rows = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-    ...list.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    ...list.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { flex: '1', minWidth: '0' } },
         h('div', { style: { fontSize: '14.5px', fontWeight: '700', color: '#3D2B3A' } }, paraFmtLiters(p.liters) + ' L drained'),
         h('div', { style: { fontSize: '12px', color: '#7D6974', marginTop: '2px' } }, fmtDateLabel(p.ts))
@@ -7068,7 +7062,7 @@ function renderWeightTrend(now) {
   svg += '</svg>';
 
   // Chart card
-  const chart = h('section', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '20px 16px 12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  const chart = h('section', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '18px', padding: '20px 16px 12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), 0 1px 2px rgba(180,130,150,0.06), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' } },
       h('div', null,
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#8A6479' } }, 'Weight Trend'),
@@ -7081,15 +7075,15 @@ function renderWeightTrend(now) {
 
   // Stats row
   const stats = h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '10px' } },
-    h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#7D6974', marginBottom: '6px' } }, 'Current'),
       h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: '#3D2B3A' } }, latest.weight + '')
     ),
-    h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#7D6974', marginBottom: '6px' } }, 'Average'),
       h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: '#3D2B3A' } }, avg)
     ),
-    h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', color: '#7D6974', marginBottom: '6px' } }, 'Change'),
       h('div', { className: 'mono', style: { fontSize: '18px', fontWeight: '700', color: changeColor } }, changeLabel)
     )
@@ -7111,7 +7105,7 @@ function renderWeightTrend(now) {
 
   const readings = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'All Readings'),
-    h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    h('div', { style: { background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       ...readingsItems
     )
   );
@@ -7532,7 +7526,7 @@ function tourRenderStep() {
   const card = h('div', {
     'data-tour-card': 'true', 'data-tour-step': String(i), 'data-tour-key': step.key,
     role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title', 'aria-describedby': 'tour-body', tabindex: '-1',
-    style: { position: 'absolute', left: '0px', top: '0px', width: 'min(340px, calc(100vw - 24px))', boxSizing: 'border-box', background: 'rgba(255,247,250,0.985)', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '20px', boxShadow: '0 18px 48px rgba(90,40,70,0.32)', padding: '14px 15px 13px', outline: 'none' }
+    style: { position: 'absolute', left: '0px', top: '0px', width: 'min(340px, calc(100vw - 24px))', boxSizing: 'border-box', background: 'rgba(255,247,250,0.985)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '20px', boxShadow: '0 18px 48px rgba(90,40,70,0.32)', padding: '14px 15px 13px', outline: 'none' }
   },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
       h('span', { 'data-tour-count': 'true', className: 'mono', style: { flex: '1', minWidth: '0', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#8E3D61' } }, 'Step ' + (i + 1) + ' of ' + n),
