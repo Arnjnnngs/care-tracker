@@ -32,6 +32,51 @@ scratchpad that lies about being permanent.
 - If you fixed a file (including a test file), it is not fixed until it is pushed. An
   unpushed fix once sent a later agent chasing a bug in a suite that was already repaired.
 
+## Rule 0.5 — A RECAP IS NOT A STOPPING POINT. FINISH THE WORK IN THE SAME TURN.
+
+Aaron, 2026-09-04, and this is the most urgent rule on the page:
+
+> *"youre stuck or still doing the same thing. I've put you in charge of this project and you keep
+> pausing instead or working bc you're giving an update. fix this first before you touch anything
+> else. can't have any more delays over this"*
+
+**The failure, exactly.** Say "I'm measuring it now, about 20 minutes, I'll come back with the
+result" — and then end the turn. Nothing runs. Aaron has to send another message just to restart
+work that was never blocked on him. It happened repeatedly on 2026-09-01/02 and it is the single
+most expensive habit on this project after the sandbox rollbacks.
+
+**The rule.** If the next step is something YOU can do, DO IT IN THE SAME TURN, then report. The
+message announcing the work and the message reporting its result should be the same message. Rule 6
+demands progress updates during long work — it never licensed stopping to deliver one. **Checkpoint
+while working, not instead of working.**
+
+**There are exactly three legitimate reasons to end a turn:**
+
+1. **The work is genuinely finished**, verified, pushed, and `python3 pm.py` is not exit 1.
+2. **Aaron has to decide something you cannot decide for him**, or has to do something only he can
+   (approve a push to `main`, look at his own phone). Say so in plain words that name what you need
+   — *"say the word"*, *"your call"*, *"I need you to approve X"*. A vague *"let me know how it
+   looks"* tacked onto unfinished work is not this.
+3. **A background agent or job is running** and the harness will wake you when it finishes. Say
+   that it is running in the background. Do not also promise separate work of your own alongside it
+   — that work should already be done.
+
+**Anything else — go back and finish.** In particular these are NOT stopping points: an estimate of
+how long something will take; a plan; a diagnosis; a promise to verify; "I'll fold that in";
+"shortly"; "stand by". If you catch yourself writing a future-tense sentence about your own work,
+that sentence is the work you should be doing instead of writing it.
+
+**Before ending any turn, ask: did I just promise something I could have done?** If yes, the turn is
+not over.
+
+**A mechanical guard exists for this and is not yet installed.** `.claude/settings.json` and
+`.claude/stop-if-work-outstanding.sh` would refuse the stop when the last message contains a
+first-person commitment with no hand-back to Aaron and no background job — the `pm.py` principle
+applied to turn-ending, because a script cannot forget or talk itself round. Writing an
+auto-executing hook is refused by the permission classifier in a cloud session; it needs Aaron to
+approve it once, in an interactive session, via `/hooks`. Until then this rule is enforced by
+reading it.
+
 ## Rule 1 — Deploying: SETTLED 2026-08-24. Read this before touching a browser.
 
 **There are two ways to get code onto GitHub from a Claude session, and the good one is already

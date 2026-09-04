@@ -7,6 +7,22 @@ Dispatch check-ins and any new chat session should read this file first.
 
 ---
 
+## RULE 0.5 — a recap is not a stopping point (added 2026-09-04, Aaron's most urgent complaint)
+
+Aaron: *"you keep pausing instead or working bc you're giving an update. fix this first before you
+touch anything else. can't have any more delays over this"*
+
+If the next step is something you can do yourself, **do it in the same turn and report once**. The
+only legitimate reasons to end a turn: the work is finished and pushed; Aaron has to decide or do
+something only he can; a background job is running and the harness will wake you. An estimate, a
+plan, or a promise to verify is not a stopping point. Full text in `CLAUDE.md` Rule 0.5.
+
+A mechanical guard — a Stop hook, the `pm.py` principle applied to turn-ending — is written and
+ready in `outputs/STOP-HOOK-PROPOSAL.md`. It could NOT be installed from a cloud session: the
+permission classifier refuses auto-executing hook code three different ways, which is correct.
+**It needs Aaron to approve it once in an interactive session.** Until then the rule is enforced by
+reading it, which is the weaker half.
+
 ## THE DISPATCH FLAG — read this before changing the line above
 
 The `DISPATCH:` line on line 3 controls whether Aaron gets status pings. He does not want
