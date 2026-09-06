@@ -131,8 +131,14 @@ sub("""  } else if (m.type === 'para') {
     // while leaving it in the record. Nothing can be lost if the write fails, and it works past
     // the 48-hour delete window the Firestore rules enforce.
     const editing = !!m.editId;
+    // loggedAt MUST BEAT THE RECORD IT REPLACES, not merely be "now". paraSupersedes() falls back to
+    // `ts` when loggedAt is absent, so a legacy record dated in the future -- or one written on a
+    // device with a fast clock -- would keep winning and the edit would silently do nothing while
+    // the toast said "updated". Found by the Zero Day Auditor.
+    const prevRec = editing ? paracentesisResolved().find(x => x.paraId === m.editId) : null;
+    const prevStamp = prevRec ? (prevRec.loggedAt || prevRec.ts || 0) : 0;
     const entry = { medId: PARA_MED_ID, paraId: editing ? m.editId : paraNewId(), liters: v, dose: paraFmtLiters(v) + ' L',
-                    mg: 0, ts, loggedAt: Date.now() };
+                    mg: 0, ts, loggedAt: Math.max(Date.now(), prevStamp + 1) };
     setState({ paraInput: '', timeModal: null });
     await addEntryDB(entry);
     setToast('Paracentesis ' + paraFmtLiters(v) + ' L ' + (editing ? 'updated' : 'logged') + ' at ' + fmtTime(ts));""",
@@ -157,7 +163,11 @@ sub("""  } else if (m.type === 'marker') {
         await removeEntryDB(editId);
       } catch (err) {
         console.warn('[marker] moved but old entry not removed:', err);
-        setToast(m.label + ' moved, but the old one is still there — remove it from Cycle History');
+        // NOT "remove it from Cycle History". That instruction was only correct when the date moved
+        // EARLIER: move a start LATER and p.startId points at the new entry, so following it would
+        // delete the correction and silently restore the original date. There is also no Remove on
+        // that screen any more. Say what happened and what to do that actually works.
+        setToast(m.label + ' moved, but the old date is still recorded — move it again to the date you want');
         return;
       }
     }
@@ -175,14 +185,6 @@ function paraEditOpen(p) {
 // Moves one end of a period to another day. medId decides which marker is being moved.
 function cycleEditOpen(entryId, medId, label, ts) {
   setState({ timeModal: { type: 'marker', editId: entryId, medId, label, timeValue: toLocalISO(ts) } });
-}
-async function cycleRemove(entryId) {
-  try {
-    await removeEntryDB(entryId);
-    setToast('Removed');
-  } catch (e) {
-    setToast('Could not remove — check connection and try again');
-  }
 }
 // The add row that was missing from Paracentesis and Weight. One helper, so the two screens cannot
 // drift apart the way they did in the first place. It deliberately reuses the SAME onLog handlers
@@ -273,17 +275,28 @@ sub("""      ...periods.map(p => h('div', { style: { background: 'rgba(255,255,2
         h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
           p.startId ? h('button', { 'data-cycle-edit-start': 'true', onClick: () => cycleEditOpen(p.startId, 'cycle_start', 'Period Start', p.start), style: { color: '#8E3D61', fontSize: '13px', fontWeight: '700', padding: '0 14px', borderRadius: '10px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Move start') : null,
           p.endId ? h('button', { 'data-cycle-edit-end': 'true', onClick: () => cycleEditOpen(p.endId, 'cycle_end', 'Period End', p.end), style: { color: '#8E3D61', fontSize: '13px', fontWeight: '700', padding: '0 14px', borderRadius: '10px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Move end') : null,
-          // Remove exists because the edit's failure path tells the caregiver to delete a leftover
-          // duplicate here. A message naming an action the screen does not offer is the exact class
-          // of defect this release is fixing.
-          p.startId ? h('button', { 'data-cycle-remove': 'true', onClick: () => cycleRemove(p.endId || p.startId), style: { color: '#8E3D61', fontSize: '13px', fontWeight: '700', padding: '0 14px', borderRadius: '10px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove') : null
+          // THERE IS NO REMOVE HERE, AND THAT IS THE POINT.
+          // v66 shipped one and it destroyed data on a single unconfirmed tap. Removing a period's
+          // END reopens that period; cyclePeriods()'s UC20 rule then makes the NEXT cycle_start
+          // update the reopened period instead of starting a new one, so two periods merge and one
+          // row disappears. It could not be undone from the app either: after the merge
+          // cycleActive() is false, so every control offers Period Start only and nothing anywhere
+          // writes a cycle_end for a past day. Measured by the Zero Day Auditor: two seeded periods,
+          // one tap, one period gone, toast said "Removed", no confirmation step -- while every
+          // other destructive control in this app is two-step.
+          //
+          // Moving a date is safe because it is add-then-remove of a marker that is immediately
+          // replaced. Deleting one outright is not, and a delete that can silently merge two months
+          // of a patient's record does not belong behind a single tap. Withdrawn until it can be
+          // done as "delete this period", closing the reopened period as part of the same action.
+          null
         )
       ))""",
     'cycle-row-controls')
 
 sub("""    h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Cycle History'),""",
     """    h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Cycle History'),
-    h('div', { style: { fontSize: '12px', color: '#7D6974', marginBottom: '10px', lineHeight: '1.45' } }, 'Move start or Move end shifts that date to another day. Remove deletes the most recent marker of the period.'),""",
+    h('div', { style: { fontSize: '12px', color: '#7D6974', marginBottom: '10px', lineHeight: '1.45' } }, 'Move start or Move end shifts that date to another day.'),""",
     'cycle-history-hint')
 
 
@@ -324,12 +337,25 @@ body = re.sub(r"return \[h\('div',", "return [addRow, h('div',", body)
 # first attempt put a newline between `[` and `addRow`, the counter did not recognise it, and the
 # check reported 1 of 2 -- the check catching its own author.
 body = re.sub(r"return \[\n(\s+)toggle,", lambda mm: "return [addRow,\n" + mm.group(1) + "toggle,", body)
+# THE PATH THAT ACTUALLY MATTERS. renderWeightTrend ends on a TERNARY return --
+#   return paraLine ? [toggle, chart, ...] : [toggle, chart, ...]
+# -- which no `return [` regex above can see, and which the count check below could not see either
+# because it counted `return [` occurrences. So the check reported "2 of 2" and went green while
+# the normal path -- readings exist, which is every real device -- had no add row at all. The
+# feature shipped appearing ONLY when there were no readings: exactly backwards. Found by the Zero
+# Day Auditor on the live v66 build.
+body = re.sub(r"return paraLine \? \[toggle,", "return paraLine ? [addRow, toggle,", body)
+body = re.sub(r": \[toggle, chart, stats, readings\];", ": [addRow, toggle, chart, stats, readings];", body)
 # EVERY return path must lead with the add row, not merely one of them. The first run of this
 # patch rewrote exactly one of the two and would have shipped a Weight screen where the new control
 # appeared only once some readings existed -- the same "present on one path, absent on another"
 # inconsistency the release exists to remove.
-n_returns = len(re.findall(r"return \[", body))
-n_fixed = body.count('return [addRow')
+# COUNT EVERY `return`, NOT EVERY `return [`. The first version of this check counted only returns
+# of an array literal, so a ternary return was outside the universe it compared against and it
+# reported "2 of 2" while a third path had been missed entirely. A check is only as honest as the
+# denominator it chooses.
+n_returns = len(re.findall(r"\breturn\b", body))
+n_fixed = len(re.findall(r"\[addRow,", body))
 if n_fixed != n_returns:
     raise SystemExit('ANCHOR weight-returns: %d of %d return paths carry addRow' % (n_fixed, n_returns))
 s = s[:start] + body + s[end:]

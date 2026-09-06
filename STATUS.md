@@ -117,12 +117,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v66 |
-| **Commit** | v66 built 2026-09-06 on Aaron's go-ahead: *"add all"*. NOT YET PUSHED to main at the time of writing. |
+| **Version** | v67 |
+| **Commit** | v67 — **an emergency fix for a data-loss defect that v66 put live.** Shipped without waiting: v66's Cycle History Remove deleted a whole period on one unconfirmed tap. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `84b7be6e7f9ae6704eb27ad383708c7b` |
-| **sw.js md5** | `4388a153912e08467370fed8ba3f958f` |
-| **State** | **v66 — the report screens can now do the whole job.** Aaron: *"there isn't a way to add a para from the reports screen. there also a way to edit cycles."* Both confirmed; Paracentesis could Remove but not add or correct, and Weight had the same defect unreported. Adds an add row to Paracentesis and Weight, Edit to paracentesis rows, and Move start / Move end / Remove to Cycle history. A paracentesis edit is a new record with the same `paraId` (supersedes, deletes nothing, works past 48h); a cycle edit is add-then-remove in that order, so a failure leaves a duplicate rather than losing the marker. New gate `enhance-test` 15/15, falsified against v65 at 1/11. Four further defects were caught only by opening the screenshots — see `outputs/RENDER-v66.md`. Rollback bundle for v65 in `outputs/rollback-v65/`. |
+| **index.html md5** | `b2a94b77275e5369d85937c18b0fb1c7` |
+| **sw.js md5** | `ce3a25abe5f566d6ea97546f1d69c1b4` |
+| **State** | **v67 — v66's audit returned BLOCK and this is the fix.** One unconfirmed tap on Cycle History's Remove deleted an entire period and it could not be recovered from the app: the delete reopened the period, UC20 merged the next start into it, and nothing writes a `cycle_end` for a past day. **The control is withdrawn**; moving a date stays. Also fixed: the Weight add row appeared ONLY when there were no readings (a ternary return the patch and its own count check both missed — the check counted `return [`), the move-failure toast was correct in one direction only, and a paracentesis edit silently no-opped on a legacy record with no `loggedAt`. Two vacuous checks retired. `enhance-test` 16/16, falsified against the broken v66 at 14/16. Rollback bundle for v66 in `outputs/rollback-v66/`. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 

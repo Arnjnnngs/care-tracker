@@ -9,8 +9,9 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** August 16, 2026
-> **Current version:** v66 (a mistake can be fixed on the screen where you find it — add and
-> edit on Paracentesis and Weight, move a period's start or end on Cycle)
+> **Current version:** v67 (add and correct a paracentesis or a weight on their own screens;
+> move a period's start or end. Periods cannot be deleted there — v66's one-tap delete destroyed
+> a whole period and is withdrawn)
 
 ---
 

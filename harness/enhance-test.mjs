@@ -65,7 +65,13 @@ const seed = [
   { id: 'seed_para_1', medId: 'paracentesis', paraId: 'para_seed_one', liters: 4.5, dose: '4.5 L', mg: 0,
     ts: NOW - 3 * DAY, loggedAt: NOW - 3 * DAY },
   { id: 'seed_cyc_start', medId: 'cycle_start', dose: null, mg: 0, ts: NOW - 10 * DAY },
-  { id: 'seed_cyc_end',   medId: 'cycle_end',   dose: null, mg: 0, ts: NOW - 6 * DAY }
+  { id: 'seed_cyc_end',   medId: 'cycle_end',   dose: null, mg: 0, ts: NOW - 6 * DAY },
+  // WEIGHT READINGS ARE SEEDED ON PURPOSE. v66 shipped the Weight add row visible ONLY when there
+  // were no readings -- exactly backwards, and invisible on Brandi's phone, which has months of
+  // them. The suite tested the empty state and went green. Whichever state a real device is in is
+  // the state the test has to be in.
+  { id: 'seed_w1', medId: 'weight', weight: 156.2, dose: '156.2 lbs', mg: 0, ts: NOW - 2 * DAY },
+  { id: 'seed_w2', medId: 'weight', weight: 154.8, dose: '154.8 lbs', mg: 0, ts: NOW - 9 * DAY }
 ];
 const stubFs = `
 const store={entries:${JSON.stringify(seed)},prefs:{}};const eL=[],pL=[];let n=0;
@@ -200,9 +206,12 @@ console.log('\n3. Weight — the same defect, unreported');
   await page.waitForTimeout(400);
   await openReport('Weight');
   const box = await page.$('[data-weight-report-add]');
-  // The seed has NO weight readings, so this is the empty-state path -- the one the first version
-  // of the patch missed entirely.
-  t('an add control exists on the Weight report when empty', !!box, box ? '' : 'no [data-weight-report-add]');
+  // PROVE WHICH PATH WE ARE ON. The Weeks/Months toggle only renders once readings exist, so its
+  // presence is what stops this check quietly passing on the empty state -- the state v66's version
+  // of this check was stuck in while the real one was broken.
+  const populated = await page.evaluate(() => [...document.querySelectorAll('button')].some(b => /^Weeks$/.test((b.innerText||'').trim())));
+  t('the Weight report is showing its populated view', populated, populated ? '' : 'no Weeks/Months toggle - still the empty state');
+  t('an add control exists on the Weight report with readings', !!box && populated, box ? '' : 'no [data-weight-report-add]');
 }
 
 console.log('\n4. Cycle — a period logged on the wrong day can be moved');
@@ -215,7 +224,10 @@ console.log('\n4. Cycle — a period logged on the wrong day can be moved');
   const rmBtn = await page.$('[data-cycle-remove]');
   t('a period start can be moved', !!startBtn, startBtn ? '' : 'no [data-cycle-edit-start]');
   t('a period end can be moved', !!endBtn, endBtn ? '' : 'no [data-cycle-edit-end]');
-  t('a period marker can be removed', !!rmBtn, rmBtn ? '' : 'no [data-cycle-remove]');
+  // ASSERT ITS ABSENCE. v66 shipped a Remove here that destroyed a whole period on one unconfirmed
+  // tap -- removing the END reopened the period and the next start merged into it, unrecoverably.
+  // It is withdrawn, and this check exists so it cannot come back without someone deciding to.
+  t('there is NO one-tap period delete', !rmBtn, rmBtn ? 'data-cycle-remove is back' : '');
   if (startBtn) {
     const beforeText = await page.evaluate(() => document.querySelector('[data-cycle-edit-start]').closest('div').parentElement.innerText);
     await startBtn.click();
@@ -243,7 +255,12 @@ console.log('\n4. Cycle — a period logged on the wrong day can be moved');
     });
     t('the period now reads a different date', afterText !== beforeText, beforeText.replace(/\n/g,' ').slice(0,40) + '  ->  ' + afterText.replace(/\n/g,' ').slice(0,40));
     const stillOne = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
-    t('moving a start did not create a second period', stillOne === 1, stillOne + ' period(s)');
+    // NAMED FOR WHAT IT ACTUALLY ASSERTS. It was called "did not create a second period", which
+    // implied it covered cyclePeriods()'s UC20 merge rule; the auditor deleted that whole branch
+    // and this stayed green. It cannot cover UC20 -- when the remove succeeds there is only ever
+    // one start, so the merge rule is never reached. What it does check is that the move did not
+    // duplicate the period, which is worth checking under its own name.
+    t('the move replaced the period rather than duplicating it', stillOne === 1, stillOne + ' period(s)');
   }
 }
 

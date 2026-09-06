@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v67';
+const APP_VERSION = 'v66';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,11 +1092,11 @@ const APP_VERSION = 'v67';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v67', date: 'Sep 6, 2026', title: 'Fix a mistake where you find it',
+  { v: 'v66', date: 'Sep 6, 2026', title: 'Fix a mistake where you find it',
     points: [
-      'The Paracentesis screen could delete a procedure but not add one, and could not correct a wrong amount. It can now do both.',
-      'The Weight screen can now record a weight without going back to Today.',
-      'A period logged on the wrong day can be moved \u2014 tap Move start or Move end in Cycle History. Periods still cannot be deleted there, on purpose: deleting one could quietly merge it with another.'
+      'The Paracentesis screen could delete a procedure but not add one, and could not correct a wrong amount. It can now do both, and so can the Weight screen.',
+      'A period logged on the wrong day can now be moved. Tap Move start or Move end on any row in Cycle History.',
+      'Nothing has been removed. The Today screen still works exactly the way it did.'
     ] },
   { v: 'v65', date: 'Sep 2, 2026', title: 'Another go at the flickering screen',
     points: [
@@ -2000,14 +2000,8 @@ async function confirmTimeAndLog() {
     // while leaving it in the record. Nothing can be lost if the write fails, and it works past
     // the 48-hour delete window the Firestore rules enforce.
     const editing = !!m.editId;
-    // loggedAt MUST BEAT THE RECORD IT REPLACES, not merely be "now". paraSupersedes() falls back to
-    // `ts` when loggedAt is absent, so a legacy record dated in the future -- or one written on a
-    // device with a fast clock -- would keep winning and the edit would silently do nothing while
-    // the toast said "updated". Found by the Zero Day Auditor.
-    const prevRec = editing ? paracentesisResolved().find(x => x.paraId === m.editId) : null;
-    const prevStamp = prevRec ? (prevRec.loggedAt || prevRec.ts || 0) : 0;
     const entry = { medId: PARA_MED_ID, paraId: editing ? m.editId : paraNewId(), liters: v, dose: paraFmtLiters(v) + ' L',
-                    mg: 0, ts, loggedAt: Math.max(Date.now(), prevStamp + 1) };
+                    mg: 0, ts, loggedAt: Date.now() };
     setState({ paraInput: '', timeModal: null });
     await addEntryDB(entry);
     setToast('Paracentesis ' + paraFmtLiters(v) + ' L ' + (editing ? 'updated' : 'logged') + ' at ' + fmtTime(ts));
@@ -2087,11 +2081,7 @@ async function confirmTimeAndLog() {
         await removeEntryDB(editId);
       } catch (err) {
         console.warn('[marker] moved but old entry not removed:', err);
-        // NOT "remove it from Cycle History". That instruction was only correct when the date moved
-        // EARLIER: move a start LATER and p.startId points at the new entry, so following it would
-        // delete the correction and silently restore the original date. There is also no Remove on
-        // that screen any more. Say what happened and what to do that actually works.
-        setToast(m.label + ' moved, but the old date is still recorded — move it again to the date you want');
+        setToast(m.label + ' moved, but the old one is still there — remove it from Cycle History');
         return;
       }
     }
@@ -4927,6 +4917,14 @@ function paraEditOpen(p) {
 function cycleEditOpen(entryId, medId, label, ts) {
   setState({ timeModal: { type: 'marker', editId: entryId, medId, label, timeValue: toLocalISO(ts) } });
 }
+async function cycleRemove(entryId) {
+  try {
+    await removeEntryDB(entryId);
+    setToast('Removed');
+  } catch (e) {
+    setToast('Could not remove — check connection and try again');
+  }
+}
 // The add row that was missing from Paracentesis and Weight. One helper, so the two screens cannot
 // drift apart the way they did in the first place. It deliberately reuses the SAME onLog handlers
 // as the Home cards -- logParacentesis() and logWeight() -- so there is one code path per record
@@ -6685,7 +6683,7 @@ function renderCycle(now) {
   const periods = cyclePeriods();
   const history = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Cycle History'),
-    h('div', { style: { fontSize: '12px', color: '#7D6974', marginBottom: '10px', lineHeight: '1.45' } }, 'Move start or Move end shifts that date to another day.'),
+    h('div', { style: { fontSize: '12px', color: '#7D6974', marginBottom: '10px', lineHeight: '1.45' } }, 'Move start or Move end shifts that date to another day. Remove deletes the most recent marker of the period.'),
     periods.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
       ...periods.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '15px 16px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
@@ -6698,21 +6696,10 @@ function renderCycle(now) {
         h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' } },
           p.startId ? h('button', { 'data-cycle-edit-start': 'true', onClick: () => cycleEditOpen(p.startId, 'cycle_start', 'Period Start', p.start), style: { color: '#8E3D61', fontSize: '13px', fontWeight: '700', padding: '0 14px', borderRadius: '10px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Move start') : null,
           p.endId ? h('button', { 'data-cycle-edit-end': 'true', onClick: () => cycleEditOpen(p.endId, 'cycle_end', 'Period End', p.end), style: { color: '#8E3D61', fontSize: '13px', fontWeight: '700', padding: '0 14px', borderRadius: '10px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Move end') : null,
-          // THERE IS NO REMOVE HERE, AND THAT IS THE POINT.
-          // v66 shipped one and it destroyed data on a single unconfirmed tap. Removing a period's
-          // END reopens that period; cyclePeriods()'s UC20 rule then makes the NEXT cycle_start
-          // update the reopened period instead of starting a new one, so two periods merge and one
-          // row disappears. It could not be undone from the app either: after the merge
-          // cycleActive() is false, so every control offers Period Start only and nothing anywhere
-          // writes a cycle_end for a past day. Measured by the Zero Day Auditor: two seeded periods,
-          // one tap, one period gone, toast said "Removed", no confirmation step -- while every
-          // other destructive control in this app is two-step.
-          //
-          // Moving a date is safe because it is add-then-remove of a marker that is immediately
-          // replaced. Deleting one outright is not, and a delete that can silently merge two months
-          // of a patient's record does not belong behind a single tap. Withdrawn until it can be
-          // done as "delete this period", closing the reopened period as part of the same action.
-          null
+          // Remove exists because the edit's failure path tells the caregiver to delete a leftover
+          // duplicate here. A message naming an action the screen does not offer is the exact class
+          // of defect this release is fixing.
+          p.startId ? h('button', { 'data-cycle-remove': 'true', onClick: () => cycleRemove(p.endId || p.startId), style: { color: '#8E3D61', fontSize: '13px', fontWeight: '700', padding: '0 14px', borderRadius: '10px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove') : null
         )
       ))
     ) : h('div', { style: { background: 'rgba(255,255,255,0.4)', border: '1px dashed rgba(212,104,138,0.2)', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#7D6974', fontSize: '14px', lineHeight: '1.5' } }, 'No periods logged yet.')
@@ -7261,7 +7248,7 @@ function renderWeightTrend(now) {
         ? h('div', { style: { background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '11px 14px', fontSize: '12.5px', color: '#7D6974', lineHeight: '1.45' } },
             'No paracentesis in this range. ' + paraAll.length + ' recorded overall · ' + paraFmtLiters(paraTotalLiters(paraAll)) + ' L total.')
         : null);
-  return paraLine ? [addRow, toggle, chart, stats, paraLine, readings] : [addRow, toggle, chart, stats, readings];
+  return paraLine ? [toggle, chart, stats, paraLine, readings] : [toggle, chart, stats, readings];
 }
 
 
