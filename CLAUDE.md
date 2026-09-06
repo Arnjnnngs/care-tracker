@@ -246,6 +246,20 @@ is a patient's medical app and every extra control is a new way to mis-tap.
    for what is missing is not the same as looking at what is there**, and this role is the one most
    likely to make that mistake. Before adding to a screen, read what it already says.
 
+### THE OUTPUT GOES TO AARON. Every release. Unprompted. (Added 2026-09-06)
+
+Aaron: *"I shouldn't have to ask for enhancer list...otherwise, what is it doing?"*
+
+**The role was being run and its output was being filed.** Two passes sat in `outputs/` — written,
+committed, never surfaced. **A role whose output is a file in a repo the owner does not read is not a
+role, it is a habit.** He had to ask for it twice, which is the same failure as a silent agent run.
+
+**The rule: the proposal list goes IN THE RELEASE MESSAGE, as a short list with a size on each item
+and a recommendation. A release message without one is incomplete.** The write-up still goes in
+`outputs/ENHANCER-PASS-nn.md` for the record; the file is the record, not the delivery. If a pass
+found nothing worth proposing, say that in one line — an explicit "nothing this time" is information,
+silence is not.
+
 ### How to run it
 
 Cheap and mechanical first: extract the actual button labels per screen and tabulate add / edit /
