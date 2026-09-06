@@ -37,11 +37,15 @@ const STUB_APP = `export function initializeApp(c){return{name:'[DEFAULT]',optio
 const STUB_MSG = `export function getMessaging(){throw new Error('off');}
 export async function getToken(){return null;} export function onMessage(){return()=>{};}`;
 const DAY = 86400000, NOW = Date.now();
+// EVERY weight ts in this app is MINUTE-GRANULAR: both logging and editing go through the same
+// datetime-local modal, whose value is YYYY-MM-DDTHH:MM. So seed on a minute boundary, as a real
+// reading is, and an edit that keeps the time produces a document with an IDENTICAL ts.
+const MIN = 60000, floorMin = (t) => Math.floor(t / MIN) * MIN;
 // Two readings, both far past the 48h delete window, as every reading on Brandi's phone is.
 // The OLDER one carries a typo: 105.0 where 150.0 was meant. Real weights, real magnitudes.
 const seed = [
-  { id: 'seed_w_old', medId: 'weight', weight: 105.0, dose: '105.0 lbs', mg: 0, ts: NOW - 20 * DAY },
-  { id: 'seed_w_new', medId: 'weight', weight: 140.0, dose: '140.0 lbs', mg: 0, ts: NOW - 2 * DAY }
+  { id: 'seed_w_old', medId: 'weight', weight: 105.0, dose: '105.0 lbs', mg: 0, ts: floorMin(NOW - 20 * DAY) },
+  { id: 'seed_w_new', medId: 'weight', weight: 140.0, dose: '140.0 lbs', mg: 0, ts: floorMin(NOW - 2 * DAY) }
 ];
 const stubFs = `
 const store={entries:${JSON.stringify(seed)},prefs:{}};const eL=[],pL=[];let n=0;
