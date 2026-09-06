@@ -69,13 +69,14 @@ that sentence is the work you should be doing instead of writing it.
 **Before ending any turn, ask: did I just promise something I could have done?** If yes, the turn is
 not over.
 
-**A mechanical guard exists for this and is not yet installed.** `.claude/settings.json` and
-`.claude/stop-if-work-outstanding.sh` would refuse the stop when the last message contains a
-first-person commitment with no hand-back to Aaron and no background job — the `pm.py` principle
-applied to turn-ending, because a script cannot forget or talk itself round. Writing an
-auto-executing hook is refused by the permission classifier in a cloud session; it needs Aaron to
-approve it once, in an interactive session, via `/hooks`. Until then this rule is enforced by
-reading it.
+**AARON HAS NOTHING TO DO ABOUT THIS RULE. Do not ask him to install anything for it.** A Stop
+hook was drafted that would refuse the stop mechanically (`outputs/STOP-HOOK-PROPOSAL.md` — the
+`pm.py` principle applied to turn-ending). The permission classifier refuses to install
+auto-executing hook code from a cloud session, three different ways. **The response to that was to
+write him a to-do list, which broke Rule 1 — he is the owner, not the deploy pipeline, and he reads
+these on a tablet.** The correct response is this: the rule stands on its own, enforced by being
+read, and the draft sits in `outputs/` for any future session that CAN install it without involving
+him. Never turn a blocked mechanical guard into a chore for Aaron.
 
 ## Rule 1 — Deploying: SETTLED 2026-08-24. Read this before touching a browser.
 

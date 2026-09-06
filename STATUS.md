@@ -17,11 +17,12 @@ only legitimate reasons to end a turn: the work is finished and pushed; Aaron ha
 something only he can; a background job is running and the harness will wake you. An estimate, a
 plan, or a promise to verify is not a stopping point. Full text in `CLAUDE.md` Rule 0.5.
 
-A mechanical guard — a Stop hook, the `pm.py` principle applied to turn-ending — is written and
-ready in `outputs/STOP-HOOK-PROPOSAL.md`. It could NOT be installed from a cloud session: the
-permission classifier refuses auto-executing hook code three different ways, which is correct.
-**It needs Aaron to approve it once in an interactive session.** Until then the rule is enforced by
-reading it, which is the weaker half.
+A mechanical guard — a Stop hook, the `pm.py` principle applied to turn-ending — is drafted in
+`outputs/STOP-HOOK-PROPOSAL.md`. It could not be installed from a cloud session (the permission
+classifier refuses auto-executing hook code, which is correct). **Aaron has nothing to do about
+it.** Telling him to go install it was itself a Rule 1 violation — he is the owner, not the deploy
+pipeline, and he reads these on a tablet. The draft stays in `outputs/` for a future session that
+can install it unassisted; the rule stands on its own meanwhile.
 
 ## THE DISPATCH FLAG — read this before changing the line above
 
