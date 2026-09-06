@@ -70,8 +70,11 @@ const seed = [
   // were no readings -- exactly backwards, and invisible on Brandi's phone, which has months of
   // them. The suite tested the empty state and went green. Whichever state a real device is in is
   // the state the test has to be in.
-  { id: 'seed_w1', medId: 'weight', weight: 156.2, dose: '156.2 lbs', mg: 0, ts: NOW - 2 * DAY },
-  { id: 'seed_w2', medId: 'weight', weight: 154.8, dose: '154.8 lbs', mg: 0, ts: NOW - 9 * DAY }
+  // NINE AND TWENTY DAYS OLD, BOTH WELL PAST THE 48-HOUR DELETE WINDOW. The first version of this
+  // suite seeded a 2-day-old reading and edited THAT, so it exercised the only age at which a
+  // delete-based edit could have worked. Every reading on a real phone is older than this window.
+  { id: 'seed_w1', medId: 'weight', weight: 156.2, dose: '156.2 lbs', mg: 0, ts: NOW - 9 * DAY },
+  { id: 'seed_w2', medId: 'weight', weight: 154.8, dose: '154.8 lbs', mg: 0, ts: NOW - 20 * DAY }
 ];
 const stubFs = `
 const store={entries:${JSON.stringify(seed)},prefs:{}};const eL=[],pL=[];let n=0;
@@ -83,10 +86,20 @@ export function orderBy(){return{};}
 export function onSnapshot(ref,cb){if(ref&&ref.__kind==='q'){eL.push(cb);cb(snap(store.entries));return()=>{};}
  pL.push(cb);cb({exists:()=>true,data:()=>store.prefs});return()=>{};}
 export async function addDoc(c,d){store.entries.push(Object.assign({id:'a'+(++n)},d));push();return{id:'a'+n};}
-export async function deleteDoc(ref){const id=ref&&ref.id;store.entries=store.entries.filter(e=>String(e.id)!==String(id));push();}
+export async function deleteDoc(ref){const id=ref&&ref.id;
+ // EVERY DELETE IS RECORDED. STATUS.md's v52 section states the Firestore rules refuse a delete by
+ // document AGE with no medId exemption -- which is why a paracentesis is removed by appending a
+ // tombstone. The first draft of the v69 weight edit called deleteDoc on every row; on Brandi's
+ // phone, where readings are months old, the correction would have been added and the old reading
+ // left behind. The rules are not in this repo and cannot be read from here, so the suite asserts
+ // the app never DEPENDS on a delete rather than asserting what the rules do.
+ const hit=store.entries.find(e=>String(e.id)===String(id));
+ globalThis.__deleted.push({id:String(id),medId:hit?hit.medId:null});
+ store.entries=store.entries.filter(e=>String(e.id)!==String(id));push();}
 export async function setDoc(){}
 export async function getDocs(){return snap(store.entries);} export function serverTimestamp(){return Date.now();}
 globalThis.__entryCount=()=>store.entries.length;
+globalThis.__deleted=[];
 `;
 
 const server = http.createServer((rq, rs) => {
@@ -149,7 +162,9 @@ const confirmModal = async (where) => {
 const paraCount = () => page.evaluate(() => window.__paraCount ? window.__paraCount() : null);
 await page.evaluate(() => {
   // paracentesisResolved is module-scoped; expose the row count via the rendered rows' own hook.
-  window.__paraCount = () => document.querySelectorAll('[data-para-edit]').length;
+  // COUNT THE ROW, NOT THE EDIT BUTTON -- the same trap that produced a false red in the weight
+  // section. A row showing Delete/Keep has no Edit button.
+  window.__paraCount = () => document.querySelectorAll('[data-para-row]').length;
 });
 
 console.log('\n1. Paracentesis — the screen that could delete but not add');
@@ -275,6 +290,16 @@ console.log('\n3. Weight — the same defect, unreported');
     await page.waitForTimeout(600);
     const afterR = await wCount();
     t('confirming removes exactly one reading', beforeR > 0 && afterR === beforeR - 1, beforeR + ' -> ' + afterR);
+
+    // THE GUARANTEE, not the symptom. Both flows above ran against readings 9 and 20 days old, so
+    // if either had reached for deleteDoc this is where it shows -- age-independently, without the
+    // suite having to know what the Firestore rules actually say. Mirrors PARA-7.
+    const dels = await page.evaluate(() => (globalThis.__deleted || []).filter(d => d.medId === 'weight'));
+    const anyWeightWrites = await wCount();
+    t('a weight edit and a weight removal both actually ran', beforeW > 0 && beforeR > 0 && anyWeightWrites >= 0,
+      'edited ' + beforeW + ' row(s), removed from ' + beforeR);
+    t('correcting or removing a weight NEVER deletes a document', dels.length === 0,
+      dels.length ? JSON.stringify(dels) : 'no deleteDoc on any weight');
   }
 }
 

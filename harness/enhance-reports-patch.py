@@ -439,9 +439,9 @@ sub("""      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight
     );
   });""",
     """      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight: '600', color: '#7B3F6B' } }, p.weight + ' lbs'),
-      state.confirmRemoveWeight === p.id
+      state.confirmRemoveWeight === p.weightId
         ? h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
-            h('button', { onClick: () => removeWeightReading(p.id), style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px', minHeight: '44px' } }, 'Delete'),
+            h('button', { onClick: () => removeWeightReading(p.weightId), style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px', minHeight: '44px' } }, 'Delete'),
             h('button', { onClick: () => setState({ confirmRemoveWeight: null }), style: { color: '#7D6974', fontSize: '12.5px', padding: '8px 6px', fontWeight: '600', minHeight: '44px' } }, 'Keep')
           )
         : h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center', flexShrink: '0' } },
@@ -452,19 +452,70 @@ sub("""      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight
             // which has always done this. Without it a red Delete sits armed on a medical record
             // through scrolling and through leaving the screen and coming back, and a mis-tap is
             // exactly what a two-step confirmation exists to prevent.
-            h('button', { 'data-weight-remove': 'true', onClick: () => { setState({ confirmRemoveWeight: p.id }); setTimeout(() => { if (state.confirmRemoveWeight === p.id) setState({ confirmRemoveWeight: null }); }, 6000); }, style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
+            h('button', { 'data-weight-remove': 'true', onClick: () => { setState({ confirmRemoveWeight: p.weightId }); setTimeout(() => { if (state.confirmRemoveWeight === p.weightId) setState({ confirmRemoveWeight: null }); }, 6000); }, style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
           )
     );
   });""",
     'weight-row-controls')
 
+# CORRECTING A WEIGHT IS AN APPEND, NEVER A DELETE -- and the first version of this release got it
+# wrong in exactly the way STATUS.md warned about seventeen releases ago. From the v52 section:
+#
+#     "The Firestore rules block deletes by document age, with no medId exemption. BYPASS_48H_IDS
+#      only shows or hides a button; it cannot grant a delete the rules refuse."
+#
+# That is why removeParacentesis() appends a tombstone. The first draft of the weight edit called
+# deleteDoc on every row with no age check, so on any reading older than two days the correction
+# would have been ADDED and the old reading NOT removed: two weights for the same moment, forever,
+# on the screen a clinician reads a trend off. The Zero Day Audit reproduced it -- 2 rows became 3.
+#
+# The rules are not in this repo and cannot be read from here, so the claim above cannot be settled
+# either way. THAT IS THE ARGUMENT FOR THIS DESIGN, not against it: an append works whatever the
+# rules say. Betting a patient's record on an unverifiable premise is the part that was wrong.
+#
+# Grouping is by `weightId`, falling back to the document's own id. Every weight already on Brandi's
+# phone has no weightId, so each is its own group and the resolver returns them untouched -- this
+# cannot disturb existing readings.
 sub("""async function removeParacentesis(paraId) {""",
-    """function weightEditOpen(p) {
-  setState({ timeModal: { type: 'weight', editId: p.id, weightValue: p.weight, timeValue: toLocalISO(p.ts) } });
+    """// ---- WEIGHT CORRECTIONS (v69) ----
+// Same shape as PARACENTESIS above: the newest document per group wins and cancelled:true is a
+// tombstone. A legacy reading carries no weightId and is its own group, so nothing changes for it
+// until it is corrected. A Map, not a plain object, for the reason spelled out at
+// paracentesisResolved(): an id of 'constructor' reads back a truthy inherited value.
+function weightSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
+function weightResolved() {
+  const byGroup = new Map();
+  for (const d of (state.entries || [])) {
+    if (!d || d.medId !== 'weight') continue;
+    const key = (typeof d.weightId === 'string' && d.weightId) ? d.weightId : ('doc:' + String(d.id));
+    const prev = byGroup.get(key);
+    if (!prev || weightSupersedes(d, prev)) byGroup.set(key, d);
+  }
+  const live = [];
+  byGroup.forEach((w, key) => {
+    if (w.cancelled) return;                                        // tombstone
+    if (!(typeof w.ts === 'number' && isFinite(w.ts) && w.ts > 0)) return;
+    const n = Number(w.weight);
+    if (!isFinite(n) || n <= 0) return;                             // unusable reading, do not guess one
+    live.push(Object.assign({}, w, { weightId: key, weight: n }));
+  });
+  return live.sort((a, b) => a.ts - b.ts);                          // oldest first, as the chart wants
 }
-async function removeWeightReading(id) {
+function weightLatest() { const l = weightResolved(); return l.length ? l[l.length - 1] : null; }
+
+function weightEditOpen(p) {
+  // prevStamp travels with the modal so the correction can be stamped strictly newer than what it
+  // supersedes. A legacy reading has no loggedAt, so its ts stands in -- the same fix v67 made for
+  // paracentesis, where an edit silently no-opped on a record with no loggedAt while the toast
+  // said "updated".
+  setState({ timeModal: { type: 'weight', editId: p.weightId, weightValue: p.weight, timeValue: toLocalISO(p.ts), prevStamp: (p.loggedAt || p.ts || 0) } });
+}
+async function removeWeightReading(gid) {
+  const p = weightResolved().find(x => x.weightId === gid);
+  if (!p) return;
   try {
-    await removeEntryDB(id);
+    await addEntryDB({ medId: 'weight', weightId: gid, weight: p.weight, dose: 'Weight removed', mg: 0,
+                       ts: p.ts, cancelled: true, loggedAt: Math.max(Date.now(), (p.loggedAt || p.ts || 0) + 1) });
     setState({ confirmRemoveWeight: null });
     setToast('Weight reading removed');
   } catch (e) {
@@ -476,9 +527,10 @@ async function removeWeightReading(id) {
 async function removeParacentesis(paraId) {""",
     'weight-edit-helpers')
 
-# The weight branch has to handle an edit, and ADD BEFORE REMOVE for the same reason the marker
-# branch does: a failed remove leaves a visible duplicate the caregiver can delete, while the
-# reverse order lets a failed add destroy the reading in silence.
+# The weight branch handles a correction by APPENDING a superseding document -- no delete, so it
+# works at any age and cannot half-succeed. The add-before-remove dance the first draft used is gone
+# with the delete it was protecting: there is now only one write, and if it fails addEntryDB's own
+# red banner says so and the success toast never fires.
 sub("""  } else if (m.type === 'weight') {
     const v = m.weightValue;
     const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
@@ -492,17 +544,12 @@ sub("""  } else if (m.type === 'weight') {
     if (!(typeof v === 'number' && isFinite(v) && v > 0 && v <= 999)) { setToast('Enter a valid weight'); return; }
     const editId = m.editId;
     const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
+    if (editId) {
+      entry.weightId = editId;
+      entry.loggedAt = Math.max(Date.now(), (m.prevStamp || 0) + 1);
+    }
     setState({ weightInput: '', timeModal: null });
     await addEntryDB(entry);
-    if (editId) {
-      try {
-        await removeEntryDB(editId);
-      } catch (err) {
-        console.warn('[weight] corrected but old reading not removed:', err);
-        setToast('Weight updated, but the old reading is still there — remove it from the list below');
-        return;
-      }
-    }
     setToast('Weight ' + v + ' lbs ' + (editId ? 'updated' : 'logged') + ' at ' + fmtTime(ts));""",
     'weight-edit-confirm')
 
@@ -529,8 +576,51 @@ sub("""confirmRemovePara: null,""", """confirmRemovePara: null, confirmRemoveWei
 # button; a row showing the Delete/Keep confirmation has no Edit button, so arming the confirmation
 # looked exactly like a deletion that had not happened. Count the row, not the control.
 sub("""    return h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },""",
-    """    return h('div', { 'data-weight-row': p.id, style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },""",
+    """    return h('div', { 'data-weight-row': p.weightId, style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },""",
     'weight-row-hook')
+
+# EVERY SCREEN THAT READS A WEIGHT NOW READS THE RESOLVED ONE. Miss one of these and a corrected
+# reading shows the OLD value on that screen while the Weight report shows the new -- two numbers for
+# one weigh-in, which is worse than not offering the correction at all.
+#
+# Deliberately NOT changed, for consistency with how paracentesis and appointments already behave
+# here: History, the CSV export and the printable report show raw documents, so a correction appears
+# there as what it is -- the original reading, then the correction, then any removal. Those screens
+# are the audit trail; hiding a superseded value from them would be the wrong kind of tidy.
+sub("""function weightDefault() { const lw = latest('weight'); return lw ? String(lw.weight) : ''; }""",
+    """function weightDefault() { const lw = weightLatest(); return lw ? String(lw.weight) : ''; }""",
+    'reader-weightDefault')
+
+sub("""  const weightLoggedToday = state.entries.some(e => e.medId === 'weight' && e.ts >= dayStart(now));""",
+    """  const weightLoggedToday = weightResolved().some(w => w.ts >= dayStart(now));""",
+    'reader-weightLoggedToday')
+
+sub("""  const lastWeight = latest('weight');""",
+    """  const lastWeight = weightLatest();""",
+    'reader-home-card')
+
+sub("""const latestWeight = latest('weight');""",
+    """const latestWeight = weightLatest();""",
+    'reader-report-card-meta')
+
+# History shows the tombstone as what it is, the same way a removed paracentesis reads "Removed"
+# rather than as a phantom reading of the old value.
+sub("""  if (e.medId === 'weight') return e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '');""",
+    """  if (e.medId === 'weight') return e.cancelled ? 'Removed' : (e.dose || (e.weight !== undefined ? e.weight + ' lbs' : ''));""",
+    'history-weight-tombstone')
+
+sub("""  const weightEntries = state.entries.filter(e => e.medId === 'weight' && e.weight).sort((a, b) => a.ts - b.ts);""",
+    """  const weightEntries = weightResolved();""",
+    'reader-weight-report')
+
+# The same row hook the Weight list gained, for the same reason. enhance-test counted paracentesis
+# rows by their Edit button; a row showing the Delete/Keep confirmation has no Edit button, so the
+# count would read a confirmation as a deletion. It has not bitten yet only because no para check
+# happens to arm a confirmation -- the v69 audit named it, and a latent trap in a suite that guards
+# a patient's record is worth ten seconds.
+sub("""    ...list.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },""",
+    """    ...list.map(p => h('div', { 'data-para-row': p.paraId, style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },""",
+    'para-row-hook')
 
 # ---------------------------------------------------------------------------------------------
 # THE RELEASE STAMP. Rule 0 says a release must be reproducible from the repo alone: base version

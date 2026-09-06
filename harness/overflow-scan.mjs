@@ -114,7 +114,13 @@ const SEED = [
   { id: 's8', medId: 'paracentesis', dose: '4.5 L', mg: 0, ts: now - 86400000, liters: 4.5 },
   { id: 's9', medId: 'inpatient_start', dose: null, mg: 0, ts: now - 172800000 },
   { id: 's10', medId: 'chemo_date', dose: 'Chemo scheduled', mg: 0, ts: now - 259200000, loggedAt: now - 259200000 },
-  { id: 's11', medId: 'symptom_nausea', dose: 'Sharp rib pain after the second dose, worse lying down', mg: 0, ts: now - 12600000 }
+  { id: 's11', medId: 'symptom_nausea', dose: 'Sharp rib pain after the second dose, worse lying down', mg: 0, ts: now - 12600000 },
+  // ADDED v69 so the report DETAIL screens render populated lists. An empty report has no rows and
+  // therefore no row controls, so scanning it would prove nothing about the screens this release
+  // changed.
+  { id: 's12', medId: 'weight', dose: '178.4 lbs', mg: 0, ts: now - 9 * 86400000, weight: 178.4 },
+  { id: 's13', medId: 'cycle_start', dose: null, mg: 0, ts: now - 12 * 86400000 },
+  { id: 's14', medId: 'cycle_end', dose: null, mg: 0, ts: now - 8 * 86400000 }
 ];
 
 const SCREENS = ['home', 'meds', 'reports', 'inpatient', 'symptoms'];
@@ -323,7 +329,46 @@ for (const dev of DEVICES) {
       if (b) { b.click(); return true; }
       return false;
     });
-  } }];
+  } },
+  // THE REPORT DETAIL SCREENS. Found missing by the v69 Zero Day Audit: 'reports' in SCREENS is the
+  // reports MENU, so this scan had never once rendered a report's contents. It reported "80/80
+  // CLEAN" across three releases that added row controls to exactly those screens -- a render gate
+  // that skips the thing under change, which is the failure this file exists to prevent and which
+  // it had quietly reintroduced one level in.
+  //
+  // Each pass proves its own screen by a data- hook rather than by text. History, Appetite and
+  // Bowel Movement are still NOT covered here -- they carry no per-row controls, and claiming
+  // coverage this scan does not have is what went wrong in the first place.
+  ...[['Weight', '[data-weight-row]'], ['Paracentesis', '[data-para-edit]'], ['Cycle', '[data-cycle-edit-start]']]
+    .map(([label, marker]) => ({ name: 'report-' + label.toLowerCase(), open: async page => {
+      // RE-SEED FIRST. An earlier overlay pass RELOADS the page to produce the update pop-up, and a
+      // reload empties the stub's entry list -- so these passes found every report empty and
+      // reported themselves unreachable, which is the honest outcome but not the useful one.
+      await page.evaluate(rows => { try { rows.forEach(r => globalThis.__mc.pushEntry(r)); } catch (e) {} }, SEED);
+      await page.waitForTimeout(600);
+      // And dismiss anything covering the screen, for the same reason.
+      await page.evaluate(() => {
+        const close = [...document.querySelectorAll('button')].find(b => /^(Got it|Close|Done|Cancel)$/i.test((b.innerText || '').trim()));
+        if (close) close.click();
+      });
+      await page.waitForTimeout(400);
+      const onMenu = await page.evaluate(async () => {
+        const nav = [...document.querySelectorAll('button')].find(b =>
+          ((b.getAttribute('aria-label') || b.innerText || '').trim().toLowerCase()) === 'reports');
+        if (!nav) return false;
+        nav.click();
+        await new Promise(r => setTimeout(r, 600));
+        return true;
+      });
+      if (!onMenu) return 'the Reports tab is not on screen';
+      const picked = await page.evaluate(lbl => {
+        const b = [...document.querySelectorAll('button')].find(x => (x.innerText || '').trim().startsWith(lbl));
+        if (!b) return false; b.click(); return true;
+      }, label);
+      if (!picked) return 'no ' + label + ' card on the Reports menu';
+      await page.waitForTimeout(800);
+      return page.evaluate(m => document.querySelector(m) ? true : 'that report rendered no rows', marker);
+    } }))];
 
   for (const screen of SCREENS) {
     // CLICK THE REAL NAV BUTTON. The first version called navigateTo() inside page.evaluate, wrapped

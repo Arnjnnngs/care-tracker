@@ -1094,7 +1094,7 @@ const APP_VERSION = 'v69';
 const CHANGELOG = [
   { v: 'v69', date: 'Sep 6, 2026', title: 'Fix a weight you typed wrong',
     points: [
-      'A weight reading can now be corrected or removed from the Weight report \u2014 tap Edit to change the number or the time, or Remove to delete it. Before this, a weight typed wrong could only be fixed from History.',
+      'A weight reading can now be corrected or removed from the Weight report \u2014 tap Edit to change the number or the time, or Remove to delete it. Before this, a weight typed wrong had to be deleted from History and typed in again.',
       'Removing asks twice, like everywhere else in the app: Remove, then Delete.'
     ] },
   { v: 'v68', date: 'Sep 6, 2026', title: 'Fix a mistake where you find it',
@@ -1951,7 +1951,7 @@ async function setChemoDate() {
   setToast('Chemo date set — ' + new Date(ts).toLocaleDateString());
 }
 
-function weightDefault() { const lw = latest('weight'); return lw ? String(lw.weight) : ''; }
+function weightDefault() { const lw = weightLatest(); return lw ? String(lw.weight) : ''; }
 async function logWeight() {
   const raw = (state.weightInput || '').trim();
   const v = parseFloat(raw);
@@ -1993,18 +1993,13 @@ async function confirmTimeAndLog() {
     if (!(typeof v === 'number' && isFinite(v) && v > 0 && v <= 999)) { setToast('Enter a valid weight'); return; }
     const editId = m.editId;
     const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
+    if (editId) {
+      entry.weightId = editId;
+      entry.loggedAt = Math.max(Date.now(), (m.prevStamp || 0) + 1);
+    }
     setState({ weightInput: '', timeModal: null });
     await addEntryDB(entry);
-    if (editId) {
-      try {
-        await removeEntryDB(editId);
-      } catch (err) {
-        console.warn('[weight] corrected but old reading not removed:', err);
-        setToast('Weight corrected, but the old reading is still there — remove it from the Weight report');
-        return;
-      }
-    }
-    setToast('Weight ' + v + ' lbs ' + (editId ? 'corrected' : 'logged') + ' at ' + fmtTime(ts));
+    setToast('Weight ' + v + ' lbs ' + (editId ? 'updated' : 'logged') + ' at ' + fmtTime(ts));
   } else if (m.type === 'para') {
     const v = m.paraValue;
     // The liters are typed into the modal when editing, so they are re-validated HERE rather than
@@ -3711,7 +3706,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // without a reading: quiet reminder in the morning, firmer by afternoon, urgent by evening.
   // (Shares its escalation rules with the Bowel Movement and Appetite alerts above via
   // dailyAlertLevel()/dailyAlertStyle() — all three "must be answered" cards behave identically.)
-  const weightLoggedToday = state.entries.some(e => e.medId === 'weight' && e.ts >= dayStart(now));
+  const weightLoggedToday = weightResolved().some(w => w.ts >= dayStart(now));
   if (!weightLoggedToday) {
     const level = dailyAlertLevel(now);
     const s = dailyAlertStyle(level);
@@ -3744,7 +3739,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   let tempColor = '#3D2B3A';
   if (lastTemp) { if (lastTemp.temp >= tempHigh()) tempColor = '#C0453B'; else if (lastTemp.temp >= tempFever()) tempColor = '#9A6419'; }
   const tempSubLabel = lastTemp ? ('Last reading ' + fmtTime(lastTemp.ts)) : 'No readings yet';
-  const lastWeight = latest('weight');
+  const lastWeight = weightLatest();
   const weightSubLabel = lastWeight ? ('Last reading ' + fmtTime(lastWeight.ts)) : 'No readings yet';
 
   // Acetaminophen meter (full width) — shown only when Tylenol is still on the active
@@ -4396,7 +4391,7 @@ function renderMedicationManager(now) {
 
 function reportDescriptor(type, now) {
   if (type === 'history') return { label: 'History', icon: 'history', description: 'Review dose, symptom, and vital logs by day.', meta: state.entries.length + ' recorded entries' };
-  if (type === 'weight') { const latestWeight = latest('weight'); return { label: 'Weight', icon: 'chart', description: 'Explore weight readings, trends, and recent changes.', meta: latestWeight ? (latestWeight.weight + ' lbs latest') : 'No readings yet' }; }
+  if (type === 'weight') { const latestWeight = weightLatest(); return { label: 'Weight', icon: 'chart', description: 'Explore weight readings, trends, and recent changes.', meta: latestWeight ? (latestWeight.weight + ' lbs latest') : 'No readings yet' }; }
   if (type === 'cycle') {
     const active = cycleActive();
     const day = daysSinceCycleStart();
@@ -4970,12 +4965,45 @@ function reportAddRow(opts) {
   );
 }
 
-function weightEditOpen(p) {
-  setState({ timeModal: { type: 'weight', editId: p.id, weightValue: p.weight, timeValue: toLocalISO(p.ts) } });
+// ---- WEIGHT CORRECTIONS (v69) ----
+// Same shape as PARACENTESIS above: the newest document per group wins and cancelled:true is a
+// tombstone. A legacy reading carries no weightId and is its own group, so nothing changes for it
+// until it is corrected. A Map, not a plain object, for the reason spelled out at
+// paracentesisResolved(): an id of 'constructor' reads back a truthy inherited value.
+function weightSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
+function weightResolved() {
+  const byGroup = new Map();
+  for (const d of (state.entries || [])) {
+    if (!d || d.medId !== 'weight') continue;
+    const key = (typeof d.weightId === 'string' && d.weightId) ? d.weightId : ('doc:' + String(d.id));
+    const prev = byGroup.get(key);
+    if (!prev || weightSupersedes(d, prev)) byGroup.set(key, d);
+  }
+  const live = [];
+  byGroup.forEach((w, key) => {
+    if (w.cancelled) return;                                        // tombstone
+    if (!(typeof w.ts === 'number' && isFinite(w.ts) && w.ts > 0)) return;
+    const n = Number(w.weight);
+    if (!isFinite(n) || n <= 0) return;                             // unusable reading, do not guess one
+    live.push(Object.assign({}, w, { weightId: key, weight: n }));
+  });
+  return live.sort((a, b) => a.ts - b.ts);                          // oldest first, as the chart wants
 }
-async function removeWeightReading(id) {
+function weightLatest() { const l = weightResolved(); return l.length ? l[l.length - 1] : null; }
+
+function weightEditOpen(p) {
+  // prevStamp travels with the modal so the correction can be stamped strictly newer than what it
+  // supersedes. A legacy reading has no loggedAt, so its ts stands in -- the same fix v67 made for
+  // paracentesis, where an edit silently no-opped on a record with no loggedAt while the toast
+  // said "updated".
+  setState({ timeModal: { type: 'weight', editId: p.weightId, weightValue: p.weight, timeValue: toLocalISO(p.ts), prevStamp: (p.loggedAt || p.ts || 0) } });
+}
+async function removeWeightReading(gid) {
+  const p = weightResolved().find(x => x.weightId === gid);
+  if (!p) return;
   try {
-    await removeEntryDB(id);
+    await addEntryDB({ medId: 'weight', weightId: gid, weight: p.weight, dose: 'Weight removed', mg: 0,
+                       ts: p.ts, cancelled: true, loggedAt: Math.max(Date.now(), (p.loggedAt || p.ts || 0) + 1) });
     setState({ confirmRemoveWeight: null });
     setToast('Weight reading removed');
   } catch (e) {
@@ -5547,7 +5575,7 @@ function reportNameOf(id) {
 function exportDetailFor(e) {
   if (!e) return '';
   if (e.medId === 'temp') return e.dose || (e.temp !== undefined ? e.temp + tempSuffix() : '');
-  if (e.medId === 'weight') return e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '');
+  if (e.medId === 'weight') return e.cancelled ? 'Removed' : (e.dose || (e.weight !== undefined ? e.weight + ' lbs' : ''));
   if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : (e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || ''));
   if (e.medId === 'bowel_movement') return BOWEL_MOVEMENT_LABELS[e.value] || e.dose || e.value || '';
   if (e.medId === 'appetite') return APPETITE_LABELS[e.value] || e.dose || e.value || '';
@@ -7078,7 +7106,7 @@ function renderParacentesis(now) {
   const note = h('div', { style: { background: 'rgba(170,83,117,0.08)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '14px', padding: '12px 14px', fontSize: '12.5px', color: '#6E5261', lineHeight: '1.5' } },
     'These are recorded separately from weight — the Weight report still shows what the scale actually said, with a marker on each drain date.');
   const rows = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-    ...list.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+    ...list.map(p => h('div', { 'data-para-row': p.paraId, style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { flex: '1', minWidth: '0' } },
         h('div', { style: { fontSize: '14.5px', fontWeight: '700', color: '#3D2B3A' } }, paraFmtLiters(p.liters) + ' L drained'),
         h('div', { style: { fontSize: '12px', color: '#7D6974', marginTop: '2px' } }, fmtDateLabel(p.ts))
@@ -7090,7 +7118,10 @@ function renderParacentesis(now) {
           )
         : h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center', flexShrink: '0' } },
             h('button', { 'data-para-edit': 'true', onClick: () => paraEditOpen(p), style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Edit'),
-            h('button', { onClick: () => setState({ confirmRemovePara: p.paraId }), style: { flexShrink: '0', color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
+            // Six-second arm, then it disarms itself -- the same behaviour History's Remove has
+            // always had. v68 shipped this control without it, so a red Delete stayed armed on a
+            // procedure indefinitely. Fixed here rather than filed.
+            h('button', { onClick: () => { setState({ confirmRemovePara: p.paraId }); setTimeout(() => { if (state.confirmRemovePara === p.paraId) setState({ confirmRemovePara: null }); }, 6000); }, style: { flexShrink: '0', color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
           )
     ))
   );
@@ -7098,7 +7129,7 @@ function renderParacentesis(now) {
 }
 
 function renderWeightTrend(now) {
-  const weightEntries = state.entries.filter(e => e.medId === 'weight' && e.weight).sort((a, b) => a.ts - b.ts);
+  const weightEntries = weightResolved();
   const range = state.weightRange;
   const DAY = 86400000;
 
@@ -7268,22 +7299,26 @@ function renderWeightTrend(now) {
     const d = new Date(p.ts);
     const day = d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' });
     const time = fmtTime(p.ts);
-    return h('div', { 'data-weight-row': p.id, style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },
+    return h('div', { 'data-weight-row': p.weightId, style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },
       h('div', { style: { flex: '1' } },
         h('div', { style: { fontSize: '14px', fontWeight: '700' } }, day),
         h('div', { style: { fontSize: '12px', color: '#7D6974' } }, time)
       ),
       h('div', { className: 'mono', style: { fontSize: '16px', fontWeight: '600', color: '#7B3F6B' } }, p.weight + ' lbs'),
-      state.confirmRemoveWeight === p.id
+      state.confirmRemoveWeight === p.weightId
         ? h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
-            h('button', { onClick: () => removeWeightReading(p.id), style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px', minHeight: '44px' } }, 'Delete'),
+            h('button', { onClick: () => removeWeightReading(p.weightId), style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px', minHeight: '44px' } }, 'Delete'),
             h('button', { onClick: () => setState({ confirmRemoveWeight: null }), style: { color: '#7D6974', fontSize: '12.5px', padding: '8px 6px', fontWeight: '600', minHeight: '44px' } }, 'Keep')
           )
         : h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center', flexShrink: '0' } },
             h('button', { 'data-weight-edit': 'true', onClick: () => weightEditOpen(p), style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Edit'),
             // TWO-STEP, like every other destructive control here. v66 shipped a one-tap delete on
             // Cycle History and it destroyed a whole period.
-            h('button', { 'data-weight-remove': 'true', onClick: () => setState({ confirmRemoveWeight: p.id }), style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
+            // ARMS FOR SIX SECONDS, then disarms itself -- copied from the History row's Remove,
+            // which has always done this. Without it a red Delete sits armed on a medical record
+            // through scrolling and through leaving the screen and coming back, and a mis-tap is
+            // exactly what a two-step confirmation exists to prevent.
+            h('button', { 'data-weight-remove': 'true', onClick: () => { setState({ confirmRemoveWeight: p.weightId }); setTimeout(() => { if (state.confirmRemoveWeight === p.weightId) setState({ confirmRemoveWeight: null }); }, 6000); }, style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
           )
     );
   });

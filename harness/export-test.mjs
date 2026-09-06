@@ -490,7 +490,7 @@ async function newPage(browser, url, net, opts) {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
   });
 
-  await context.addInitScript(({ fixture, fixedNow, medConfig, medKey }) => {
+  await context.addInitScript(({ fixture, fixedNow, medConfig, medKey, seenKey, seenVersion }) => {
     // sw.js is cache-first and would serve a stale build across runs. Deleting the property makes
     // `'serviceWorker' in navigator` false, so the app's own guard skips registration.
     try { delete Navigator.prototype.serviceWorker; } catch (e) {}
@@ -505,12 +505,21 @@ async function newPage(browser, url, net, opts) {
     try {
       localStorage.clear();
       if (medConfig) localStorage.setItem(medKey, JSON.stringify(medConfig));
+      // THIS PHONE HAS ALREADY SEEN THIS VERSION. Without it the What's-New pop-up opens over the
+      // app and swallows the first click, and every run of this suite died on
+      // "[data-cal-menu-button] intercepts pointer events" -- a failure that looks like a broken
+      // export and is nothing of the kind. The version is READ OUT OF THE FILE UNDER TEST, never
+      // pinned, so this does not have to be touched again on the next release.
+      if (seenKey && seenVersion) localStorage.setItem(seenKey, seenVersion);
     } catch (e) {}
   }, {
     fixture: options.fixture || buildFixture(),
     fixedNow: FIXED_NOW,
     medConfig: options.medConfig === undefined ? buildMedConfig() : options.medConfig,
-    medKey: MED_CONFIG_KEY
+    medKey: MED_CONFIG_KEY,
+    seenKey: 'caretracker-seen-version',
+    // Read from the file under test at call time -- APP_FILE is module scope, `html` is not.
+    seenVersion: (fs.readFileSync(APP_FILE, 'utf-8').match(/const APP_VERSION = '([^']+)'/) || [])[1] || ''
   });
 
   const page = await context.newPage();
