@@ -353,6 +353,42 @@ console.log('\n4. Cycle — a period logged on the wrong day can be moved');
     // one start, so the merge rule is never reached. What it does check is that the move did not
     // duplicate the period, which is worth checking under its own name.
     t('the move replaced the period rather than duplicating it', stillOne === 1, stillOne + ' period(s)');
+
+    // v70. THE GUARANTEE, not the symptom. The seeded markers are 10 and 6 days old -- well past
+    // the 48-hour window in which a delete can be relied on -- so if the move had reached for
+    // deleteDoc this is where it shows, age-independently, without the suite needing to know what
+    // the Firestore rules actually say. Same shape as the weight check above and as PARA-7.
+    const mdels = await page.evaluate(() => (globalThis.__deleted || [])
+      .filter(d => d.medId === 'cycle_start' || d.medId === 'cycle_end'));
+    t('moving a period date NEVER deletes a document', mdels.length === 0,
+      mdels.length ? JSON.stringify(mdels) : 'no deleteDoc on any cycle marker');
+
+    // MOVE THE SAME START A SECOND TIME. The correction has to edit the same GROUP, not spawn a
+    // second independent one -- otherwise the third date would land beside the second instead of
+    // replacing it, and cyclePeriods()'s UC20 merge rule would be the only thing hiding it.
+    const beforeSecond = await page.evaluate(() => {
+      const b = document.querySelector('[data-cycle-edit-start]');
+      return b ? b.closest('div').parentElement.innerText : '';
+    });
+    await page.evaluate(() => { const b = document.querySelector('[data-cycle-edit-start]'); if (b) b.click(); });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      const inp = document.querySelector('input[type="datetime-local"]');
+      if (!inp) return;
+      const d = new Date(inp.value); d.setDate(d.getDate() - 3);
+      const p2 = (n) => String(n).padStart(2, '0');
+      inp.value = d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await confirmModal('cycle-move-2');
+    const afterSecond = await page.evaluate(() => {
+      const b = document.querySelector('[data-cycle-edit-start]');
+      return b ? b.closest('div').parentElement.innerText : '(gone)';
+    });
+    const stillOneAfterTwo = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
+    t('a second move corrects the first rather than adding another period', stillOneAfterTwo === 1, stillOneAfterTwo + ' period(s)');
+    t('the second move actually changed the date again', afterSecond !== beforeSecond,
+      beforeSecond.replace(/\n/g,' ').slice(0,34) + '  ->  ' + afterSecond.replace(/\n/g,' ').slice(0,34));
   }
 }
 

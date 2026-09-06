@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v70';
+const APP_VERSION = 'v69';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,11 +1092,6 @@ const APP_VERSION = 'v70';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v70', date: 'Sep 6, 2026', title: 'Moving a period date now actually works',
-    points: [
-      'Moving a period start or end only worked if the date was less than two days old. Older than that, the app said it had moved the date and quietly kept the old one as well. It works at any age now.',
-      'Nothing is deleted when you move a date \u2014 the correction is recorded on top of the old one, the same way a corrected paracentesis or weight already worked.'
-    ] },
   { v: 'v69', date: 'Sep 6, 2026', title: 'Fix a weight you typed wrong',
     points: [
       'A weight reading can now be corrected or removed from the Weight report \u2014 tap Edit to change the number or the time, or Remove to delete it. Before this, a weight typed wrong had to be deleted from History and typed in again.',
@@ -2096,18 +2091,25 @@ async function confirmTimeAndLog() {
   } else if (m.type === 'marker') {
     const editId = m.editId;
     setState({ timeModal: null });
-    // ONE WRITE. The add-then-remove dance is gone with the delete it was protecting: a move now
-    // APPENDS a document that supersedes the old date, so it works at any age and cannot leave the
-    // record half-corrected. If the write fails, addEntryDB's own red banner says so and the
-    // success toast never fires.
-    const markerEntry = { medId: m.medId, dose: null, mg: 0, ts };
+    // ADD FIRST, THEN REMOVE -- the order is the whole safety argument. If the remove fails the
+    // caregiver is left with a visible duplicate she can delete from Cycle History. Reverse it and
+    // a failed add silently destroys the marker with nothing on screen to say so. For a medical
+    // record the survivable failure is the duplicate.
+    await addEntryDB({ medId: m.medId, dose: null, mg: 0, ts });
     if (editId) {
-      markerEntry.markerId = editId;
-      markerEntry.loggedAt = Math.max(Date.now(), (m.prevStamp || 0) + 1);
+      try {
+        await removeEntryDB(editId);
+      } catch (err) {
+        console.warn('[marker] moved but old entry not removed:', err);
+        // NOT "remove it from Cycle History". That instruction was only correct when the date moved
+        // EARLIER: move a start LATER and p.startId points at the new entry, so following it would
+        // delete the correction and silently restore the original date. There is also no Remove on
+        // that screen any more. Say what happened and what to do that actually works.
+        setToast(m.label + ' moved, but the old date is still recorded — move it again to the date you want');
+        return;
+      }
     }
-    await addEntryDB(markerEntry);
     setToast(m.label + (editId ? ' moved to ' : ' logged for ') + new Date(ts).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + ' at ' + fmtTime(ts));
-    return;
   } else if (m.type === 'symptom') {
     if (!m.symptomType) { setToast('Select a symptom first'); return; }
     if (m.symptomType === 'other' && !(m.note || '').trim()) { setToast('Describe the symptom before saving'); return; }
@@ -2137,48 +2139,14 @@ const clockSVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" st
 
 // ---- Menstrual cycle tracking ----
 // Instant one-tap events, no time picker — logs at the current moment.
-// ---- CYCLE MARKERS: corrected by appending, never by deleting (v70) ----
-// Same shape as paracentesisResolved() and weightResolved(). See this patch's header for why a
-// delete cannot be relied on. A Map, not a plain object: markerId comes out of the database and on
-// a plain object an id of 'constructor' reads back a truthy INHERITED value, which would silently
-// drop the first record carrying it.
-function markerSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
-function cycleResolved() {
-  const byGroup = new Map();
-  for (const d of (state.entries || [])) {
-    if (!d || (d.medId !== 'cycle_start' && d.medId !== 'cycle_end')) continue;
-    const key = (typeof d.markerId === 'string' && d.markerId) ? d.markerId : ('doc:' + String(d.id));
-    const prev = byGroup.get(key);
-    if (!prev || markerSupersedes(d, prev)) byGroup.set(key, d);
-  }
-  const live = [];
-  byGroup.forEach((m, key) => {
-    if (m.cancelled) return;                                        // tombstone
-    if (!(typeof m.ts === 'number' && isFinite(m.ts) && m.ts > 0)) return;
-    live.push(Object.assign({}, m, { markerId: key }));
-  });
-  return live.sort((a, b) => a.ts - b.ts);
-}
-// THE SEAM. cycleActive(), cyclePeriods() and daysSinceCycleStart() all read through this one
-// function, so resolving here fixes every consumer at once rather than five call sites that drift.
-function cycleEntries() { return cycleResolved(); }
-// Is this exact document superseded by a newer one in its group? Labelling only -- the CSV keeps
-// every document, because it is the audit trail, but an unlabelled duplicate is not an audit trail.
-function markerSuperseded(e) {
-  if (!e || (e.medId !== 'cycle_start' && e.medId !== 'cycle_end') || e.cancelled) return false;
-  const keyOf = (d) => (typeof d.markerId === 'string' && d.markerId) ? d.markerId : ('doc:' + String(d.id));
-  const key = keyOf(e);
-  const mine = (e.loggedAt || e.ts || 0);
-  return (state.entries || []).some(d => d && (d.medId === 'cycle_start' || d.medId === 'cycle_end')
-    && String(d.id) !== String(e.id) && keyOf(d) === key && (d.loggedAt || d.ts || 0) > mine);
-}
+function cycleEntries() { return state.entries.filter(e => e.medId === 'cycle_start' || e.medId === 'cycle_end').sort((a, b) => a.ts - b.ts); }
 function cycleActive() {
   const es = cycleEntries();
   if (!es.length) return false;
   return es[es.length - 1].medId === 'cycle_start';
 }
 function lastCycleStart() {
-  const es = cycleResolved().filter(e => e.medId === 'cycle_start');
+  const es = entriesFor('cycle_start');
   return es.length ? es.reduce((a, b) => a.ts > b.ts ? a : b) : null;
 }
 function daysSinceCycleStart() {
@@ -2206,10 +2174,10 @@ function cyclePeriods() {
   let cur = null;
   events.forEach(e => {
     if (e.medId === 'cycle_start') {
-      if (cur && cur.end === null) { cur.start = e.ts; cur.startId = e.markerId; }
-      else { cur = { start: e.ts, startId: e.markerId, end: null, endId: null }; periods.push(cur); }
+      if (cur && cur.end === null) { cur.start = e.ts; cur.startId = e.id; }
+      else { cur = { start: e.ts, startId: e.id, end: null, endId: null }; periods.push(cur); }
     }
-    else if (e.medId === 'cycle_end' && cur && cur.end === null) { cur.end = e.ts; cur.endId = e.markerId; }
+    else if (e.medId === 'cycle_end' && cur && cur.end === null) { cur.end = e.ts; cur.endId = e.id; }
   });
   return periods.reverse();
 }
@@ -4976,14 +4944,8 @@ function paraEditOpen(p) {
   setState({ timeModal: { type: 'para', editId: p.paraId, paraValue: p.liters, timeValue: toLocalISO(p.ts) } });
 }
 // Moves one end of a period to another day. medId decides which marker is being moved.
-function cycleEditOpen(markerId, medId, label, ts) {
-  // prevStamp travels with the modal so the correction is stamped strictly newer than the document
-  // it supersedes. A legacy marker carries no loggedAt, so its ts stands in -- v67 fixed exactly
-  // this for paracentesis, where an edit silently no-opped on a record with no loggedAt while the
-  // toast said "updated".
-  const m = cycleResolved().find(x => x.markerId === markerId);
-  setState({ timeModal: { type: 'marker', editId: markerId, medId, label, timeValue: toLocalISO(ts),
-                          prevStamp: m ? (m.loggedAt || m.ts || 0) : 0 } });
+function cycleEditOpen(entryId, medId, label, ts) {
+  setState({ timeModal: { type: 'marker', editId: entryId, medId, label, timeValue: toLocalISO(ts) } });
 }
 // The add row that was missing from Paracentesis and Weight. One helper, so the two screens cannot
 // drift apart the way they did in the first place. It deliberately reuses the SAME onLog handlers
@@ -5631,11 +5593,6 @@ function exportDetailFor(e) {
   if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : (e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || ''));
   if (e.medId === 'bowel_movement') return BOWEL_MOVEMENT_LABELS[e.value] || e.dose || e.value || '';
   if (e.medId === 'appetite') return APPETITE_LABELS[e.value] || e.dose || e.value || '';
-  if (e.medId === 'cycle_start' || e.medId === 'cycle_end') {
-    // The spreadsheet keeps every document -- that is the audit trail -- but a moved date would
-    // otherwise print as two identical-looking marker rows with nothing saying which one stands.
-    return (e.medId === 'cycle_start' ? 'Period Start' : 'Period End') + (markerSuperseded(e) ? ' (moved — superseded)' : '');
-  }
   if (e.medId === 'chemo_date') return e.dose || 'Chemo date';
   let d = e.dose || '';
   // Tylenol Liquid records volume separately from the dose label on some entries.
