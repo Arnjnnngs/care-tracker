@@ -21,6 +21,16 @@ the shipping `index.html` with three weight readings and two paracentesis proced
 - **`v69-paracentesis-report.png`** — **Total drained is still there.** This release nearly deleted
   it; the screenshot is the proof it did not.
 
+## What the second audit changed after these images were taken
+
+The readings list used to be built from whatever the Weeks/Months toggle was showing, so a reading
+older than the window had **no Edit and no Remove at all** — the correction feature had an invisible
+horizon, under a heading reading *"All Readings"* that was not true. The chart stays windowed; the
+list now shows every reading. The screenshots were **retaken from the final build** rather than left
+as they were: all three seeded readings fall inside four weeks, so the screen looks the same, but a
+render doc showing a screen that no longer exists is the exact kind of false claim this project
+keeps paying for.
+
 ## Two things seen and deliberately NOT changed
 
 1. **The Weight report carries an "Average" stat card.** Having just retired the paracentesis
@@ -39,6 +49,7 @@ the shipping `index.html` with three weight readings and two paracentesis proced
 | Suite | Result |
 |---|---|
 | `enhance-test` | **27/27** — every new check falsified against a mutant first |
+| `audit-v69-weightreport` | **11/11** — and **7 passed / 4 failed** against the build it blocked, so all four of its checks are proven able to fail |
 | `overflow-scan` | **110/110 CLEAN** — now including the Weight, Paracentesis and Cycle report *detail* screens |
 | `export-test` | **49/49** — this suite had been dead since v64 and nobody had run it |
 | `para-test` | 16/16 |
