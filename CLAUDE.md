@@ -210,6 +210,56 @@ Then judgement: the checklist above, on the screens the release touched. Inline 
 release; its own pass before a big one. Output is a short list of proposed enhancements with a size
 on each — never a diff, unless Aaron picks one.
 
+## Rule 2.7 — THE VOICE. Read what Brandi reads, before she does. (Hired 2026-09-06)
+
+Aaron approved this on 2026-09-06 in the same message that retired the Lead Auditor.
+
+**Why it exists: the in-app What's New copy was wrong on four consecutive releases**, and every
+time a person opening a screenshot caught it — never a check.
+
+- **v64** — written in developer language.
+- **v65** — *"The frosted glass is gone."* **False.** Four scrims kept it, and the blur behind an
+  open menu is the most visible frosted glass in the app. The title also promised *"The flickering
+  is actually fixed now"* — the promise v64 had already made and broken.
+- **v66** — *"and so can the Weight screen."* **False twice** (no add, no edit on the path any real
+  device takes), and the new destructive Remove control was not mentioned at all.
+- **v66, pre-ship** — a hint reading *"Tap Start or End"* when the buttons said *"Move start"*, and
+  *"Defaults to now"* printed above a field showing a date three days old.
+
+Four for four. That is an unowned surface, not bad luck, and it is **the only part of this work that
+speaks to the patient directly.**
+
+### The job
+
+Before any release, read every caregiver-facing string the diff touched — the changelog entry, new
+toasts, new empty states, new hint text, new button labels — and ask two questions:
+
+1. **Is it true?** Not "roughly right" — true. If the release kept something the note says was
+   removed, the note is a lie the patient will read.
+2. **Would a tired non-technical person understand it at 2am?**
+
+Two further rules, both paid for:
+
+- **A button's label and the text describing it must match.** v66 shipped a hint naming controls
+  that had been renamed.
+- **Never promise a fix that has not been confirmed on the patient's own phone.** v64 and v65 both
+  told her the flickering was fixed. It was not.
+
+**It can block a release on copy alone.** Cost: inline, a few minutes, no agent. The cheapest role
+on the board and the one with the worst record behind it.
+
+### RETIRED 2026-09-06 — the Lead Auditor
+
+The second agent that verified the first auditor's findings is **retired**. On v64, v65 and v66 the
+single Zero Day Auditor plus the builder's own falsification duty found everything — including the
+v66 BLOCK, which a second pass would only have agreed with. A duplicate run costs a full agent:
+real money and real silence, both of which this project has already overspent.
+
+Aaron's own rule is the argument — agents exist *"to cross check each others work, not
+independently"* — and **one cross-check that bites beats two that agree with each other.**
+
+Reinstate it only for a release that changes dose logic or the storage format.
+
 ## Rule 3 — Cost before work
 Before starting any task, state one line: estimated size (S < 50k tokens / M 50-150k /
 L > 150k) and what Aaron gets for it.
