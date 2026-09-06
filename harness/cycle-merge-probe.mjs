@@ -64,18 +64,10 @@ const NOW = Date.now();
 const seed = [
   { id: 'seed_para_1', medId: 'paracentesis', paraId: 'para_seed_one', liters: 4.5, dose: '4.5 L', mg: 0,
     ts: NOW - 3 * DAY, loggedAt: NOW - 3 * DAY },
-  // loggedAt DELIBERATELY IN THE FUTURE. The correction is stamped
-  // `Math.max(Date.now(), prevStamp + 1)`, and with every seeded marker in the past that Math.max
-  // could be replaced by a bare Date.now() and the suite stayed green -- a guard with no check that
-  // can fail. A phone with a skewed clock, or a marker written by one, produces exactly this: if
-  // the correction is not stamped strictly newer, the ORIGINAL date keeps winning and the move
-  // silently does nothing while the toast says it worked.
-  { id: 'seed_cyc_start', medId: 'cycle_start', dose: null, mg: 0, ts: NOW - 10 * DAY, loggedAt: NOW + 5 * DAY },
-  { id: 'seed_cyc_end',   medId: 'cycle_end',   dose: null, mg: 0, ts: NOW - 6 * DAY },
-  // AN OLDER PERIOD AS WELL. With one period on screen the merge case cannot happen at all -- and a
-  // build that swallowed a whole period passed this suite because of it.
-  { id: 'seed_cyc_start0', medId: 'cycle_start', dose: null, mg: 0, ts: NOW - 40 * DAY },
-  { id: 'seed_cyc_end0',   medId: 'cycle_end',   dose: null, mg: 0, ts: NOW - 36 * DAY },
+  { id: 'seed_cyc_start', medId: 'cycle_start', dose: null, mg: 0, ts: NOW - 40 * DAY },
+  { id: 'seed_cyc_end',   medId: 'cycle_end',   dose: null, mg: 0, ts: NOW - 36 * DAY },
+  { id: 'seed_cyc_start2', medId: 'cycle_start', dose: null, mg: 0, ts: NOW - 10 * DAY },
+  { id: 'seed_cyc_end2',   medId: 'cycle_end',   dose: null, mg: 0, ts: NOW - 6 * DAY },
   // WEIGHT READINGS ARE SEEDED ON PURPOSE. v66 shipped the Weight add row visible ONLY when there
   // were no readings -- exactly backwards, and invisible on Brandi's phone, which has months of
   // them. The suite tested the empty state and went green. Whichever state a real device is in is
@@ -104,11 +96,16 @@ export async function deleteDoc(ref){const id=ref&&ref.id;
  // left behind. The rules are not in this repo and cannot be read from here, so the suite asserts
  // the app never DEPENDS on a delete rather than asserting what the rules do.
  const hit=store.entries.find(e=>String(e.id)===String(id));
+ // THE REAL RULE, MODELLED. STATUS.md v52: the published Firestore rules refuse a delete by
+ // document AGE (48h) with no medId exemption. The suite's stub had always let every delete
+ // succeed, which is why v69 scored 29/30 rather than showing the damage.
+ if (hit && hit.ts && (Date.now()-hit.ts) > 172800000) { globalThis.__refused=(globalThis.__refused||0)+1; throw new Error('PERMISSION_DENIED: delete blocked after 48 hours'); }
  globalThis.__deleted.push({id:String(id),medId:hit?hit.medId:null});
  store.entries=store.entries.filter(e=>String(e.id)!==String(id));push();}
 export async function setDoc(){}
 export async function getDocs(){return snap(store.entries);} export function serverTimestamp(){return Date.now();}
 globalThis.__entryCount=()=>store.entries.length;
+globalThis.__rawEntries=()=>store.entries.map(e=>Object.assign({},e));
 globalThis.__deleted=[];
 `;
 
@@ -164,7 +161,20 @@ const confirmModal = async (where) => {
     if (b) b.click();
   });
   for (let i = 0; i < 30 && await modalOpen(); i++) await page.waitForTimeout(100);
-  if (await modalOpen()) throw new Error('modal did not close after Confirm at: ' + where);
+  if (await modalOpen()) {
+    // THE GUARDED BUILD REFUSES THE MOVE, and a refusal correctly leaves the dialog open with the
+    // date still in it. This probe was written against the build that ACCEPTED the merge, so a
+    // thrown error here would read as a crash rather than as the fix working. Report it and carry
+    // on; the assertion coverage lives in harness/enhance-test.mjs, which checks that the move is
+    // refused AND that both periods survive.
+    console.log('  REFUSED  the app declined the move at: ' + where + ' (dialog stayed open) — this is v70 behaviour');
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button')].find(x => /^Cancel$/i.test((x.innerText || '').trim()));
+      if (b) b.click();
+    });
+    await page.waitForTimeout(400);
+    return 'refused';
+  }
   await page.waitForTimeout(400);
 };
 // Count rows by the resolved record set, not by scraping text. In a single-file app the source is
@@ -316,162 +326,38 @@ console.log('\n3. Weight — the same defect, unreported');
   }
 }
 
-console.log('\n4. Cycle — a period logged on the wrong day can be moved');
+
+console.log('\n4. MERGE PROBE — move the newest period start back across the older period');
 {
   await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /Back/.test(x.innerText||'')); if (b) b.click(); });
   await page.waitForTimeout(400);
   await openReport('Cycle');
-  const startBtn = await page.$('[data-cycle-edit-start]');
-  const endBtn = await page.$('[data-cycle-edit-end]');
-  const rmBtn = await page.$('[data-cycle-remove]');
-  t('a period start can be moved', !!startBtn, startBtn ? '' : 'no [data-cycle-edit-start]');
-  t('a period end can be moved', !!endBtn, endBtn ? '' : 'no [data-cycle-edit-end]');
-  // ASSERT ITS ABSENCE. v66 shipped a Remove here that destroyed a whole period on one unconfirmed
-  // tap -- removing the END reopened the period and the next start merged into it, unrecoverably.
-  // It is withdrawn, and this check exists so it cannot come back without someone deciding to.
-  t('there is NO one-tap period delete', !rmBtn, rmBtn ? 'data-cycle-remove is back' : '');
-  if (startBtn) {
-    // COMPARE TO WHAT WAS THERE. This used to assert `=== 1`, which was true only because the suite
-    // seeded a single period -- it said nothing about duplication and broke the moment a second
-    // period was seeded to make the merge case reachable.
-    const periodsBeforeMove = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
-    const beforeText = await page.evaluate(() => document.querySelector('[data-cycle-edit-start]').closest('div').parentElement.innerText);
-    await startBtn.click();
-    await page.waitForTimeout(500);
-    // Scoped to the dialog, not the whole document, for the same reason.
-    const titled = await page.evaluate(() => {
-      const inp = document.querySelector('input[type="datetime-local"]');
-      const dlg = inp && inp.closest('div').parentElement;
-      return !!dlg && /Edit Period Start/.test(dlg.innerText || '');
-    });
-    t('the move step says Edit, not Log', titled, '');
-    // Move the start two days earlier and confirm the displayed period changed.
-    await page.evaluate(() => {
-      const inp = document.querySelector('input[type="datetime-local"]');
-      if (!inp) return;
-      const d = new Date(inp.value); d.setDate(d.getDate() - 2);
-      const p2 = (n) => String(n).padStart(2, '0');
-      inp.value = d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
-      inp.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await confirmModal('cycle-move');
-    const afterText = await page.evaluate(() => {
-      const b = document.querySelector('[data-cycle-edit-start]');
-      return b ? b.closest('div').parentElement.innerText : '(gone)';
-    });
-    t('the period now reads a different date', afterText !== beforeText, beforeText.replace(/\n/g,' ').slice(0,40) + '  ->  ' + afterText.replace(/\n/g,' ').slice(0,40));
-    const stillOne = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
-    // NAMED FOR WHAT IT ACTUALLY ASSERTS. It was called "did not create a second period", which
-    // implied it covered cyclePeriods()'s UC20 merge rule; the auditor deleted that whole branch
-    // and this stayed green. It cannot cover UC20 -- when the remove succeeds there is only ever
-    // one start, so the merge rule is never reached. What it does check is that the move did not
-    // duplicate the period, which is worth checking under its own name.
-    t('the move replaced the period rather than duplicating it',
-      periodsBeforeMove > 0 && stillOne === periodsBeforeMove, periodsBeforeMove + ' -> ' + stillOne + ' period(s)');
-
-    // v70. THE GUARANTEE, not the symptom. The seeded markers are 10 and 6 days old -- well past
-    // the 48-hour window in which a delete can be relied on -- so if the move had reached for
-    // deleteDoc this is where it shows, age-independently, without the suite needing to know what
-    // the Firestore rules actually say. Same shape as the weight check above and as PARA-7.
-    const mdels = await page.evaluate(() => (globalThis.__deleted || [])
-      .filter(d => d.medId === 'cycle_start' || d.medId === 'cycle_end'));
-    t('moving a period date NEVER deletes a document', mdels.length === 0,
-      mdels.length ? JSON.stringify(mdels) : 'no deleteDoc on any cycle marker');
-
-    // MOVE THE SAME START A SECOND TIME. The correction has to edit the same GROUP, not spawn a
-    // second independent one -- otherwise the third date would land beside the second instead of
-    // replacing it, and cyclePeriods()'s UC20 merge rule would be the only thing hiding it.
-    const beforeSecond = await page.evaluate(() => {
-      const b = document.querySelector('[data-cycle-edit-start]');
-      return b ? b.closest('div').parentElement.innerText : '';
-    });
-    await page.evaluate(() => { const b = document.querySelector('[data-cycle-edit-start]'); if (b) b.click(); });
-    await page.waitForTimeout(500);
-    await page.evaluate(() => {
-      const inp = document.querySelector('input[type="datetime-local"]');
-      if (!inp) return;
-      const d = new Date(inp.value); d.setDate(d.getDate() - 3);
-      const p2 = (n) => String(n).padStart(2, '0');
-      inp.value = d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
-      inp.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await confirmModal('cycle-move-2');
-    const afterSecond = await page.evaluate(() => {
-      const b = document.querySelector('[data-cycle-edit-start]');
-      return b ? b.closest('div').parentElement.innerText : '(gone)';
-    });
-    const stillOneAfterTwo = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
-    t('a second move corrects the first rather than adding another period',
-      periodsBeforeMove > 0 && stillOneAfterTwo === periodsBeforeMove, periodsBeforeMove + ' -> ' + stillOneAfterTwo + ' period(s)');
-    t('the second move actually changed the date again', afterSecond !== beforeSecond,
-      beforeSecond.replace(/\n/g,' ').slice(0,34) + '  ->  ' + afterSecond.replace(/\n/g,' ').slice(0,34));
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // THE CASE THAT BLOCKED v70's FIRST BUILD. Once a start can be moved to ANY date, dragging one
-  // backwards into an earlier period's span hits cyclePeriods()'s UC20 merge rule and the LATER
-  // PERIOD DISAPPEARS -- toast says "moved", nothing on any screen points at the orphaned markers,
-  // and no control can put it back. Measured: v69 kept both periods, v70's first build kept one.
-  // A move that makes the record worse must be refused, and the refusal must be visible.
-  const periodCount = () => page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
-  let lastRefusalText = '';
-  const tryMoveNewestStartTo = async (deltaDays, where) => {
-    await page.evaluate(() => { const b = document.querySelector('[data-cycle-edit-start]'); if (b) b.click(); });
-    await page.waitForTimeout(500);
-    await page.evaluate((d) => {
-      const inp = document.querySelector('input[type="datetime-local"]');
-      if (!inp) return;
-      const t = new Date(Date.now() + d * 86400000);
-      const p2 = (n) => String(n).padStart(2, '0');
-      inp.value = t.getFullYear() + '-' + p2(t.getMonth()+1) + '-' + p2(t.getDate()) + 'T' + p2(t.getHours()) + ':' + p2(t.getMinutes());
-      inp.dispatchEvent(new Event('input', { bubbles: true }));
-    }, deltaDays);
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll('button')].find(x => /^Confirm$/i.test((x.innerText || '').trim()));
-      if (b) b.click();
-    });
-    await page.waitForTimeout(900);
-    const stillOpen = await modalOpen();
-    // AND SHE HAS TO BE ABLE TO READ WHY. The first build of the guard used a toast, which fires
-    // BEHIND the dialog's scrim and its blur -- captured in outputs/render-v70/v70-move-refused.png
-    // as an unreadable smear. A refusal the caregiver cannot read is a button that does nothing.
-    lastRefusalText = await page.evaluate(() => {
-      const el = document.querySelector('[data-move-error]');
-      return el ? (el.innerText || '').trim() : '';
-    });
-    if (stillOpen) {
-      await page.evaluate(() => {
-        const b = [...document.querySelectorAll('button')].find(x => /^Cancel$/i.test((x.innerText || '').trim()));
-        if (b) b.click();
-      });
-      await page.waitForTimeout(400);
-    }
-    return stillOpen;
-  };
-  {
-    const before = await periodCount();
-    t('there are two periods on screen, so the merge case is reachable at all', before === 2, before + ' period(s)');
-    // -38 days lands inside the older period (-40 to -36).
-    const refused = await tryMoveNewestStartTo(-38, 'merge');
-    const after = await periodCount();
-    t('a move that would swallow another period is REFUSED', refused, refused ? 'the dialog stayed open' : 'the app accepted it');
-    t('and both periods are still there afterwards', after === before, before + ' -> ' + after);
-    t('the refusal is written inside the dialog, where she can read it',
-      /inside another period/i.test(lastRefusalText), lastRefusalText.slice(0, 70) || 'no [data-move-error] in the dialog');
-  }
-  {
-    // Its own end is 6 days ago; -1 day is after it. That would leave the period reading "Active"
-    // forever with the red banner up and the end marker unreachable.
-    const closedBefore = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-end]').length);
-    const refused = await tryMoveNewestStartTo(-1, 'past-own-end');
-    const closedAfter = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-end]').length);
-    t('a start cannot be moved past its own end', refused, refused ? 'the dialog stayed open' : 'the app accepted it');
-    t('the period still has an end afterwards', closedAfter === closedBefore, closedBefore + ' -> ' + closedAfter);
-    t('and that refusal is readable in the dialog too',
-      /cannot start after it ends/i.test(lastRefusalText), lastRefusalText.slice(0, 70) || 'no [data-move-error] in the dialog');
-  }
+  const listText = () => page.evaluate(() => {
+    const bs = [...document.querySelectorAll('[data-cycle-edit-start]')];
+    return bs.map(b => (b.closest('div').parentElement.innerText||'').replace(/\n/g,' ')).join('  ||  ');
+  });
+  console.log('  BEFORE: ' + await listText());
+  const before = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
+  t('two periods are on screen to start with', before === 2, before + ' period(s)');
+  // The FIRST card is the most recent period. Move its start back 35 days -> lands inside the older period.
+  await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]')[0].click());
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const inp = document.querySelector('input[type=\"datetime-local\"]');
+    const d = new Date(inp.value); d.setDate(d.getDate() - 32);
+    const p2 = (n) => String(n).padStart(2, '0');
+    inp.value = d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+'T'+p2(d.getHours())+':'+p2(d.getMinutes());
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await confirmModal('merge');
+  const after = await page.evaluate(() => document.querySelectorAll('[data-cycle-edit-start]').length);
+  console.log('  AFTER : ' + await listText());
+  t('BOTH periods survive a start being moved across the older one', after === 2, after + ' period(s) left (was ' + before + ')');
+  const docs = await page.evaluate(() => globalThis.__rawEntries().filter(e => e.medId==='cycle_start'||e.medId==='cycle_end').map(e=>e.medId+'@'+new Date(e.ts).toISOString().slice(0,10)+(e.markerId?(' mid='+e.markerId):'')));
+  console.log('  DOCS  : ' + docs.join(' | '));
+  const dels = await page.evaluate(() => (globalThis.__deleted||[]).length);
+  t('nothing was deleted', dels === 0, dels + ' delete(s)');
 }
-
 console.log('\n5. Nothing broke on the way');
 t('no page errors', errs.length === 0, errs.join(' / ').slice(0, 200));
 

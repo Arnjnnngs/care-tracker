@@ -2095,6 +2095,29 @@ async function confirmTimeAndLog() {
     setTimeout(() => { if (savedIds.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
   } else if (m.type === 'marker') {
     const editId = m.editId;
+    if (editId) {
+      const nowEvents = cycleEntries();
+      const proposed = nowEvents.map(e => e.markerId === editId ? Object.assign({}, e, { ts }) : e)
+                                .sort((a, b) => a.ts - b.ts);
+      const before = cyclePeriodsFrom(nowEvents);
+      const after = cyclePeriodsFrom(proposed);
+      const closedCount = (list) => list.filter(p => p.end !== null).length;
+      // A period disappearing is the blocker this exists for.
+      if (after.length < before.length) {
+        state.timeModal.moveError = 'That date falls inside another period. Moving it there would merge the two into one, and the later period would be lost. Pick a date outside it.';
+        setState({ timeModal: state.timeModal });
+        return;
+      }
+      // And a period losing its end leaves it reading "Active" forever, with the red banner up and
+      // the end marker unreachable because there is no Move end button on an open period.
+      if (closedCount(after) < closedCount(before)) {
+        state.timeModal.moveError = (m.medId === 'cycle_start')
+          ? 'A period cannot start after it ends. Move the end date first, then come back to the start.'
+          : 'A period cannot end before it starts. Move the start date first, then come back to the end.';
+        setState({ timeModal: state.timeModal });
+        return;
+      }
+    }
     setState({ timeModal: null });
     // ONE WRITE. The add-then-remove dance is gone with the delete it was protecting: a move now
     // APPENDS a document that supersedes the old date, so it works at any age and cannot leave the
@@ -2201,7 +2224,9 @@ function cyclePeriods() {
   // later logged against the newer start. Found live during the 30-use-case QA pass (UC20): two
   // back-to-back Period Starts around 7/14 left a permanently un-closeable "7/14/2026 – Active"
   // duplicate in Cycle History.
-  const events = cycleEntries();
+  return cyclePeriodsFrom(cycleEntries());
+}
+function cyclePeriodsFrom(events) {
   const periods = [];
   let cur = null;
   events.forEach(e => {
@@ -3020,6 +3045,7 @@ function renderTimeModal() {
                 d.setHours(hh, mm, 0, 0);
                 state.timeModal.timeValue = toLocalISO(d.getTime());
                 state.timeModal.futureOk = false;
+                state.timeModal.moveError = null;
                 setState({ timeModal: state.timeModal });
               },
               style: { flex: '1', minHeight: '38px', borderRadius: '10px', fontSize: '12.5px', fontWeight: '700',
@@ -3039,6 +3065,7 @@ function renderTimeModal() {
           ...Array.from({ length: 10 }, (_, i) => i + 1).map(n => h('option', { value: String(n) }, String(n) + (n === 1 ? ' — mild' : n === 5 ? ' — moderate' : n === 10 ? ' — worst' : '')))
         )
       ) : null,
+      m.moveError ? h('div', { 'data-move-error': 'true', style: { marginTop: '14px', background: 'rgba(192,69,59,0.10)', border: '1px solid rgba(192,69,59,0.32)', borderRadius: '12px', padding: '11px 13px', fontSize: '13px', lineHeight: '1.45', color: '#93332B', fontWeight: '600' } }, m.moveError) : null,
       m.futureOk ? h('div', { style: { marginTop: '14px', background: 'rgba(181,118,30,0.12)', border: '1px solid rgba(181,118,30,0.3)', borderRadius: '12px', padding: '11px 13px', fontSize: '13px', lineHeight: '1.45', color: '#9A6419', fontWeight: '600' } }, '⚠ This time is in the future. Press Confirm again to log it anyway.') : null,
       h('div', { style: { display: 'flex', gap: '10px', marginTop: '22px' } },
         h('button', { onClick: () => setState({ timeModal: null }), style: { flex: '1', minHeight: '50px', borderRadius: '13px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#8A6479', fontSize: '15px', fontWeight: '700' } }, 'Cancel'),
@@ -4027,7 +4054,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
         //
         // missedDosesFor() is the SAME function the banner uses. Reused deliberately rather than
         // recomputing "missed" here: a second definition is a second thing to drift.
-        missedTodayLabel ? h('span', { 'data-missed-on-card': 'true', style: { flexShrink: '0', color: '#A13830', fontWeight: '800', fontSize: '11px', whiteSpace: 'nowrap' } }, missedTodayLabel) : null,
+        missedTodayLabel ? h('span', { 'data-missed-on-card': 'true', style: { flexShrink: '1', minWidth: '0', color: '#A13830', fontWeight: '800', fontSize: '11px', whiteSpace: 'normal', textAlign: 'right' } }, missedTodayLabel) : null,
         subStatus ? h('span', { style: { display: 'none', color: '#7D6974' } }, subStatus) : null,
         h('span', { style: { display: 'none', color: '#7D6A74', fontSize: '11.5px' } }, med.note)
       ),
@@ -5634,7 +5661,9 @@ function exportDetailFor(e) {
   if (e.medId === 'cycle_start' || e.medId === 'cycle_end') {
     // The spreadsheet keeps every document -- that is the audit trail -- but a moved date would
     // otherwise print as two identical-looking marker rows with nothing saying which one stands.
-    return (e.medId === 'cycle_start' ? 'Period Start' : 'Period End') + (markerSuperseded(e) ? ' (moved — superseded)' : '');
+    const base = (e.medId === 'cycle_start' ? 'Period Start' : 'Period End');
+    if (markerSuperseded(e)) return base + ' (moved — superseded)';
+    return base + (e.markerId ? ' (moved)' : '');
   }
   if (e.medId === 'chemo_date') return e.dose || 'Chemo date';
   let d = e.dose || '';

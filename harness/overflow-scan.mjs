@@ -425,7 +425,15 @@ for (const dev of DEVICES) {
     }
 
     scanned++;
-    const found = await page.evaluate(scanFn, Math.max(dev.w, layout.inner));
+    // THE SCREEN IS dev.w. It used to be Math.max(dev.w, layout.inner), and under isMobile:true
+    // Chromium reports window.innerWidth as the LAYOUT viewport, which it widens past the device
+    // width whenever the page overflows -- so the moment anything overflowed, this told the scanner
+    // the screen had grown to fit it and the "off the right edge" rule could never fire. A real
+    // 14px overflow on Home (a missed-dose chip with white-space:nowrap) sat behind that for many
+    // releases: the page-level check saw it, the element-level check was blindfolded, and no run
+    // could name the element. clientWidth and visualViewport both stay at the true width; innerWidth
+    // does not. Found by the v70 Zero Day Audit.
+    const found = await page.evaluate(scanFn, dev.w);
 
     if (SHOTS) {
       fs.mkdirSync(SHOTS, { recursive: true });

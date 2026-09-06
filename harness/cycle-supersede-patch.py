@@ -183,6 +183,100 @@ sub("""  if (e.medId === 'chemo_date') return e.dose || 'Chemo date';""",
   if (e.medId === 'chemo_date') return e.dose || 'Chemo date';""",
     'export-marker-superseded')
 
+# THE PAIRING RULE, RUNNABLE ON A HYPOTHETICAL LIST. Split out so a proposed move can be SIMULATED
+# before it is written. Nothing about the rule itself changes.
+sub("""  const events = cycleEntries();
+""",
+    """  return cyclePeriodsFrom(cycleEntries());
+}
+function cyclePeriodsFrom(events) {
+""", 'split-cyclePeriodsFrom')
+
+# THE GUARD, and v70's first build was BLOCKED for not having it.
+#
+# cyclePeriods()'s UC20 rule -- a second cycle_start while one is open UPDATES the open period --
+# was written for two starts logged back-to-back by accident. Once a start can be MOVED to any
+# date, a start dragged backwards into an earlier period's span hits that same rule and SWALLOWS
+# the later period whole: it vanishes from Cycle History, the toast says "moved", and no control
+# on any screen points at the orphaned markers. v69 was safe here only by accident -- the delete it
+# depended on was refused, so the original start survived.
+#
+# Rather than enumerate the geometry (inside another period, across a start, past its own end),
+# SIMULATE the move and refuse it if the record would come out worse. That covers the cases nobody
+# thought of, which on this screen is the category that has actually caused harm. The guard runs
+# BEFORE the modal closes, so a refusal leaves her in the dialog with the date still there.
+sub("""  } else if (m.type === 'marker') {
+    const editId = m.editId;
+    setState({ timeModal: null });""",
+    """  } else if (m.type === 'marker') {
+    const editId = m.editId;
+    if (editId) {
+      const nowEvents = cycleEntries();
+      const proposed = nowEvents.map(e => e.markerId === editId ? Object.assign({}, e, { ts }) : e)
+                                .sort((a, b) => a.ts - b.ts);
+      const before = cyclePeriodsFrom(nowEvents);
+      const after = cyclePeriodsFrom(proposed);
+      const closedCount = (list) => list.filter(p => p.end !== null).length;
+      // A period disappearing is the blocker this exists for.
+      if (after.length < before.length) {
+        state.timeModal.moveError = 'That date falls inside another period. Moving it there would merge the two into one, and the later period would be lost. Pick a date outside it.';
+        setState({ timeModal: state.timeModal });
+        return;
+      }
+      // And a period losing its end leaves it reading "Active" forever, with the red banner up and
+      // the end marker unreachable because there is no Move end button on an open period.
+      if (closedCount(after) < closedCount(before)) {
+        state.timeModal.moveError = (m.medId === 'cycle_start')
+          ? 'A period cannot start after it ends. Move the end date first, then come back to the start.'
+          : 'A period cannot end before it starts. Move the start date first, then come back to the end.';
+        setState({ timeModal: state.timeModal });
+        return;
+      }
+    }
+    setState({ timeModal: null });""",
+    'move-guard')
+
+# The LIVE side of a corrected pair is labelled too, the way a corrected weight reads "(corrected)".
+# Marking only the superseded row leaves the reader to work out which of two identical-looking
+# marker rows is the one that stands.
+sub("""    return (e.medId === 'cycle_start' ? 'Period Start' : 'Period End') + (markerSuperseded(e) ? ' (moved — superseded)' : '');""",
+    """    const base = (e.medId === 'cycle_start' ? 'Period Start' : 'Period End');
+    if (markerSuperseded(e)) return base + ' (moved — superseded)';
+    return base + (e.markerId ? ' (moved)' : '');""",
+    'label-the-live-correction')
+
+# THE 14 PIXELS. On a 320px phone the app scrolls sideways, and this one label is the whole reason:
+# a missed-dose chip reading "Morning + Evening missed" is 165px wide, set to whiteSpace:'nowrap'
+# and flexShrink:'0', so it cannot wrap or give ground and pushes the document to 334px. Measured
+# directly, 3/3 reproducible, in mobile AND desktop emulation -- and identically on v65, so it has
+# been live for many releases. It shows whenever a medication misses BOTH of its windows, which on
+# Brandi's Protonix schedule is a real state, not a corner case.
+#
+# nowrap was there to stop the chip breaking mid-phrase beside the medication name. Allowing it to
+# wrap costs a second line on the narrowest screens and nothing anywhere else; a page that scrolls
+# sideways costs a caregiver the right-hand edge of every screen she is on.
+sub("""        missedTodayLabel ? h('span', { 'data-missed-on-card': 'true', style: { flexShrink: '0', color: '#A13830', fontWeight: '800', fontSize: '11px', whiteSpace: 'nowrap' } }, missedTodayLabel) : null,""",
+    """        missedTodayLabel ? h('span', { 'data-missed-on-card': 'true', style: { flexShrink: '1', minWidth: '0', color: '#A13830', fontWeight: '800', fontSize: '11px', whiteSpace: 'normal', textAlign: 'right' } }, missedTodayLabel) : null,""",
+    'missed-chip-may-wrap')
+
+# THE REFUSAL HAS TO BE READABLE. A toast fires BEHIND the dialog's scrim and its blur -- confirmed
+# in outputs/render-v70/v70-move-refused.png, where the message is an unreadable smear at the foot
+# of the screen. A refusal the caregiver cannot read is indistinguishable from a button that does
+# nothing. It goes INSIDE the dialog, beside the field she has to change, exactly like the
+# future-time warning that was already there.
+sub("""      m.futureOk ? h('div', { style: { marginTop: '14px',""",
+    """      m.moveError ? h('div', { 'data-move-error': 'true', style: { marginTop: '14px', background: 'rgba(192,69,59,0.10)', border: '1px solid rgba(192,69,59,0.32)', borderRadius: '12px', padding: '11px 13px', fontSize: '13px', lineHeight: '1.45', color: '#93332B', fontWeight: '600' } }, m.moveError) : null,
+      m.futureOk ? h('div', { style: { marginTop: '14px',""",
+    'render-move-error')
+
+# A stale refusal must not sit under a date she has since changed.
+sub("""                state.timeModal.futureOk = false;
+                setState({ timeModal: state.timeModal });""",
+    """                state.timeModal.futureOk = false;
+                state.timeModal.moveError = null;
+                setState({ timeModal: state.timeModal });""",
+    'clear-move-error')
+
 # ---------------------------------------------------------------------------------------------
 # THE RELEASE STAMP. Rule 0: a release must be reproducible from the repo alone. This patch applies
 # to outputs/rollback-v69/index.html, and stamping the version here rather than by hand afterwards
