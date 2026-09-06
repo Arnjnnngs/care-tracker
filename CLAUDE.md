@@ -277,6 +277,16 @@ ends — one asks "what can't she do here", the other "should this be here at al
 
 Adding a third reviewer would not have helped. The gap was in a brief, not in the headcount.
 
+**And a finding worth more than the fix: ChemoWell already had a copy-review role, and care-tracker
+did not.** ChemoWell's `TEAM.md` has carried a "Copy review (wordsmith)" section since app-v23. The
+two projects' processes had quietly drifted apart, and care-tracker was running without the role its
+sibling had had for months. **When one project fixes a process gap, check whether the other has it.**
+
+**Even so, the wordsmith would NOT have caught the average** — which is why question 3 exists rather
+than being assumed. *"Averaging 5.6 L per procedure"* is short, clear, reads the way a person would
+say it and repeats nothing; it passes every test a copy review applies. **The wording was never the
+problem. The number was.**
+
 ### RETIRED 2026-09-06 — the Lead Auditor
 
 The second agent that verified the first auditor's findings is **retired**. On v64, v65 and v66 the
