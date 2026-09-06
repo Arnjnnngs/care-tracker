@@ -24,6 +24,22 @@ it.** Telling him to go install it was itself a Rule 1 violation — he is the o
 pipeline, and he reads these on a tablet. The draft stays in `outputs/` for a future session that
 can install it unassisted; the rule stands on its own meanwhile.
 
+## THE ENHANCER — new role, added 2026-09-06 on Aaron's observation
+
+Aaron: *"there isn't a way to add a para from the reports screen. there also a way to edit cycles.
+these kind of things needs to be checked bc it's what makes sense for stuff like this. someone
+should have suggested this fix from the team."*
+
+Both confirmed. Every existing role checks whether a change is CORRECT; none asks whether a screen
+is COMPLETE, so "you can delete a paracentesis here but not add one" passed every gate for
+releases. Role and checklist are now `CLAUDE.md` **Rule 2.6**; the first pass is
+`outputs/ENHANCER-PASS-01.md`.
+
+**Open, awaiting Aaron's pick (nothing built yet):** add-paracentesis and add-weight controls on
+their own report screens (S each), edit for paracentesis rows and cycle history rows (S–M each), or
+all four as one release (M, recommended). In-Patient and Calendar already have the full add / edit /
+remove set — the rest of the app does not, and the inconsistency is the finding.
+
 ## THE DISPATCH FLAG — read this before changing the line above
 
 The `DISPATCH:` line on line 3 controls whether Aaron gets status pings. He does not want

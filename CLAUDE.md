@@ -166,6 +166,50 @@ index.html actually parses, and that `harness/` still makes the release reproduc
 
 It blocked its own release on unpushed work while it was being written. Trust it over yourself.
 
+## Rule 2.6 — THE ENHANCER. Nobody on this team was asked "does this screen make sense?"
+
+Aaron, 2026-09-06: *"there isn't a way to add a para from the reports screen. there also a way to
+edit cycles. these kind of things needs to be checked bc it's what makes sense for stuff like this.
+someone should have suggested this fix from the team."*
+
+**He is right, and the gap is structural.** Every existing role checks whether the change is
+CORRECT: the builder makes it work, the Zero Day Auditor tries to prove it broken, `pm.py` checks
+the release mechanics. **Not one of them asks whether the screen is COMPLETE.** So a screen that
+lets a caregiver delete a paracentesis but never add one passed every gate this project has,
+release after release, because nothing was wrong — something was just missing.
+
+### The Enhancer's one job
+
+For every screen the release touches: **can the caregiver do the whole job there, or does the app
+send her somewhere else?** It PROPOSES; Aaron decides. It never widens a release on its own — this
+is a patient's medical app and every extra control is a new way to mis-tap.
+
+### The checklist, derived from what actually went wrong here
+
+1. **Add / edit / remove symmetry.** For each kind of record a screen displays, can it be added,
+   corrected, and removed from that same screen? A screen that removes but cannot add is the
+   Paracentesis bug exactly.
+2. **Read the empty states out loud.** *"No paracentesis procedures logged yet. Log the liters
+   drained from the card on Today."* — **the app is telling you the screen is incomplete.** That
+   sentence is a bug report the app wrote about itself. Three of them were sitting in the file.
+3. **Can a mistake be corrected, or only deleted and redone?** Logging a period on the wrong day
+   should be fixable, not require delete-and-re-add.
+4. **Is anything a dead end** — information shown with no action available on it?
+5. **Where a sibling screen already got it right, why didn't this one?** In-Patient has log-now,
+   log-for-another-day and edit. Paracentesis, Weight and Cycle have some or none of that. The
+   inconsistency IS the finding.
+
+### How to run it
+
+Cheap and mechanical first: extract the actual button labels per screen and tabulate add / edit /
+remove. **Do not trust a keyword search** — the first pass at this reported "Add: yes" for
+Paracentesis when the screen has only Delete/Keep/Remove, because a loose pattern matched something
+else. Presence checks pass on nonsense here as everywhere. Read the labels.
+
+Then judgement: the checklist above, on the screens the release touched. Inline for a small
+release; its own pass before a big one. Output is a short list of proposed enhancements with a size
+on each — never a diff, unless Aaron picks one.
+
 ## Rule 3 — Cost before work
 Before starting any task, state one line: estimated size (S < 50k tokens / M 50-150k /
 L > 150k) and what Aaron gets for it.
