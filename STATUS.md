@@ -117,12 +117,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v68 |
-| **Commit** | v68 — removes the paracentesis average on Aaron's report. |
+| **Version** | v69 |
+| **Commit** | v69 — a weight can be corrected or removed from the Weight report, by appending rather than deleting. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `87e3099ee804bc5093e91acf4e139d7e` |
-| **sw.js md5** | `cd5b7f000a95600d7de2f100d116f16d` |
-| **State** | **v68 — the Paracentesis report no longer shows an average per procedure.** Aaron: *"this isn't an avg thing."* Correct: a paracentesis drains what has accumulated, so the mean of those volumes means nothing and invites the wrong reading; the interval already on screen as "Since last" is what carries meaning. Arithmetically correct and clinically meaningless is still a false impression. **Nobody caught it because of a blind spot now written down:** the Enhancer walked that screen the same day asking what the caregiver could not DO there, and never asked whether what was already displayed should be. The Voice gained a third question — *does this number belong on the screen at all?* — and the Enhancer a sixth checklist item. No new hire; the gap was in a brief. |
+| **index.html md5** | `8a0ef4f1d5dbd448b2cd97e187c82ca3` |
+| **sw.js md5** | `814d201993e4051b9f0f057f33fc562d` |
+| **State** | **v69 — a weight typed wrong can be corrected or removed on the Weight report, and the mechanism was rebuilt after the audit blocked the first attempt.** The first build called `deleteDoc` on every weight row with no age check. `STATUS.md`'s own v52 section says the Firestore rules refuse a delete by document AGE with no `medId` exemption — which is why a paracentesis is removed by appending a tombstone — so on any reading older than two days the correction would have been added and the old reading left behind: two weights for one weigh-in, permanently. The Zero Day Audit reproduced it (2 rows became 3) and BLOCKED the release. **Rebuilt as an append:** `weightResolved()` groups by `weightId` (falling back to the document id), newest `loggedAt` wins, `cancelled:true` is a tombstone. Every existing reading is its own group, so nothing changes for data already on the phone, and it works at any age because nothing is ever deleted. Also fixed: the armed red Delete never expired on the Weight or Paracentesis rows (History's has always expired after 6s); `overflow-scan` had never opened a report DETAIL screen in its life, reporting 80/80 CLEAN across three releases that added controls to exactly those screens (now 110/110); and `export-test` had been dead since v64, its first click swallowed by the What's-New pop-up (now 49/49). **A near-miss worth keeping:** the patch also deleted *"Total drained"* until STATUS.md was checked and found Aaron asking for it. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 

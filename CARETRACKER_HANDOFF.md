@@ -8,9 +8,10 @@
 
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
-> **Last updated:** August 16, 2026
-> **Current version:** v68 (add and correct a paracentesis or a weight on their own screens;
-> move a period's start or end; no misleading average on the Paracentesis report)
+> **Last updated:** September 6, 2026
+> **Current version:** v69 (correct or remove a weight from the Weight report — by appending a
+> superseding record, never by deleting, so it works past the 48-hour window; add and correct a
+> paracentesis; move a period's start or end; no misleading average on the Paracentesis report)
 
 ---
 
@@ -274,7 +275,7 @@ If a device shows a blank screen or stale content:
 
 6. **FCM token management** — Tokens can go stale if a user uninstalls the PWA or clears browser data. The `send-reminders.js` script auto-cleans invalid tokens, but there's no UI to re-subscribe.
 
-7. **UI/rules coupling** — The Remove button is hidden for entries older than 48h because Firestore security rules (published July 2026) block those deletes. If the rules' delete window changes, update the `48 * 3600000` constant in `removeBtn()` in index.html to match.
+7. **UI/rules coupling** — The Remove button is hidden for entries older than 48h because Firestore security rules (published July 2026) block those deletes. If the rules' delete window changes, update the `48 * 3600000` constant in `removeBtn()` in index.html to match. **`BYPASS_48H_IDS` is NOT an exemption from the rules — it only shows or hides a button.** `STATUS.md`'s v52 section states the rules block deletes by document age with no `medId` exemption, which is why paracentesis, appointments and (from v69) weight corrections all work by APPENDING a superseding document rather than deleting one. **The rules file is not in this repo and cannot be read from a session**, so the claim cannot be settled either way from here — which is precisely why any new correct-or-remove control must be built as an append. v69's first build called `deleteDoc` on weight rows and was blocked in audit for it.
 
 8. **Timezone hardcoded** — The reminder system uses `America/Chicago` (Central Time). If the user moves timezone, both `send-reminders.js` and any time-display logic in `index.html` may need updating.
 
