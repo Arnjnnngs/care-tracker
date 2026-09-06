@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -118,7 +118,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | | |
 |---|---|
 | **Version** | v70 |
-| **Commit** | v70 — moving a period date works at any age, and cannot swallow another period. |
+| **Commit** | `cb93ba8` — v70 LIVE on main. Moving a period date works at any age, and cannot swallow another period. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `5ada87ff87c762edeb40f88e9fc12fa2` |
 | **sw.js md5** | `0df0e038b75a912f132f6de5c5b7198b` |
