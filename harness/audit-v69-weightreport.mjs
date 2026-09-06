@@ -37,11 +37,15 @@ const STUB_APP = `export function initializeApp(c){return{name:'[DEFAULT]',optio
 const STUB_MSG = `export function getMessaging(){throw new Error('off');}
 export async function getToken(){return null;} export function onMessage(){return()=>{};}`;
 const DAY = 86400000, NOW = Date.now();
+// EVERY weight ts in this app is MINUTE-GRANULAR: both logging and editing go through the same
+// datetime-local modal, whose value is YYYY-MM-DDTHH:MM. So seed on a minute boundary, as a real
+// reading is, and an edit that keeps the time produces a document with an IDENTICAL ts.
+const MIN = 60000, floorMin = (t) => Math.floor(t / MIN) * MIN;
 // Two readings, both far past the 48h delete window, as every reading on Brandi's phone is.
 // The OLDER one carries a typo: 105.0 where 150.0 was meant. Real weights, real magnitudes.
 const seed = [
-  { id: 'seed_w_old', medId: 'weight', weight: 105.0, dose: '105.0 lbs', mg: 0, ts: NOW - 20 * DAY },
-  { id: 'seed_w_new', medId: 'weight', weight: 140.0, dose: '140.0 lbs', mg: 0, ts: NOW - 2 * DAY }
+  { id: 'seed_w_old', medId: 'weight', weight: 105.0, dose: '105.0 lbs', mg: 0, ts: floorMin(NOW - 20 * DAY) },
+  { id: 'seed_w_new', medId: 'weight', weight: 140.0, dose: '140.0 lbs', mg: 0, ts: floorMin(NOW - 2 * DAY) }
 ];
 const stubFs = `
 const store={entries:${JSON.stringify(seed)},prefs:{}};const eL=[],pL=[];let n=0;
@@ -52,7 +56,7 @@ export function doc(db,col,id){return{__kind:'doc',id:id};} export function quer
 export function orderBy(){return{};}
 export function onSnapshot(ref,cb){if(ref&&ref.__kind==='q'){eL.push(cb);cb(snap(store.entries));return()=>{};}
  pL.push(cb);cb({exists:()=>true,data:()=>store.prefs});return()=>{};}
-export async function addDoc(c,d){store.entries.push(Object.assign({id:'a'+(++n)},d));store.entries.sort((a,b)=>(a.ts||0)-(b.ts||0));push();return{id:'a'+n};}
+export async function addDoc(c,d){store.entries.push(Object.assign({id:'zz'+(++n)},d));store.entries.sort((a,b)=>((a.ts||0)-(b.ts||0))||String(a.id).localeCompare(String(b.id)));push();return{id:'a'+n};}
 export async function deleteDoc(ref){globalThis.__deleted.push(String(ref&&ref.id));store.entries=store.entries.filter(e=>String(e.id)!==String(ref&&ref.id));push();}
 export async function setDoc(){} export async function getDocs(){return snap(store.entries);}
 export function serverTimestamp(){return Date.now();}
@@ -170,6 +174,31 @@ const net2 = netFromBytes(rep);
 console.log('     Net weight change tile now reads: ' + JSON.stringify(net2));
 t('a REMOVED reading no longer drives the report (one reading left => no net change)', net2 === '—',
   'REPORT SAYS ' + JSON.stringify(net2) + ' — computed from a reading the caregiver deleted.');
+
+
+console.log('\n4. History — what the same corrected weigh-in looks like in the daily log');
+await openReport('History');
+const hist = await page.evaluate(() => {
+  // Scoped to the day-summary element, never document.body: in a single-file app the source is in
+  // the body and any text match hits the source itself.
+  const els = [...document.querySelectorAll('div')].filter(d => /\d+ wt/.test(d.textContent || '') && d.children.length === 0);
+  return els.map(e => e.textContent.trim());
+});
+console.log('     day summaries containing a weight count: ' + JSON.stringify(hist));
+t('a corrected weigh-in is not counted twice in the History day summary',
+  !hist.some(x => /2 wt/.test(x)), JSON.stringify(hist));
+const csv = await (async () => {
+  await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /menu/i.test(x.getAttribute('aria-label')||'')); if (b) b.click(); });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => (x.innerText||'').trim().startsWith('Reports')); if (b) b.click(); });
+  await page.waitForTimeout(600);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('[data-backup-btn="csv"]')]);
+  return fs.readFileSync(await dl.path()).toString('utf-8');
+})();
+const wRows = csv.split('\n').filter(l => /Weight/.test(l));
+console.log('     CSV weight rows:\n       ' + wRows.join('\n       '));
+t('the superseded 105.0 lbs typo is not still a plain reading in the spreadsheet',
+  !wRows.some(l => /105/.test(l) && !/Removed|superseded/i.test(l)), String(wRows.length) + ' weight rows');
 
 fs.writeFileSync(path.join(HERE, '..', 'outputs', 'v69-report-after-edit.html'), rep);
 t('no page errors', errs.length === 0, errs.join(' ; '));
