@@ -176,6 +176,18 @@ console.log('\n1. Paracentesis — the screen that could delete but not add');
   }
   const after = await paraCount();
   t('the new procedure is on the list', after === before + 1, before + ' -> ' + after);
+  // TOTAL DRAINED IS A FEATURE AARON ASKED FOR, not a leftover. STATUS.md records the request:
+  // "there can be notes for weight that can add the para together to see how much was drained."
+  // The v69 patch very nearly deleted it by carrying over the reasoning that retired the AVERAGE.
+  // Scoped to the stat grid, never document.body -- in a single-file app the source is in the body
+  // and any text match hits the source itself.
+  const totalCard = await page.evaluate(() => {
+    const grid = [...document.querySelectorAll('div')].find(d => /repeat\(3/.test(d.style.gridTemplateColumns || ''));
+    // CASE-INSENSITIVE: the card label is uppercased by CSS and innerText returns what is
+    // RENDERED, so /Total drained/ went red against a build that shows it perfectly.
+    return grid ? /total drained/i.test(grid.innerText || '') : false;
+  });
+  t('the Total drained figure is still on the Paracentesis report', totalCard, totalCard ? '' : 'stat grid missing Total drained');
 }
 
 console.log('\n2. Editing a paracentesis supersedes it — it must not appear twice');
@@ -212,6 +224,58 @@ console.log('\n3. Weight — the same defect, unreported');
   const populated = await page.evaluate(() => [...document.querySelectorAll('button')].some(b => /^Weeks$/.test((b.innerText||'').trim())));
   t('the Weight report is showing its populated view', populated, populated ? '' : 'no Weeks/Months toggle - still the empty state');
   t('an add control exists on the Weight report with readings', !!box && populated, box ? '' : 'no [data-weight-report-add]');
+
+  // v69. A weight typed wrong could be added from here but not fixed from here -- the correction
+  // lived on a different screen (History). Same shape of gap as the paracentesis one, one screen
+  // over.
+  // COUNT THE ROW, NOT THE EDIT BUTTON. A row showing the Delete/Keep confirmation has no Edit
+  // button, so counting those made arming the confirmation look like a deletion that had not
+  // happened -- a false RED that would have sent someone hunting a data-loss bug that was not there.
+  const wCount = () => page.evaluate(() => document.querySelectorAll('[data-weight-row]').length);
+  const wRows = () => page.evaluate(() => [...document.querySelectorAll('[data-weight-row]')]
+    .map(r => r.innerText).join(' | '));
+  const beforeW = await wCount();
+  // Same guard as the paracentesis edit: "count unchanged" is trivially true of an empty list, and
+  // that is exactly how the first version of the para check went green against a build with no
+  // controls at all.
+  t('there were weight readings to correct in the first place', beforeW > 0, beforeW + ' row(s)');
+  if (beforeW > 0) {
+    await page.evaluate(() => document.querySelector('[data-weight-edit]').click());
+    await page.waitForTimeout(500);
+    const field = await page.$('[data-weight-edit-value]');
+    t('the weight edit step lets the number be corrected', !!field, field ? '' : 'no [data-weight-edit-value]');
+    const titled = await page.evaluate(() => {
+      const inp = document.querySelector('input[type="datetime-local"]');
+      const dlg = inp && inp.closest('div').parentElement;
+      return !!dlg && /Edit Weight/.test(dlg.innerText || '');
+    });
+    t('the weight edit step says Edit, not Log', titled, '');
+    if (field) { await field.fill('150.3'); await confirmModal('weight-edit'); }
+    const afterW = await wCount();
+    // BOTH halves, for the same reason as the paracentesis edit: asserting only that 150.3 shows
+    // would pass just as happily on a build that left the old reading behind as well.
+    t('correcting a weight does not leave the old reading behind', afterW === beforeW, beforeW + ' -> ' + afterW);
+    t('the corrected weight is the one displayed', /150\.3 lbs/.test(await wRows()), (await wRows()).replace(/\n/g,' ').slice(0, 90));
+  }
+
+  // The remove is TWO-STEP on purpose. v66 shipped a one-tap delete on Cycle History and it
+  // destroyed a whole period; this asserts the second tap exists rather than trusting the label.
+  {
+    const beforeR = await wCount();
+    await page.evaluate(() => { const b = document.querySelector('[data-weight-remove]'); if (b) b.click(); });
+    await page.waitForTimeout(400);
+    const armed = await page.evaluate(() => [...document.querySelectorAll('button')]
+      .some(b => /^Delete$/.test((b.innerText || '').trim())));
+    t('removing a weight asks a second time before deleting', armed, armed ? '' : 'no Delete step');
+    const midway = await wCount();
+    // Guarded like every other "unchanged" assertion here: 0 -> 0 is trivially unchanged, and this
+    // one passed vacuously against v68 where no weight rows have controls at all.
+    t('nothing is deleted on the first tap', beforeR > 0 && midway === beforeR, beforeR + ' -> ' + midway);
+    await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /^Delete$/.test((x.innerText || '').trim())); if (b) b.click(); });
+    await page.waitForTimeout(600);
+    const afterR = await wCount();
+    t('confirming removes exactly one reading', beforeR > 0 && afterR === beforeR - 1, beforeR + ' -> ' + afterR);
+  }
 }
 
 console.log('\n4. Cycle — a period logged on the wrong day can be moved');

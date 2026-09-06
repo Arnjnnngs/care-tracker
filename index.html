@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v68';
+const APP_VERSION = 'v69';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,6 +1092,11 @@ const APP_VERSION = 'v68';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
+  { v: 'v69', date: 'Sep 6, 2026', title: 'Fix a weight you typed wrong',
+    points: [
+      'A weight reading can now be corrected or removed from the Weight report \u2014 tap Edit to change the number or the time, or Remove to delete it. Before this, a weight typed wrong could only be fixed from History.',
+      'Removing asks twice, like everywhere else in the app: Remove, then Delete.'
+    ] },
   { v: 'v68', date: 'Sep 6, 2026', title: 'Fix a mistake where you find it',
     points: [
       'The Paracentesis screen could delete a procedure but not add one, and could not correct a wrong amount. It can now do both.',
@@ -1297,7 +1302,7 @@ function whatsNewShouldShow() {
 
 // State
 const initialMedicationConfig = loadMedicationConfig();
-let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missedBannerOpen: false, whatsNewOpen: false, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, bkProtect: false, bkPw: '', bkPw2: '', bkLocked: null, bkUnlockPw: '', reportKind: 'problem', reportDraft: '', reportNotice: null, reportBusy: false, reportShowAll: false, reportConfirmClear: false, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
+let state = { entries: [], chemoDates: [], now: Date.now(), toast: null, warn: null, view: 'home', reportsView: null, meds: initialMedicationConfig.meds, archivedMeds: initialMedicationConfig.archivedMeds, medEditor: null, confirmDeleteMed: null, override: null, confirmRemove: null, tempInput: '', weightInput: '', paraInput: '', confirmRemovePara: null, confirmRemoveWeight: null, shareArmed: false, pendingMedList: null, confirmMedList: false, chemoInput: '', weightRange: 'weeks', timeModal: null, loaded: false, missedClearedAt: 0, missedBannerOpen: false, whatsNewOpen: false, missReasons: new Map(), missReasonSheet: null, confirmClearChemo: false, exporting: false, restoring: false, backupNotice: null, bkProtect: false, bkPw: '', bkPw2: '', bkLocked: null, bkUnlockPw: '', reportKind: 'problem', reportDraft: '', reportNotice: null, reportBusy: false, reportShowAll: false, reportConfirmClear: false, appointments: [], drawerOpen: false, calCursor: null, calSelected: null, apptSheet: null, apptConfirmDelete: null, tour: null, medsync: { devices: null, sharedJson: null, setAt: 0, setBy: '', confirm: null, saving: false } };
 
 // Decided ONCE at start-up, not on every render: whether this phone has already seen this version.
 // Reading it per render would re-open the pop-up the moment anything else redrew the screen.
@@ -1983,10 +1988,23 @@ async function confirmTimeAndLog() {
     setToast('Temperature ' + v + ' ' + suffix + ' logged at ' + fmtTime(ts));
   } else if (m.type === 'weight') {
     const v = m.weightValue;
+    // Re-validated here because when editing the value is typed into the modal, after logWeight()'s
+    // own check has already run on the way in.
+    if (!(typeof v === 'number' && isFinite(v) && v > 0 && v <= 999)) { setToast('Enter a valid weight'); return; }
+    const editId = m.editId;
     const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
     setState({ weightInput: '', timeModal: null });
     await addEntryDB(entry);
-    setToast('Weight ' + v + ' lbs logged at ' + fmtTime(ts));
+    if (editId) {
+      try {
+        await removeEntryDB(editId);
+      } catch (err) {
+        console.warn('[weight] corrected but old reading not removed:', err);
+        setToast('Weight corrected, but the old reading is still there — remove it from the Weight report');
+        return;
+      }
+    }
+    setToast('Weight ' + v + ' lbs ' + (editId ? 'corrected' : 'logged') + ' at ' + fmtTime(ts));
   } else if (m.type === 'para') {
     const v = m.paraValue;
     // The liters are typed into the modal when editing, so they are re-validated HERE rather than
@@ -2907,7 +2925,7 @@ function renderTimeModal() {
     // the value.
     title = m.editId ? 'Edit Paracentesis' : ('Log Paracentesis · ' + paraFmtLiters(m.paraValue) + ' L');
   } else if (m.type === 'weight') {
-    title = 'Log Weight · ' + m.weightValue + ' lbs';
+    title = m.editId ? 'Edit Weight' : ('Log Weight · ' + m.weightValue + ' lbs');
   } else {
     // This chain used to END on the weight line with a bare `else`, so a paracentesis -- which has
     // no weightValue -- opened a dialog headed "Log Weight · undefined lbs". Aaron reported that as
@@ -2940,6 +2958,12 @@ function renderTimeModal() {
       // as 45) is at least as likely as a wrong day, and before this the only route to fixing one
       // was Remove-and-re-enter. 16px is the iOS floor pm.py enforces -- anything smaller makes
       // Safari zoom the page on focus.
+      (m.type === 'weight' && m.editId) ? h('div', { style: { marginBottom: '16px' } },
+        h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' } }, 'Weight (lbs)'),
+        h('input', { 'data-weight-edit-value': 'true', type: 'number', inputMode: 'decimal', step: '0.1', min: '0', max: '999',
+          value: String(m.weightValue), onInput: (e) => { const n = parseFloat(e.target.value); state.timeModal.weightValue = isNaN(n) ? null : n; },
+          className: 'mono', style: { width: '100%', minHeight: '52px', border: '1px solid rgba(212,104,138,0.2)', borderRadius: '13px', padding: '0 14px', fontSize: '16px', background: 'rgba(255,255,255,0.75)', color: '#3D2B3A' } })
+      ) : null,
       (m.type === 'para' && m.editId) ? h('div', { style: { marginBottom: '16px' } },
         h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' } }, 'Liters drained'),
         h('input', { 'data-para-edit-liters': 'true', type: 'number', inputMode: 'decimal', step: '0.1', min: '0', max: String(PARA_MAX_LITERS),
@@ -4944,6 +4968,20 @@ function reportAddRow(opts) {
       h('button', { onClick: opts.onLog, style: { flexShrink: '0', minHeight: '44px', padding: '0 18px', borderRadius: '12px', background: '#AA5375', color: '#fff', fontSize: '14px', fontWeight: '700' } }, 'Log')
     )
   );
+}
+
+function weightEditOpen(p) {
+  setState({ timeModal: { type: 'weight', editId: p.id, weightValue: p.weight, timeValue: toLocalISO(p.ts) } });
+}
+async function removeWeightReading(id) {
+  try {
+    await removeEntryDB(id);
+    setState({ confirmRemoveWeight: null });
+    setToast('Weight reading removed');
+  } catch (e) {
+    console.warn('[weight] remove failed:', e);
+    setToast('Could not remove — check connection and try again');
+  }
 }
 
 async function removeParacentesis(paraId) {
@@ -7230,12 +7268,23 @@ function renderWeightTrend(now) {
     const d = new Date(p.ts);
     const day = d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' });
     const time = fmtTime(p.ts);
-    return h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },
+    return h('div', { 'data-weight-row': p.id, style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },
       h('div', { style: { flex: '1' } },
         h('div', { style: { fontSize: '14px', fontWeight: '700' } }, day),
         h('div', { style: { fontSize: '12px', color: '#7D6974' } }, time)
       ),
-      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight: '600', color: '#7B3F6B' } }, p.weight + ' lbs')
+      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight: '600', color: '#7B3F6B' } }, p.weight + ' lbs'),
+      state.confirmRemoveWeight === p.id
+        ? h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
+            h('button', { onClick: () => removeWeightReading(p.id), style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px', minHeight: '44px' } }, 'Delete'),
+            h('button', { onClick: () => setState({ confirmRemoveWeight: null }), style: { color: '#7D6974', fontSize: '12.5px', padding: '8px 6px', fontWeight: '600', minHeight: '44px' } }, 'Keep')
+          )
+        : h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center', flexShrink: '0' } },
+            h('button', { 'data-weight-edit': 'true', onClick: () => weightEditOpen(p), style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Edit'),
+            // TWO-STEP, like every other destructive control here. v66 shipped a one-tap delete on
+            // Cycle History and it destroyed a whole period.
+            h('button', { 'data-weight-remove': 'true', onClick: () => setState({ confirmRemoveWeight: p.id }), style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
+          )
     );
   });
 

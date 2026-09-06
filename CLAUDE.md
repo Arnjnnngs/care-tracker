@@ -144,6 +144,48 @@ independently."
   checkpoint messages — messages survive rollbacks, files do not), falsification duty,
   version-agnostic assertions, the h() trap, and the Firestore rules.
 
+## Rule 2.2 — WHO CHECKS THE BUILDER. The gate is lowered. (2026-09-06, Aaron's question)
+
+Aaron: *"who checks your work. maybe you facilitate and brainstorm and then you pass it to a coder
+for the work. there needs to be someone after you checking instead of PM at the end"*
+
+**He is right that there was a hole, and it is bigger than it looks.** Rule 2 sent an independent
+auditor only at *"big changes (features; anything touching dose logic, medication config, storage,
+or export)"*. Everything else was built and checked by the same person, and the only thing standing
+after that was `pm.py` — which is a **release-mechanics** script, not a reviewer. It checks that the
+version moved and the work is pushed. **It has never once looked at whether the code is right.**
+
+So on a release below the "big" line, nobody checked the builder. That is exactly the class this
+project keeps getting hurt by: v66 was small, and it shipped a control that permanently destroyed a
+period of a patient's record.
+
+### The rule, effective now
+
+**Any release that WRITES, EDITS or DELETES a record gets an independent auditor before the PM,
+regardless of how few lines it is.** Size stops being the trigger; touching the patient's data is.
+Copy, colours, layout and config stay inline as before — Rule 2 still says small work does not get
+a full chain, and that has not changed for work that cannot lose data.
+
+By that line, v69 — which deletes a weight reading — needed an auditor and would not have got one
+under the old wording. It got one.
+
+### On passing the coding to a coder instead
+
+**Not recommended, and here is the honest reason.** Splitting *build* from *review* is the thing
+worth having; which half is the subagent barely matters. Handing the code out costs more and buys
+less, because the expensive mistakes on this project have not been coding mistakes — they have been
+**context** mistakes: British spellings the file does not use, a version literal pinned in a patch,
+a check written so it could not fail, and this release nearly deleting *"Total drained"* — a figure
+**Aaron asked for**, recorded in STATUS.md, which no fresh coder would have known to protect. A
+coder briefed from scratch makes more of those, not fewer, and the reviewer then has to catch them.
+
+Keeping the build here and sending the **review** out puts the independent pair of eyes exactly
+where Aaron wants it — after the builder, before the PM — at one agent instead of two, and the
+reviewer's job is adversarial, which is the job that actually bites.
+
+**If the auditor's findings ever start being mostly context mistakes rather than logic mistakes,
+this reasoning is wrong and the split should flip.** Worth re-reading after three releases.
+
 ## Rule 2.5 — THE PM IS `pm.py`. RUN IT. IT IS NOT OPTIONAL.
 
 Aaron: *"a PM is required at all times for each of my messages/changes."*

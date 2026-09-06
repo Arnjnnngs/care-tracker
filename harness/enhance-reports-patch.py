@@ -240,7 +240,10 @@ REMOVE_BTN = ": h('button', { onClick: () => setState({ confirmRemovePara: p.par
 sub("        " + REMOVE_BTN,
     """        : h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center', flexShrink: '0' } },
             h('button', { 'data-para-edit': 'true', onClick: () => paraEditOpen(p), style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Edit'),
-            h('button', { onClick: () => setState({ confirmRemovePara: p.paraId }), style: { flexShrink: '0', color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
+            // Six-second arm, then it disarms itself -- the same behaviour History's Remove has
+            // always had. v68 shipped this control without it, so a red Delete stayed armed on a
+            // procedure indefinitely. Fixed here rather than filed.
+            h('button', { onClick: () => { setState({ confirmRemovePara: p.paraId }); setTimeout(() => { if (state.confirmRemovePara === p.paraId) setState({ confirmRemovePara: null }); }, 6000); }, style: { flexShrink: '0', color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
           )""",
     'para-edit-button')
 
@@ -411,6 +414,146 @@ sub("""    'Averaging ' + paraFmtLiters(avg) + ' L per procedure. These are reco
 # use for.
 sub("""  const avg = total / list.length;
 """, "", 'drop-unused-avg')
+
+# "TOTAL DRAINED" STAYS, AND THE FIRST DRAFT OF THIS PATCH WRONGLY REMOVED IT.
+# The reasoning that killed the average -- a figure summarising volumes that each depend on elapsed
+# time -- was carried over to the running total, which looks like the average's twin. It is not.
+# STATUS.md records Aaron asking for exactly this: "there can be notes for weight that can add the
+# para together to see how much was drained." The Paracentesis report's total, and the matching
+# per-window line on the Weight report, are that request. Removing it would have deleted a feature
+# he asked for, in the name of a rule he wrote about a different number.
+#
+# The distinction, for whoever reads this next: the AVERAGE invited a false comparison ("she is
+# averaging 5.6, this one was 3, she is improving") when the interval carried the meaning. The TOTAL
+# invites no comparison at all -- it is the plain sum of what came off, which is what was asked for.
+
+
+# WEIGHT COULD ADD BUT NOT EDIT OR REMOVE -- THE EXACT INVERSE OF THE PARACENTESIS DEFECT THIS
+# RELEASE SET OUT TO FIX. Found by the app-v71 audit's Enhancer note. A mistyped 1156.2 distorted
+# the trend permanently from the screen that displays it.
+#
+# The Enhancer FOUND this while adding the add row and it was written to a backlog instead of being
+# fixed. That was the real failure -- not the miss, the filing. Aaron: "don't tell me something is
+# wrong and not fix it."
+sub("""      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight: '600', color: '#7B3F6B' } }, p.weight + ' lbs')
+    );
+  });""",
+    """      h('div', { className: 'mono', style: { fontSize: '16px', fontWeight: '600', color: '#7B3F6B' } }, p.weight + ' lbs'),
+      state.confirmRemoveWeight === p.id
+        ? h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
+            h('button', { onClick: () => removeWeightReading(p.id), style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px', minHeight: '44px' } }, 'Delete'),
+            h('button', { onClick: () => setState({ confirmRemoveWeight: null }), style: { color: '#7D6974', fontSize: '12.5px', padding: '8px 6px', fontWeight: '600', minHeight: '44px' } }, 'Keep')
+          )
+        : h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center', flexShrink: '0' } },
+            h('button', { 'data-weight-edit': 'true', onClick: () => weightEditOpen(p), style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Edit'),
+            // TWO-STEP, like every other destructive control here. v66 shipped a one-tap delete on
+            // Cycle History and it destroyed a whole period.
+            // ARMS FOR SIX SECONDS, then disarms itself -- copied from the History row's Remove,
+            // which has always done this. Without it a red Delete sits armed on a medical record
+            // through scrolling and through leaving the screen and coming back, and a mis-tap is
+            // exactly what a two-step confirmation exists to prevent.
+            h('button', { 'data-weight-remove': 'true', onClick: () => { setState({ confirmRemoveWeight: p.id }); setTimeout(() => { if (state.confirmRemoveWeight === p.id) setState({ confirmRemoveWeight: null }); }, 6000); }, style: { color: '#8E3D61', fontSize: '12.5px', fontWeight: '700', padding: '8px 10px', borderRadius: '9px', minHeight: '44px', background: 'rgba(170,83,117,0.10)' } }, 'Remove')
+          )
+    );
+  });""",
+    'weight-row-controls')
+
+sub("""async function removeParacentesis(paraId) {""",
+    """function weightEditOpen(p) {
+  setState({ timeModal: { type: 'weight', editId: p.id, weightValue: p.weight, timeValue: toLocalISO(p.ts) } });
+}
+async function removeWeightReading(id) {
+  try {
+    await removeEntryDB(id);
+    setState({ confirmRemoveWeight: null });
+    setToast('Weight reading removed');
+  } catch (e) {
+    console.warn('[weight] remove failed:', e);
+    setToast('Could not remove — check connection and try again');
+  }
+}
+
+async function removeParacentesis(paraId) {""",
+    'weight-edit-helpers')
+
+# The weight branch has to handle an edit, and ADD BEFORE REMOVE for the same reason the marker
+# branch does: a failed remove leaves a visible duplicate the caregiver can delete, while the
+# reverse order lets a failed add destroy the reading in silence.
+sub("""  } else if (m.type === 'weight') {
+    const v = m.weightValue;
+    const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
+    setState({ weightInput: '', timeModal: null });
+    await addEntryDB(entry);
+    setToast('Weight ' + v + ' lbs logged at ' + fmtTime(ts));""",
+    """  } else if (m.type === 'weight') {
+    const v = m.weightValue;
+    // Re-validated here because when editing the value is typed into the modal, after logWeight()'s
+    // own check has already run on the way in.
+    if (!(typeof v === 'number' && isFinite(v) && v > 0 && v <= 999)) { setToast('Enter a valid weight'); return; }
+    const editId = m.editId;
+    const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
+    setState({ weightInput: '', timeModal: null });
+    await addEntryDB(entry);
+    if (editId) {
+      try {
+        await removeEntryDB(editId);
+      } catch (err) {
+        console.warn('[weight] corrected but old reading not removed:', err);
+        setToast('Weight updated, but the old reading is still there — remove it from the list below');
+        return;
+      }
+    }
+    setToast('Weight ' + v + ' lbs ' + (editId ? 'updated' : 'logged') + ' at ' + fmtTime(ts));""",
+    'weight-edit-confirm')
+
+# The modal needs a weight field when editing, for the same reason the paracentesis one does.
+sub("""      (m.type === 'para' && m.editId) ? h('div', { style: { marginBottom: '16px' } },""",
+    """      (m.type === 'weight' && m.editId) ? h('div', { style: { marginBottom: '16px' } },
+        h('div', { style: { fontSize: '11.5px', fontWeight: '700', color: '#8A6479', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' } }, 'Weight (lbs)'),
+        h('input', { 'data-weight-edit-value': 'true', type: 'number', inputMode: 'decimal', step: '0.1', min: '0', max: '999',
+          value: String(m.weightValue), onInput: (e) => { const n = parseFloat(e.target.value); state.timeModal.weightValue = isNaN(n) ? null : n; },
+          className: 'mono', style: { width: '100%', minHeight: '52px', border: '1px solid rgba(212,104,138,0.2)', borderRadius: '13px', padding: '0 14px', fontSize: '16px', background: 'rgba(255,255,255,0.75)', color: '#3D2B3A' } })
+      ) : null,
+      (m.type === 'para' && m.editId) ? h('div', { style: { marginBottom: '16px' } },""",
+    'modal-weight-field')
+
+sub("""  } else if (m.type === 'weight') {
+    title = 'Log Weight · ' + m.weightValue + ' lbs';""",
+    """  } else if (m.type === 'weight') {
+    title = m.editId ? 'Edit Weight' : ('Log Weight · ' + m.weightValue + ' lbs');""",
+    'title-weight-edit')
+
+sub("""confirmRemovePara: null,""", """confirmRemovePara: null, confirmRemoveWeight: null,""", 'state-confirmRemoveWeight')
+
+# A hook on the ROW, not only on its buttons. The v69 suite first counted weight rows by their Edit
+# button; a row showing the Delete/Keep confirmation has no Edit button, so arming the confirmation
+# looked exactly like a deletion that had not happened. Count the row, not the control.
+sub("""    return h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },""",
+    """    return h('div', { 'data-weight-row': p.id, style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } },""",
+    'weight-row-hook')
+
+# ---------------------------------------------------------------------------------------------
+# THE RELEASE STAMP. Rule 0 says a release must be reproducible from the repo alone: base version
+# plus the patches in harness/. Bumping the version by hand after applying the patch broke that --
+# a rebuild came out stamped v65 and the difference had to be reconstructed from a diff. It is done
+# here now, so outputs/rollback-v65/index.html + this file IS the shipped file.
+sub("""const APP_VERSION = 'v65';""", """const APP_VERSION = 'v69';""", 'app-version')
+
+sub("""const CHANGELOG = [
+""", """const CHANGELOG = [
+  { v: 'v69', date: 'Sep 6, 2026', title: 'Fix a weight you typed wrong',
+    points: [
+      'A weight reading can now be corrected or removed from the Weight report \\u2014 tap Edit to change the number or the time, or Remove to delete it. Before this, a weight typed wrong had to be deleted from History and typed in again.',
+      'Removing asks twice, like everywhere else in the app: Remove, then Delete.'
+    ] },
+  { v: 'v68', date: 'Sep 6, 2026', title: 'Fix a mistake where you find it',
+    points: [
+      'The Paracentesis screen could delete a procedure but not add one, and could not correct a wrong amount. It can now do both.',
+      'The Weight screen can now record a weight without going back to Today.',
+      'A period logged on the wrong day can be moved \\u2014 tap Move start or Move end in Cycle History. Periods still cannot be deleted there, on purpose: deleting one could quietly merge it with another.',
+      'The Paracentesis screen no longer shows an average per procedure. How much comes off depends on how long it has been, so an average of it was not telling you anything.'
+    ] },
+""", 'changelog-v68-v69')
 
 open(TARGET, 'w', encoding='utf-8').write(s)
 print('enhance-reports-patch applied: %d -> %d bytes' % (orig_len, len(s)))
