@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -118,7 +118,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | | |
 |---|---|
 | **Version** | v69 |
-| **Commit** | v69 — a weight can be corrected or removed from the Weight report, by appending rather than deleting. |
+| **Commit** | `1309ea9` — v69 LIVE on main. A weight can be corrected or removed from the Weight report, by appending rather than deleting. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `d8c356dabc4bbca78416431a5554eec3` |
 | **sw.js md5** | `814d201993e4051b9f0f057f33fc562d` |
