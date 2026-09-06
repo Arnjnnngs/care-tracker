@@ -295,8 +295,11 @@ console.log('\n3. Weight — the same defect, unreported');
     // if either had reached for deleteDoc this is where it shows -- age-independently, without the
     // suite having to know what the Firestore rules actually say. Mirrors PARA-7.
     const dels = await page.evaluate(() => (globalThis.__deleted || []).filter(d => d.medId === 'weight'));
-    const anyWeightWrites = await wCount();
-    t('a weight edit and a weight removal both actually ran', beforeW > 0 && beforeR > 0 && anyWeightWrites >= 0,
+    // `anyWeightWrites >= 0` used to sit inside this guard. A count is never negative, so that
+    // clause could not fail and contributed nothing -- the delta audit called it out. What the
+    // check is actually for is proving the two flows above ran against real rows, so the
+    // never-deletes assertion below is not passing on a screen where nothing happened.
+    t('a weight edit and a weight removal both actually ran', beforeW > 0 && beforeR > 0,
       'edited ' + beforeW + ' row(s), removed from ' + beforeR);
     t('correcting or removing a weight NEVER deletes a document', dels.length === 0,
       dels.length ? JSON.stringify(dels) : 'no deleteDoc on any weight');

@@ -1992,7 +1992,7 @@ async function confirmTimeAndLog() {
     // own check has already run on the way in.
     if (!(typeof v === 'number' && isFinite(v) && v > 0 && v <= 999)) { setToast('Enter a valid weight'); return; }
     const editId = m.editId;
-    const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
+    const entry = { medId: 'weight', weight: v, dose: v + ' lbs' + (editId ? ' (corrected)' : ''), mg: 0, ts };
     if (editId) {
       entry.weightId = editId;
       entry.loggedAt = Math.max(Date.now(), (m.prevStamp || 0) + 1);
@@ -4971,9 +4971,13 @@ function reportAddRow(opts) {
 // until it is corrected. A Map, not a plain object, for the reason spelled out at
 // paracentesisResolved(): an id of 'constructor' reads back a truthy inherited value.
 function weightSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
-function weightResolved() {
+function weightResolved() { return weightResolvedFrom(state.entries); }
+// TAKES A LIST. The printable oncologist report reads allExportEntries(), not state.entries, and a
+// resolver hard-wired to one source cannot serve the other -- which is exactly how the net-weight
+// tile got left behind. See the reader list below.
+function weightResolvedFrom(source) {
   const byGroup = new Map();
-  for (const d of (state.entries || [])) {
+  for (const d of (source || [])) {
     if (!d || d.medId !== 'weight') continue;
     const key = (typeof d.weightId === 'string' && d.weightId) ? d.weightId : ('doc:' + String(d.id));
     const prev = byGroup.get(key);
@@ -4990,6 +4994,16 @@ function weightResolved() {
   return live.sort((a, b) => a.ts - b.ts);                          // oldest first, as the chart wants
 }
 function weightLatest() { const l = weightResolved(); return l.length ? l[l.length - 1] : null; }
+// Is this exact document superseded by a newer one in its own group? Used only for LABELLING rows
+// in History and the CSV, never for computing a figure -- a figure uses the resolved set.
+function weightSuperseded(e) {
+  if (!e || e.medId !== 'weight' || e.cancelled) return false;
+  const keyOf = (d) => (typeof d.weightId === 'string' && d.weightId) ? d.weightId : ('doc:' + String(d.id));
+  const key = keyOf(e);
+  const mine = (e.loggedAt || e.ts || 0);
+  return (state.entries || []).some(d => d && d.medId === 'weight' && String(d.id) !== String(e.id)
+    && keyOf(d) === key && (d.loggedAt || d.ts || 0) > mine);
+}
 
 function weightEditOpen(p) {
   // prevStamp travels with the modal so the correction can be stamped strictly newer than what it
@@ -5575,7 +5589,7 @@ function reportNameOf(id) {
 function exportDetailFor(e) {
   if (!e) return '';
   if (e.medId === 'temp') return e.dose || (e.temp !== undefined ? e.temp + tempSuffix() : '');
-  if (e.medId === 'weight') return e.cancelled ? 'Removed' : (e.dose || (e.weight !== undefined ? e.weight + ' lbs' : ''));
+  if (e.medId === 'weight') return e.cancelled ? 'Removed' : ((e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '')) + (weightSuperseded(e) ? ' (superseded)' : ''));
   if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : (e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || ''));
   if (e.medId === 'bowel_movement') return BOWEL_MOVEMENT_LABELS[e.value] || e.dose || e.value || '';
   if (e.medId === 'appetite') return APPETITE_LABELS[e.value] || e.dose || e.value || '';
@@ -5795,7 +5809,7 @@ function buildReportDoc(now) {
   const fmtD = (d) => d ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
   const temps = allExportEntries().filter(e => e.medId === 'temp' && e.temp !== undefined).map(e => Number(e.temp)).filter(n => !isNaN(n));
-  const weights = allExportEntries().filter(e => e.medId === 'weight' && e.weight !== undefined).map(e => Number(e.weight)).filter(n => !isNaN(n));
+  const weights = weightResolvedFrom(allExportEntries()).map(w => Number(w.weight)).filter(n => !isNaN(n));
   const peakTemp = temps.length ? Math.max.apply(null, temps).toFixed(1) + tempSuffix() : '—';
   const netWeight = weights.length > 1 ? ((weights[weights.length - 1] - weights[0] >= 0 ? '+' : '') + (weights[weights.length - 1] - weights[0]).toFixed(1) + ' lbs') : '—';
 
@@ -6676,7 +6690,9 @@ function renderHistory(now) {
     const tyDay = items.filter(e => e.medId === 'tylenol' && !e.missed).reduce((s, e) => s + (e.mg || 0), 0);
     const doses = items.filter(e => e.medId !== 'temp' && e.medId !== 'weight' && e.medId !== 'paracentesis' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end' && !e.missed).length;
     const temps = items.filter(e => e.medId === 'temp').length;
-    const weights = items.filter(e => e.medId === 'weight').length;
+    // Resolved, not raw: a corrected reading is one weigh-in, not two. The ROWS below still show
+    // every document, which is the audit trail; this is a count and counts must be true.
+    const weights = weightResolved().filter(w => dayStart(w.ts) === k).length;
     const wkday = new Date(k).toLocaleDateString([], { weekday: 'long' });
     const md = (new Date(k).getMonth() + 1) + '/' + new Date(k).getDate();
     const label = k === d0 ? ('Today - ' + wkday + ' ' + md) : (wkday + ', ' + md);
@@ -7295,7 +7311,7 @@ function renderWeightTrend(now) {
   );
 
   // Readings list
-  const readingsItems = points.slice().reverse().map((p, i) => {
+  const readingsItems = weightEntries.slice().reverse().map((p, i) => {
     const d = new Date(p.ts);
     const day = d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' });
     const time = fmtTime(p.ts);

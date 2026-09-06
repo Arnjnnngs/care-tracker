@@ -483,9 +483,13 @@ sub("""async function removeParacentesis(paraId) {""",
 // until it is corrected. A Map, not a plain object, for the reason spelled out at
 // paracentesisResolved(): an id of 'constructor' reads back a truthy inherited value.
 function weightSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
-function weightResolved() {
+function weightResolved() { return weightResolvedFrom(state.entries); }
+// TAKES A LIST. The printable oncologist report reads allExportEntries(), not state.entries, and a
+// resolver hard-wired to one source cannot serve the other -- which is exactly how the net-weight
+// tile got left behind. See the reader list below.
+function weightResolvedFrom(source) {
   const byGroup = new Map();
-  for (const d of (state.entries || [])) {
+  for (const d of (source || [])) {
     if (!d || d.medId !== 'weight') continue;
     const key = (typeof d.weightId === 'string' && d.weightId) ? d.weightId : ('doc:' + String(d.id));
     const prev = byGroup.get(key);
@@ -502,6 +506,16 @@ function weightResolved() {
   return live.sort((a, b) => a.ts - b.ts);                          // oldest first, as the chart wants
 }
 function weightLatest() { const l = weightResolved(); return l.length ? l[l.length - 1] : null; }
+// Is this exact document superseded by a newer one in its own group? Used only for LABELLING rows
+// in History and the CSV, never for computing a figure -- a figure uses the resolved set.
+function weightSuperseded(e) {
+  if (!e || e.medId !== 'weight' || e.cancelled) return false;
+  const keyOf = (d) => (typeof d.weightId === 'string' && d.weightId) ? d.weightId : ('doc:' + String(d.id));
+  const key = keyOf(e);
+  const mine = (e.loggedAt || e.ts || 0);
+  return (state.entries || []).some(d => d && d.medId === 'weight' && String(d.id) !== String(e.id)
+    && keyOf(d) === key && (d.loggedAt || d.ts || 0) > mine);
+}
 
 function weightEditOpen(p) {
   // prevStamp travels with the modal so the correction can be stamped strictly newer than what it
@@ -605,8 +619,14 @@ sub("""const latestWeight = latest('weight');""",
 
 # History shows the tombstone as what it is, the same way a removed paracentesis reads "Removed"
 # rather than as a phantom reading of the old value.
+# History and the CSV keep showing every document -- that is the audit trail, and hiding a value
+# the caregiver corrected would be the wrong kind of tidy. But an unlabelled row is not an audit
+# trail either: before this, a correction printed two weights at the SAME MINUTE of the same day
+# with nothing saying which one was current. The tombstone reads "Removed" and the superseded
+# reading is marked as such -- computed at render time, because the original document is
+# append-only and cannot be rewritten.
 sub("""  if (e.medId === 'weight') return e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '');""",
-    """  if (e.medId === 'weight') return e.cancelled ? 'Removed' : (e.dose || (e.weight !== undefined ? e.weight + ' lbs' : ''));""",
+    """  if (e.medId === 'weight') return e.cancelled ? 'Removed' : ((e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '')) + (weightSuperseded(e) ? ' (superseded)' : ''));""",
     'history-weight-tombstone')
 
 sub("""  const weightEntries = state.entries.filter(e => e.medId === 'weight' && e.weight).sort((a, b) => a.ts - b.ts);""",
@@ -621,6 +641,56 @@ sub("""  const weightEntries = state.entries.filter(e => e.medId === 'weight' &&
 sub("""    ...list.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },""",
     """    ...list.map(p => h('div', { 'data-para-row': p.paraId, style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },""",
     'para-row-hook')
+
+# THE READER THAT WAS LEFT BEHIND, AND WHY THE RULE THAT LEFT IT THERE WAS WRONG.
+#
+# The delta audit BLOCKED this release on it: correcting a mistyped weight could make the printable
+# oncologist report announce a 35 lb GAIN while the app's own Weight screen showed a 10 lb LOSS. It
+# was reproduced from the downloaded file's bytes, not from the screen.
+#
+# The reasoning that caused it is worth writing down because it sounded right: "History, the CSV and
+# the printable report show RAW documents, the same as paracentesis -- they are the audit trail."
+# That is true of a LIST OF ROWS. It is false of a COMPUTED FIGURE. A net-change tile that silently
+# includes a value the caregiver corrected is not an audit trail, it is arithmetic on data the app
+# itself knows is wrong -- and a removal is worse, because the tombstone carries the old weight
+# forward so the deleted reading counts TWICE.
+#
+# So the line is not raw-vs-resolved by screen. It is: ROWS raw, NUMBERS resolved.
+#
+# One more reason this had to be found by someone else: every weight ts in this app is minute
+# granular (logging and editing share one datetime-local modal), so a correction that keeps the time
+# produces an IDENTICAL ts, and orderBy('ts') breaks that tie by Firestore's random document id.
+# The bug is a coin flip. A gate whose fixture sorts ties the other way shows it green.
+sub("""  const weights = allExportEntries().filter(e => e.medId === 'weight' && e.weight !== undefined).map(e => Number(e.weight)).filter(n => !isNaN(n));""",
+    """  const weights = weightResolvedFrom(allExportEntries()).map(w => Number(w.weight)).filter(n => !isNaN(n));""",
+    'report-net-weight-resolved')
+
+# The same class of defect one screen over: a COUNT, not a listing. One corrected weigh-in read
+# "2 wt" in the History day summary.
+sub("""    const weights = items.filter(e => e.medId === 'weight').length;""",
+    """    // Resolved, not raw: a corrected reading is one weigh-in, not two. The ROWS below still show
+    // every document, which is the audit trail; this is a count and counts must be true.
+    const weights = weightResolved().filter(w => dayStart(w.ts) === k).length;""",
+    'history-weight-count-resolved')
+
+# A correction is legible in the audit trail. Without this the CSV prints two weights at the same
+# minute of the same day with nothing saying which one is current.
+sub("""    const entry = { medId: 'weight', weight: v, dose: v + ' lbs', mg: 0, ts };
+    if (editId) {
+      entry.weightId = editId;""",
+    """    const entry = { medId: 'weight', weight: v, dose: v + ' lbs' + (editId ? ' (corrected)' : ''), mg: 0, ts };
+    if (editId) {
+      entry.weightId = editId;""",
+    'mark-corrections-in-the-trail')
+
+# THE CORRECTION HAD AN INVISIBLE HORIZON. The readings list was built from `points`, which the
+# Weeks/Months toggle filters, so a reading older than the window carried no Edit and no Remove --
+# the one thing this release exists to provide, unavailable on exactly the old readings most likely
+# to need it. The heading over it said "All Readings", which was not true either.
+# The CHART stays windowed; the list does not.
+sub("""  const readingsItems = points.slice().reverse().map((p, i) => {""",
+    """  const readingsItems = weightEntries.slice().reverse().map((p, i) => {""",
+    'readings-list-shows-all')
 
 # ---------------------------------------------------------------------------------------------
 # THE RELEASE STAMP. Rule 0 says a release must be reproducible from the repo alone: base version
