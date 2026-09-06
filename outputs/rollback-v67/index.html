@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v68';
+const APP_VERSION = 'v67';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,12 +1092,11 @@ const APP_VERSION = 'v68';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v68', date: 'Sep 6, 2026', title: 'Fix a mistake where you find it',
+  { v: 'v67', date: 'Sep 6, 2026', title: 'Fix a mistake where you find it',
     points: [
       'The Paracentesis screen could delete a procedure but not add one, and could not correct a wrong amount. It can now do both.',
       'The Weight screen can now record a weight without going back to Today.',
-      'A period logged on the wrong day can be moved \u2014 tap Move start or Move end in Cycle History. Periods still cannot be deleted there, on purpose: deleting one could quietly merge it with another.',
-      'The Paracentesis screen no longer shows an average per procedure. How much comes off depends on how long it has been, so an average of it was not telling you anything.'
+      'A period logged on the wrong day can be moved \u2014 tap Move start or Move end in Cycle History. Periods still cannot be deleted there, on purpose: deleting one could quietly merge it with another.'
     ] },
   { v: 'v65', date: 'Sep 2, 2026', title: 'Another go at the flickering screen',
     points: [
@@ -7026,6 +7025,7 @@ function renderParacentesis(now) {
       'No paracentesis procedures logged yet.')];
   }
   const total = paraTotalLiters(list);
+  const avg = total / list.length;
   const daysSince = Math.floor((dayStart(now) - dayStart(list[0].ts)) / 86400000);
   const sinceLabel = daysSince <= 0 ? 'Today' : daysSince === 1 ? '1 day' : (daysSince + ' days');
   const statCard = (label, value) => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '14px', textAlign: 'center', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
@@ -7038,7 +7038,7 @@ function renderParacentesis(now) {
     statCard('Since last', sinceLabel)
   );
   const note = h('div', { style: { background: 'rgba(170,83,117,0.08)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '14px', padding: '12px 14px', fontSize: '12.5px', color: '#6E5261', lineHeight: '1.5' } },
-    'These are recorded separately from weight — the Weight report still shows what the scale actually said, with a marker on each drain date.');
+    'Averaging ' + paraFmtLiters(avg) + ' L per procedure. These are recorded separately from weight — the Weight report still shows what the scale actually said, with a marker on each drain date.');
   const rows = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
     ...list.map(p => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '14px', padding: '13px 14px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 3px 14px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { flex: '1', minWidth: '0' } },

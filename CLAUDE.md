@@ -198,6 +198,11 @@ is a patient's medical app and every extra control is a new way to mis-tap.
 5. **Where a sibling screen already got it right, why didn't this one?** In-Patient has log-now,
    log-for-another-day and edit. Paracentesis, Weight and Cycle have some or none of that. The
    inconsistency IS the finding.
+6. **Is everything already on the screen worth being there?** Added 2026-09-06. This pass added
+   controls to the Paracentesis report and walked straight past *"Averaging 5.6 L per procedure"*,
+   a statistic that means nothing for a procedure whose volume depends on elapsed time. **Looking
+   for what is missing is not the same as looking at what is there**, and this role is the one most
+   likely to make that mistake. Before adding to a screen, read what it already says.
 
 ### How to run it
 
@@ -237,6 +242,17 @@ toasts, new empty states, new hint text, new button labels — and ask two quest
 1. **Is it true?** Not "roughly right" — true. If the release kept something the note says was
    removed, the note is a lie the patient will read.
 2. **Would a tired non-technical person understand it at 2am?**
+3. **Does this number belong on the screen at all?** Added 2026-09-06, hours after the role was
+   created, because it missed one immediately. Aaron: *"we need to remove average of 5.6 L per
+   procedure for para. this isn't an avg thing."* He was right. A paracentesis drains what has
+   accumulated; how much comes off depends on how long it has been. The mean of those volumes
+   describes nothing a clinician would use and invites the wrong reading — *"she's averaging 5.6,
+   this one was 3, she's improving"* — when the **interval** is what carries the meaning, and that
+   was already on screen as "Since last".
+   **Arithmetically correct and clinically meaningless is still a false impression**, and it is the
+   harder kind to catch because nothing is wrong with the arithmetic. So: for every figure the app
+   computes about a patient, ask what a clinician would do with it, and whether an average of it
+   means anything at all. Averages of *events that accumulate over time* almost never do.
 
 Two further rules, both paid for:
 
@@ -247,6 +263,19 @@ Two further rules, both paid for:
 
 **It can block a release on copy alone.** Cost: inline, a few minutes, no agent. The cheapest role
 on the board and the one with the worst record behind it.
+
+### Why this did not need a new hire, and what actually went wrong
+
+Aaron asked whether someone should be hired or should step up. **Step up — and the role is named.**
+
+The average had been on that screen for many releases and survived every gate, including two passes
+this same day: the **Enhancer** walked the Paracentesis screen and asked whether the caregiver could
+*do* everything there, and never asked whether what was already displayed should be. That is a real
+blind spot with a name now: **the Enhancer looks at what is missing, so it is exactly the role most
+likely to walk past what should not be there.** Both roles now read the same screen from opposite
+ends — one asks "what can't she do here", the other "should this be here at all".
+
+Adding a third reviewer would not have helped. The gap was in a brief, not in the headcount.
 
 ### RETIRED 2026-09-06 — the Lead Auditor
 

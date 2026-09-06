@@ -39,8 +39,9 @@ caregiver to delete the leftover duplicate, and before this patch there was nowh
 message that names an action the app does not offer is the kind of thing this release exists to fix.
 SPELLING: this app says LITER, not litre. harness/para-test.mjs enforces one spelling across the
 whole file and went red on the first run of this patch, which had introduced five British ones in
-new UI strings and comments. ChemoWell uses "litres" -- they are different apps and the difference
-is deliberate; do not unify them.
+new UI strings and comments. ChemoWell says liter too -- an earlier version of this note claimed
+the two apps deliberately differed, which was invented and wrong: ChemoWell has 75 "liter" and one
+"litres", and that one is a Help SEARCH ALIAS so the British spelling still finds the answer.
 """
 import re, sys, os
 
@@ -389,6 +390,27 @@ sub("""        h('div', { style: { fontSize: '12px', color: '#7D6974', marginTop
           ? 'Showing the date already recorded — pick a day above, or set an exact date and time in the field'
           : 'Defaults to now — pick a day above, or set the exact date and time in the field')""",
     'defaults-to-now-is-false-when-editing')
+
+# "AVERAGING x L PER PROCEDURE" IS NOT A THING, AND IT IS REMOVED.
+# Aaron, 2026-09-06: "we need to remove average of 5.6 L per procedure for para. this isn't an avg
+# thing."
+#
+# He is right and the number was actively misleading. A paracentesis drains what has accumulated;
+# how much comes off depends on how long it has been and how fast the fluid is reaccumulating. The
+# mean of those volumes describes nothing a clinician would use and invites exactly the wrong
+# reading -- "she is averaging 5.6, this one was 3, she is improving" -- when the interval is what
+# carries the meaning, and that is already on the screen as "Since last".
+#
+# Arithmetically correct and clinically meaningless is still a false impression. The sentence about
+# weight is kept: that one tells the caregiver something true and useful about where to look.
+sub("""    'Averaging ' + paraFmtLiters(avg) + ' L per procedure. These are recorded separately from weight — the Weight report still shows what the scale actually said, with a marker on each drain date.');""",
+    """    'These are recorded separately from weight — the Weight report still shows what the scale actually said, with a marker on each drain date.');""",
+    'no-average-per-procedure')
+
+# `avg` now has no reader. Left in place would be a dead calculation that the next person restores a
+# use for.
+sub("""  const avg = total / list.length;
+""", "", 'drop-unused-avg')
 
 open(TARGET, 'w', encoding='utf-8').write(s)
 print('enhance-reports-patch applied: %d -> %d bytes' % (orig_len, len(s)))

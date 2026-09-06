@@ -117,12 +117,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v67 |
-| **Commit** | v67 — **an emergency fix for a data-loss defect that v66 put live.** Shipped without waiting: v66's Cycle History Remove deleted a whole period on one unconfirmed tap. |
+| **Version** | v68 |
+| **Commit** | v68 — removes the paracentesis average on Aaron's report. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `b2a94b77275e5369d85937c18b0fb1c7` |
-| **sw.js md5** | `ce3a25abe5f566d6ea97546f1d69c1b4` |
-| **State** | **v67 — v66's audit returned BLOCK and this is the fix.** One unconfirmed tap on Cycle History's Remove deleted an entire period and it could not be recovered from the app: the delete reopened the period, UC20 merged the next start into it, and nothing writes a `cycle_end` for a past day. **The control is withdrawn**; moving a date stays. Also fixed: the Weight add row appeared ONLY when there were no readings (a ternary return the patch and its own count check both missed — the check counted `return [`), the move-failure toast was correct in one direction only, and a paracentesis edit silently no-opped on a legacy record with no `loggedAt`. Two vacuous checks retired. `enhance-test` 16/16, falsified against the broken v66 at 14/16. Rollback bundle for v66 in `outputs/rollback-v66/`. |
+| **index.html md5** | `87e3099ee804bc5093e91acf4e139d7e` |
+| **sw.js md5** | `cd5b7f000a95600d7de2f100d116f16d` |
+| **State** | **v68 — the Paracentesis report no longer shows an average per procedure.** Aaron: *"this isn't an avg thing."* Correct: a paracentesis drains what has accumulated, so the mean of those volumes means nothing and invites the wrong reading; the interval already on screen as "Since last" is what carries meaning. Arithmetically correct and clinically meaningless is still a false impression. **Nobody caught it because of a blind spot now written down:** the Enhancer walked that screen the same day asking what the caregiver could not DO there, and never asked whether what was already displayed should be. The Voice gained a third question — *does this number belong on the screen at all?* — and the Enhancer a sixth checklist item. No new hire; the gap was in a brief. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 

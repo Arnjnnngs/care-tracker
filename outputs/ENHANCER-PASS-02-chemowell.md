@@ -41,8 +41,11 @@ More than half, but **not by copy-paste**:
 - **Storage differs**: ChemoWell is localStorage-only with no Firestore and no 48-hour delete
   window, so the "supersede instead of delete" argument is about consistency with the existing data
   shape rather than about a security rule.
-- **Spelling differs and must stay different**: ChemoWell says **litres**, care-tracker says
-  **liters**. `harness/para-test.mjs` enforces one spelling per app. Do not unify them.
+- **Spelling does NOT differ, and the first version of this file said it did.** Both apps say
+  **liters** — ChemoWell has 75 occurrences of it and exactly one of "litres", which is a Help
+  *search alias* so that someone typing the British spelling still finds the answer. The claim that
+  the two apps deliberately spelled it differently was invented, and it reached this file, the v66
+  patch header and a commit message before anyone checked. Counting takes ten seconds.
 
 ## Why this is not being built in the same block as care-tracker v66
 
