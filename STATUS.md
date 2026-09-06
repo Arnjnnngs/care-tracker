@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: IDLE
+DISPATCH: ACTIVE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -117,12 +117,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v65 |
-| **Commit** | `0f4d83f` — v65 **LIVE** 2026-09-02, shipped on Aaron's instruction to fix it without delay. Pages build for `0f4d83f` completed successfully and the `index.html`/`sw.js` blob SHAs on `main` match the built files. The live URL cannot be fetched from this sandbox (network policy denies `arnjnnngs.github.io`, 403 on CONNECT), so deployment is confirmed through the GitHub API rather than the usual cache-buster fetch. **Aaron's own eyes on the phone remain the real confirmation.** |
+| **Version** | v66 |
+| **Commit** | v66 built 2026-09-06 on Aaron's go-ahead: *"add all"*. NOT YET PUSHED to main at the time of writing. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `d122ceded77c507642a048ce194ee970` |
-| **sw.js md5** | `8744463a1cc3010facceb97980c6bcdb` |
-| **State** | **v65 — the flicker Aaron actually reported.** v64 stopped the app rebuilding itself once a second; that was real, and it was not this. His screen recording puts the flashing at **~3 times a second** on Home and the menu, and the app has exactly one timer running at one second. The cause was **56 stacked `backdrop-filter` blurs**. 52 removed; the four modal/drawer scrims kept, because they are what makes the screen behind the menu read as behind and they measure free. At his own screen size, scrolling with the menu open: **v64 = 129-139 frames / 41-51 janky → v65 = 181-182 / 0** (runs vary; the gap does not). New gate `glass-test` 7/7, falsified against v64 at 4/7. Its Home jank check does NOT fail on v64 (headless compositing differs from a Galaxy) — Home is guarded by the layer count instead. It is insensitive rather than dead: the auditor made it fire twice, under a main-thread stall and at blur(60px). Audit verdict **SHIP** (`outputs/AUDIT-v65.md`); its three follow-ups — the false caregiver copy, an attribute-based scrim classifier that would have misfired on two never-opened scrims, and two undocumented opacity lifts — are all fixed. Rollback bundle for v64 in `outputs/rollback-v64/`. |
+| **index.html md5** | `84b7be6e7f9ae6704eb27ad383708c7b` |
+| **sw.js md5** | `4388a153912e08467370fed8ba3f958f` |
+| **State** | **v66 — the report screens can now do the whole job.** Aaron: *"there isn't a way to add a para from the reports screen. there also a way to edit cycles."* Both confirmed; Paracentesis could Remove but not add or correct, and Weight had the same defect unreported. Adds an add row to Paracentesis and Weight, Edit to paracentesis rows, and Move start / Move end / Remove to Cycle history. A paracentesis edit is a new record with the same `paraId` (supersedes, deletes nothing, works past 48h); a cycle edit is add-then-remove in that order, so a failure leaves a duplicate rather than losing the marker. New gate `enhance-test` 15/15, falsified against v65 at 1/11. Four further defects were caught only by opening the screenshots — see `outputs/RENDER-v66.md`. Rollback bundle for v65 in `outputs/rollback-v65/`. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 
