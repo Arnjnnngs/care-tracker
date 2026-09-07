@@ -24,7 +24,22 @@ const seed = [
   { id: 'bm_d2', medId: 'bowel_movement', value: 'diarrhea', dose: 'Diarrhea', mg: 0, ts: D2 + NOON },
   { id: 'bm_d1', medId: 'bowel_movement', value: 'diarrhea', dose: 'Diarrhea', mg: 0, ts: D1 + NOON },
   { id: 'sym9', medId: 'symptom_nausea', symptomType: 'nausea', ts: D9 + 15 * 3600000, note: 'mild', dose: null, mg: 0 },
-  { id: 'symT', medId: 'symptom_nausea', symptomType: 'nausea', ts: TODAY + 9 * 3600000, note: 'morning', dose: null, mg: 0, loggedAt: TODAY + 9 * 3600000 }
+  { id: 'symT', medId: 'symptom_nausea', symptomType: 'nausea', ts: TODAY + 9 * 3600000, note: 'morning', dose: null, mg: 0, loggedAt: TODAY + 9 * 3600000 },
+  // DELTA pass seeds (weightSuperseded is now excluded from the journal): a plain weight, a legacy weight
+  // plus its append-correction, a weight plus its tombstone, one Tylenol dose, a paracentesis plus correction.
+  { id: 'ty1', medId: 'tylenol', dose: '500 mg', mg: 500, pills: 1, ts: TODAY + 7 * 3600000 },
+  { id: 'w1', medId: 'weight', weight: 140, dose: '140 lbs', mg: 0, ts: TODAY + 8 * 3600000 },
+  { id: 'w2', medId: 'weight', weight: 141, dose: '141 lbs', mg: 0, ts: TODAY + 10 * 3600000 },
+  { id: 'w3', medId: 'weight', weightId: 'doc:w2', weight: 142, dose: '142 lbs (corrected)', mg: 0, ts: TODAY + 10 * 3600000, loggedAt: TODAY + 10 * 3600000 + 60000 },
+  { id: 'w4', medId: 'weight', weight: 143, dose: '143 lbs', mg: 0, ts: TODAY + 11 * 3600000 },
+  { id: 'w4t', medId: 'weight', weightId: 'doc:w4', weight: 143, dose: 'Weight removed', mg: 0, ts: TODAY + 11 * 3600000, cancelled: true, loggedAt: TODAY + 11 * 3600000 + 60000 },
+  { id: 'p1', medId: 'paracentesis', paraId: 'para_x', liters: 4, dose: '4 L', mg: 0, ts: TODAY + 13 * 3600000 },
+  { id: 'p2', medId: 'paracentesis', paraId: 'para_x', liters: 4.5, dose: '4.5 L (corrected)', mg: 0, ts: TODAY + 13 * 3600000, loggedAt: TODAY + 13 * 3600000 + 60000 },
+  // a paracentesis REMOVED today (v67-style tombstone) and an appointment removed today
+  { id: 'p3', medId: 'paracentesis', paraId: 'para_y', liters: 3, dose: '3 L', mg: 0, ts: TODAY + 14 * 3600000 },
+  { id: 'p3t', medId: 'paracentesis', paraId: 'para_y', liters: 3, dose: 'Paracentesis removed', mg: 0, ts: TODAY + 14 * 3600000, cancelled: true, loggedAt: TODAY + 14 * 3600000 + 60000 },
+  { id: 'a1', medId: 'appointment', apptId: 'appt_z', title: 'Labs', note: '', ts: TODAY + 15 * 3600000, dose: 'Labs', mg: 0 },
+  { id: 'a1t', medId: 'appointment', apptId: 'appt_z', title: 'Labs', note: '', ts: TODAY + 15 * 3600000, cancelled: true, dose: 'Appointment removed', mg: 0, loggedAt: TODAY + 15 * 3600000 + 60000 }
 ];
 const stubFs = `
 const store={entries:${JSON.stringify(seed)},prefs:{}};const eL=[],pL=[];let n=0;const NOW=${NOW};
@@ -71,6 +86,33 @@ const journalRows = () => page.evaluate(() => {
   const sec = hd && hd.closest('section'); if (!sec) return null;
   return [...sec.querySelectorAll('div.mono')].filter(m => /^\d{1,2}:\d{2}/.test((m.innerText || '').trim())).map(m => (m.parentElement.innerText || '').replace(/\s+/g, ' ').trim());
 });
+
+console.log('\nD. DELTA: weights in Today\'s journal (plain once, corrected once, removed never), Tylenol total, missed row');
+{
+  await nav('Home');
+  const rows = (await journalRows()) || [];
+  console.log('     journal rows: ' + JSON.stringify(rows));
+  const w = rows.filter(r => /weight/i.test(r));
+  t('a plain single weight shows once', w.filter(r => /140 lbs/.test(r)).length === 1, JSON.stringify(w));
+  t('a corrected weight shows ONCE, as the correction (142 lbs), never zero times', w.filter(r => /142 lbs/.test(r)).length === 1 && !w.some(r => /141 lbs/.test(r)), JSON.stringify(w));
+  t('a removed weight shows zero times (no 143, no "removed")', !w.some(r => /143 lbs|removed/i.test(r)), JSON.stringify(w));
+  t('exactly two weight rows in total', w.length === 2, w.length + ' weight row(s)');
+  t('the Tylenol dose is still listed', rows.some(r => /tylenol/i.test(r) && /500/.test(r)), '');
+  t('the missed Protonix row is still listed (missedDosesFor is untouched by the filter)', rows.some(r => /protonix/i.test(r) && /missed/i.test(r)), '');
+  const nausea = rows.filter(r => /nausea/i.test(r)); t('today\'s symptom shows once', nausea.length === 1, nausea.length + '');
+  // The Tylenol figure on Home: every leaf element whose text carries "500" -- printed, then asserted present.
+  const figs = await page.evaluate(() => [...document.querySelectorAll('div,span')].filter(x => x.children.length === 0 && /\b500\b/.test(x.innerText || '')).map(x => (x.innerText || '').replace(/\s+/g, ' ').trim()).filter((v, i, a) => a.indexOf(v) === i));
+  console.log('     "500" texts on Home: ' + JSON.stringify(figs.slice(0, 8)));
+  t('the Tylenol total on Home still counts the 500 mg dose', figs.some(s => /500\s*(mg|\/)/i.test(s) || /^500$/.test(s)), JSON.stringify(figs.slice(0, 8)));
+  // INFORMATIONAL (pre-v72 behaviour, not part of the delta): a paracentesis corrected today.
+  const para = rows.filter(r => /paracentesis/i.test(r));
+  const p3 = rows.filter(r => /3 L\b/.test(r) || /paracentesis removed/i.test(r));
+  console.log('     INFO rows for a paracentesis REMOVED today: ' + JSON.stringify(p3));
+  t('a paracentesis removed today is not listed as standing with no "removed" line', !(p3.some(r => /3 L\b/.test(r) && !/removed/i.test(r)) && !p3.some(r => /removed/i.test(r))), JSON.stringify(p3));
+  const ap = rows.filter(r => /labs|appointment/i.test(r));
+  console.log('     INFO rows for an appointment REMOVED today: ' + JSON.stringify(ap));
+  console.log('     INFO paracentesis rows for a corrected procedure today: ' + para.length + ' ' + JSON.stringify(para));
+}
 
 console.log('\nA. Today\'s journal after logging today\'s bowel answer and removing it from History');
 {

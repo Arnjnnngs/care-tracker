@@ -299,6 +299,13 @@ console.log('\n7. Today\'s answer from the card, then removed from History: a to
   t('today\'s answer was appended with a stamp', (await entries()).length === before + 1 && logged.medId === 'bowel_movement' && typeof logged.loggedAt === 'number', JSON.stringify({ medId: logged.medId, loggedAt: logged.loggedAt }));
   const cardGone = await page.evaluate(() => ![...document.querySelectorAll('select')].find(x => [...x.options].some(o => o.value === 'very_little')));
   t('the card is gone: today reads answered', cardGone, '');
+  // PRESENCE before ABSENCE (the delta audit's point): a filter that dropped every bowel row would
+  // pass the absence check below, so first prove the live answer IS in the journal.
+  const journalBefore = await page.evaluate(() => {
+    const head = [...document.querySelectorAll('div')].find(d => /^Today.s journal$/i.test((d.innerText || '').trim()));
+    const sec = head && head.closest('section'); return sec ? (sec.innerText || '') : null;
+  });
+  t('Home\'s journal lists today\'s live bowel answer exactly once', journalBefore !== null && (journalBefore.match(/bowel movement/ig) || []).length === 1, (journalBefore || '').replace(/\s+/g, ' ').slice(0, 100));
   await openReport('History');
   const has = await page.evaluate((id) => { const b = [...document.querySelectorAll('[data-history-row="' + id + '"] button')].find(x => /^Remove$/.test((x.innerText || '').trim())); if (b) { b.click(); return true; } return false; }, String(logged.id));
   t('today\'s bowel row offers Remove in History', has, 'row id ' + logged.id);

@@ -237,7 +237,7 @@ async function removeEntryFor(e) {
 }
 function removeBtn(e) {
   if (!bypasses48h(e.medId) && state.now - e.ts > 48 * 3600000) return null; // entries older than 48h are permanent history
-  if (e.cancelled || dailySuperseded(e) || symptomSuperseded(e)) return null; // a row that no longer stands has nothing to remove
+  if (e.cancelled || dailySuperseded(e) || symptomSuperseded(e) || paraSuperseded(e)) return null; // a row that no longer stands has nothing to remove
 """)
 rep("""      h('button', { onClick: () => { setState({ confirmRemove: null }); removeEntry(e.id); }, style: { color: '#fff', background: '#C0453B'""",
     """      h('button', { onClick: () => { setState({ confirmRemove: null }); removeEntryFor(e); }, style: { color: '#fff', background: '#C0453B'""")
@@ -266,7 +266,7 @@ rep("""            rows.push(h('div', { style: { display: 'flex', alignItems: 'c
               h('div', { style: { flex: '1' } },
                 h('div', { style: { fontSize: '15px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' } },
                   nameOf(e.medId),""",
-    """            const stale = e.cancelled ? 'Removed' : ((dailySuperseded(e) || symptomSuperseded(e)) ? 'Superseded' : null);
+    """            const stale = e.cancelled ? 'Removed' : ((dailySuperseded(e) || symptomSuperseded(e) || paraSuperseded(e) || weightSuperseded(e)) ? 'Superseded' : null);
             rows.push(h('div', { 'data-history-row': String(e.id), style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: newGroup ? 'none' : '1px solid rgba(212,104,138,0.08)', opacity: stale ? '0.72' : '1' } },
               h('div', { className: 'mono', style: { fontSize: '13px', color: '#8A6479', minWidth: '66px' } }, fmtTime(e.ts)),
               h('div', { style: { flex: '1' } },
@@ -274,13 +274,28 @@ rep("""            rows.push(h('div', { style: { display: 'flex', alignItems: 'c
                   nameOf(e.medId),
                   stale ? h('span', { 'data-history-stale': stale.toLowerCase(), style: { fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#7D6974', background: 'rgba(125,105,116,0.10)', border: '1px solid rgba(125,105,116,0.28)', borderRadius: '6px', padding: '2px 6px' } }, stale) : null,""")
 
+# ---- 5d. paraSuperseded, mirrored from weightSuperseded. The DELTA audit blocked the journal fix
+# because `!e.cancelled` hid a paracentesis TOMBSTONE while nothing hid the procedure it removed, so a
+# paracentesis removed today read as standing on Home with a Remove button. A helper the model
+# already had for weight and cycle markers, and never for paracentesis (v52).
+rep("""function paraSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }""",
+    """function paraSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
+// Is this exact document out-ranked by a newer one in its paraId group? LABELLING and hiding only.
+function paraSuperseded(e) {
+  if (!e || e.medId !== 'paracentesis' || e.cancelled) return false;
+  const keyOf = (d) => (typeof d.paraId === 'string' && d.paraId) ? d.paraId : ('doc:' + String(d.id));
+  const key = keyOf(e), mine = (e.loggedAt || e.ts || 0);
+  return (state.entries || []).some(d => d && d.medId === 'paracentesis' && String(d.id) !== String(e.id)
+    && keyOf(d) === key && (d.loggedAt || d.ts || 0) > mine);
+}""")
+
 # ---- 5c. Today's journal on Home reads RESOLVED (the Zero Day Audit BLOCKED the first build here:
 # after removing today's answer, Home showed the end-of-day card asking again AND the old answer
 # unlabelled with no Remove, plus the tombstone. v71 deleted those within 48h; on the one screen she
 # uses most that was a visible regression. A journal is what she did today, not an audit trail.)
 rep("""  const todayEntries = state.entries.filter(e => e.ts >= d0 && e.medId !== 'inpatient' && e.medId !== 'inpatient_start' && e.medId !== 'inpatient_end' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end').slice().sort((a, b) => a.ts - b.ts);""",
     """  const todayEntries = state.entries.filter(e => e.ts >= d0 && e.medId !== 'inpatient' && e.medId !== 'inpatient_start' && e.medId !== 'inpatient_end' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end'
-    && !e.cancelled && !dailySuperseded(e) && !symptomSuperseded(e) && !weightSuperseded(e)).slice().sort((a, b) => a.ts - b.ts);""")
+    && !e.cancelled && !dailySuperseded(e) && !symptomSuperseded(e) && !weightSuperseded(e) && !paraSuperseded(e)).slice().sort((a, b) => a.ts - b.ts);""")
 
 # ---- 5a. the printable oncologist report lists symptoms RESOLVED (v69's lesson: a list a clinician
 # reads is a figure, not an audit trail; the CSV keeps every document, this table keeps the truth)
@@ -288,6 +303,9 @@ rep("""  const symptoms = allExportEntries().filter(e => e.medId && e.medId.inde
     .sort((a, b) => usableTs(a.ts) - usableTs(b.ts))""",
     """  const symptoms = symptomResolvedFrom(allExportEntries())
     .sort((a, b) => usableTs(a.ts) - usableTs(b.ts))""")
+
+rep("""  if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : (e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || ''));""",
+    """  if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : ((e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || '')) + (paraSuperseded(e) ? ' (superseded)' : ''));""")
 
 # ---- 5b. data- hooks so the suite counts ROWS, never text (Rule 5) ----------------------------
 def rep_in(section_start, old, new):

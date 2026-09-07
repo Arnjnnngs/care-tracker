@@ -3564,7 +3564,7 @@ async function removeEntryFor(e) {
 }
 function removeBtn(e) {
   if (!bypasses48h(e.medId) && state.now - e.ts > 48 * 3600000) return null; // entries older than 48h are permanent history
-  if (e.cancelled || dailySuperseded(e) || symptomSuperseded(e)) return null; // a row that no longer stands has nothing to remove
+  if (e.cancelled || dailySuperseded(e) || symptomSuperseded(e) || paraSuperseded(e)) return null; // a row that no longer stands has nothing to remove
   if (state.confirmRemove === e.id) {
     return h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
       h('button', { onClick: () => { setState({ confirmRemove: null }); removeEntryFor(e); }, style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px' } }, 'Delete'),
@@ -4197,7 +4197,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
   // Today's journal
   const d0 = dayStart(now);
   const todayEntries = state.entries.filter(e => e.ts >= d0 && e.medId !== 'inpatient' && e.medId !== 'inpatient_start' && e.medId !== 'inpatient_end' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end'
-    && !e.cancelled && !dailySuperseded(e) && !symptomSuperseded(e) && !weightSuperseded(e)).slice().sort((a, b) => a.ts - b.ts);
+    && !e.cancelled && !dailySuperseded(e) && !symptomSuperseded(e) && !weightSuperseded(e) && !paraSuperseded(e)).slice().sort((a, b) => a.ts - b.ts);
   const bucket = timeBucket;
   const tmap = {};
   const missedTodayForJournal = missedDosesFor(now, now);
@@ -5081,6 +5081,14 @@ const PARA_MED_ID = 'paracentesis';
 const PARA_MAX_LITERS = 25; // a single therapeutic drain above this is a typo, not a procedure
 function paraNewId() { return 'para_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10); }
 function paraSupersedes(a, b) { return (a.loggedAt || a.ts || 0) > (b.loggedAt || b.ts || 0); }
+// Is this exact document out-ranked by a newer one in its paraId group? LABELLING and hiding only.
+function paraSuperseded(e) {
+  if (!e || e.medId !== 'paracentesis' || e.cancelled) return false;
+  const keyOf = (d) => (typeof d.paraId === 'string' && d.paraId) ? d.paraId : ('doc:' + String(d.id));
+  const key = keyOf(e), mine = (e.loggedAt || e.ts || 0);
+  return (state.entries || []).some(d => d && d.medId === 'paracentesis' && String(d.id) !== String(e.id)
+    && keyOf(d) === key && (d.loggedAt || d.ts || 0) > mine);
+}
 // A Map, NOT a plain object. paraId comes out of the database, and on a plain object an id of
 // 'constructor' or '__proto__' reads back a truthy INHERITED value, so the first record with such
 // an id would be silently dropped as already-seen. That exact bug has already cost this project
@@ -5770,7 +5778,7 @@ function exportDetailFor(e) {
   if (!e) return '';
   if (e.medId === 'temp') return e.dose || (e.temp !== undefined ? e.temp + tempSuffix() : '');
   if (e.medId === 'weight') return e.cancelled ? 'Removed' : ((e.dose || (e.weight !== undefined ? e.weight + ' lbs' : '')) + (weightSuperseded(e) ? ' (superseded)' : ''));
-  if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : (e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || ''));
+  if (e.medId === 'paracentesis') return e.cancelled ? 'Removed' : ((e.liters !== undefined ? (Math.round(Number(e.liters) * 10) / 10).toFixed(1) + ' L drained' : (e.dose || '')) + (paraSuperseded(e) ? ' (superseded)' : ''));
   if (e.medId === 'bowel_movement') return e.cancelled ? 'Removed' : ((BOWEL_MOVEMENT_LABELS[e.value] || e.dose || e.value || '') + (dailySuperseded(e) ? ' (superseded)' : ''));
   if (e.medId === 'appetite') return e.cancelled ? 'Removed' : ((APPETITE_LABELS[e.value] || e.dose || e.value || '') + (dailySuperseded(e) ? ' (superseded)' : ''));
   if (e.medId === 'cycle_start' || e.medId === 'cycle_end') {
@@ -6920,7 +6928,7 @@ function renderHistory(now) {
               rows.push(h('div', { style: { padding: '8px 14px 4px', fontSize: '10.5px', fontWeight: '800', letterSpacing: '0.06em', textTransform: 'uppercase', color: '#7D6974', background: 'rgba(212,104,138,0.06)', borderTop: i > 0 ? '1px solid rgba(212,104,138,0.08)' : 'none' } }, bk));
             }
             if (e.missed) { rows.push(missedRow(e, newGroup ? 0 : 1)); return; }
-            const stale = e.cancelled ? 'Removed' : ((dailySuperseded(e) || symptomSuperseded(e)) ? 'Superseded' : null);
+            const stale = e.cancelled ? 'Removed' : ((dailySuperseded(e) || symptomSuperseded(e) || paraSuperseded(e) || weightSuperseded(e)) ? 'Superseded' : null);
             rows.push(h('div', { 'data-history-row': String(e.id), style: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderTop: newGroup ? 'none' : '1px solid rgba(212,104,138,0.08)', opacity: stale ? '0.72' : '1' } },
               h('div', { className: 'mono', style: { fontSize: '13px', color: '#8A6479', minWidth: '66px' } }, fmtTime(e.ts)),
               h('div', { style: { flex: '1' } },
