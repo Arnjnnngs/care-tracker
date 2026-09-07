@@ -15,3 +15,4 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | export-test.mjs | PASS |   49/49 checks passed. |
 | glass-test.mjs | PASS | 7/7 checks passed |
 | inpatient-window-test.mjs | PASS | 10/10 checks passed |
+| iosshare-test.mjs | PASS | 7/7 checks passed |
