@@ -120,7 +120,12 @@ const SEED = [
   // changed.
   { id: 's12', medId: 'weight', dose: '178.4 lbs', mg: 0, ts: now - 9 * 86400000, weight: 178.4 },
   { id: 's13', medId: 'cycle_start', dose: null, mg: 0, ts: now - 12 * 86400000 },
-  { id: 's14', medId: 'cycle_end', dose: null, mg: 0, ts: now - 8 * 86400000 }
+  { id: 's14', medId: 'cycle_end', dose: null, mg: 0, ts: now - 8 * 86400000 },
+  // ADDED v72 so History, Bowel Movement and Appetite render populated -- including a SUPERSEDED
+  // daily answer, so the new 'Superseded' chip in History is on screen at every width.
+  { id: 's15', medId: 'bowel_movement', value: 'normal', dose: 'Normal', mg: 0, ts: now - 3 * 86400000 },
+  { id: 's16', medId: 'bowel_movement', value: 'very_little', dose: 'Very little', mg: 0, ts: now - 3 * 86400000, loggedAt: now - 1000 },
+  { id: 's17', medId: 'appetite', value: 'little', dose: 'Little to none', mg: 0, ts: now - 2 * 86400000, note: 'Only soup', loggedAt: now - 2000 }
 ];
 
 const SCREENS = ['home', 'meds', 'reports', 'inpatient', 'symptoms'];
@@ -337,9 +342,10 @@ for (const dev of DEVICES) {
   // it had quietly reintroduced one level in.
   //
   // Each pass proves its own screen by a data- hook rather than by text. History, Appetite and
-  // Bowel Movement are still NOT covered here -- they carry no per-row controls, and claiming
-  // coverage this scan does not have is what went wrong in the first place.
-  ...[['Weight', '[data-weight-row]'], ['Paracentesis', '[data-para-edit]'], ['Cycle', '[data-cycle-edit-start]']]
+  // Bowel Movement were NOT covered until v72 gave each of them a per-row data- hook -- the
+  // release that changed those three screens is the one that added them, which is the rule.
+  ...[['Weight', '[data-weight-row]'], ['Paracentesis', '[data-para-edit]'], ['Cycle', '[data-cycle-edit-start]'],
+     ['History', '[data-history-row]'], ['Bowel Movement', '[data-bowel-row]'], ['Appetite', '[data-appetite-row]']]
     .map(([label, marker]) => ({ name: 'report-' + label.toLowerCase(), open: async page => {
       // RE-SEED FIRST. An earlier overlay pass RELOADS the page to produce the update pop-up, and a
       // reload empties the stub's entry list -- so these passes found every report empty and

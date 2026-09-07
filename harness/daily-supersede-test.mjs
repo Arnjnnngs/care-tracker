@@ -268,6 +268,8 @@ console.log('\n6. History: rows stay, the ones that no longer stand are labelled
 {
   await openReport('History');
   const stale = await page.evaluate((id) => { const r = document.querySelector('[data-history-row="' + id + '"] [data-history-stale]'); return r ? r.getAttribute('data-history-stale') : null; }, 'seed_sym1');
+  await page.evaluate((id) => { const r = document.querySelector('[data-history-row="' + id + '"]'); if (r) r.scrollIntoView({ block: 'center' }); }, 'seed_bm_b');
+  await page.waitForTimeout(300);
   await shot('5-history-labels');
   t('the superseded symptom document is still listed, marked Superseded', stale === 'superseded', 'stale=' + stale);
   const bmStale = await page.evaluate((id) => { const r = document.querySelector('[data-history-row="' + id + '"] [data-history-stale]'); return r ? r.getAttribute('data-history-stale') : null; }, 'seed_bm_b');

@@ -241,6 +241,34 @@ if _ver:
             else:
                 notes.append("render audit recorded for %s (outputs/RENDER-%s.md)" % (_ver, _ver))
 
+# --- 7b. EVERY SUITE MUST HAVE BEEN RUN (added 2026-09-07) ------------------------------------
+# export-test was dead from v64 to v70 and nobody ran it; overflow-scan was blindfolded for three
+# releases. A suite nobody runs is a check that cannot fail. harness/run-all.sh runs every suite and
+# writes outputs/SUITES-<version>.md; a changed index.html without that record, or a record carrying
+# a FAIL or ERROR row that is not marked EXEMPT with a written reason, blocks the release.
+if _ver:
+    _changed_s, _rc_s = sh("git -C %s diff --name-only origin/main 2>/dev/null" % REPO)
+    if _rc_s == 0 and "index.html" in _changed_s.split():
+        _rec = os.path.join(REPO, "outputs", "SUITES-%s.md" % _ver)
+        if not os.path.exists(_rec):
+            blockers.append("NOBODY RAN THE SUITES — index.html changed but there is no\n"
+                            "    outputs/SUITES-%s.md. Run harness/run-all.sh and commit the record." % _ver)
+        else:
+            _bad = []
+            for _ln in open(_rec, encoding="utf-8").read().splitlines():
+                _cells = [c.strip() for c in _ln.strip().strip("|").split("|")]
+                if len(_cells) < 3 or not _cells[0].endswith(".mjs"): continue
+                if _cells[1] in ("FAIL", "ERROR"):
+                    _bad.append("%s -> %s" % (_cells[0], _cells[1]))
+                elif _cells[1] == "EXEMPT" and len(_cells[2]) < 20:
+                    _bad.append("%s -> EXEMPT with no written reason" % _cells[0])
+            if _bad:
+                blockers.append("A SUITE IS RED in outputs/SUITES-%s.md — fix it, or mark the row EXEMPT with a reason\n"
+                                "    of at least twenty characters (an exemption nobody wrote down is an oversight):\n      %s"
+                                % (_ver, "\n      ".join(_bad)))
+            else:
+                notes.append("every suite recorded for %s (outputs/SUITES-%s.md)" % (_ver, _ver))
+
 # --- 8. THE NOTES MUST MOVE WITH THE CODE ------------------------------------------------------
 # Aaron, 2026-08-24: "we need to make sure that notes are being updated each final push and commit."
 # Documentation failures are SILENT -- nothing breaks when a changelog goes stale, so no amount of
