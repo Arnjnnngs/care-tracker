@@ -74,3 +74,47 @@ Bowel and appetite both delete before they add, in three places, and both reader
 winner on an identical timestamp. Fifth instance of the root cause fixed in v52/v69/v70. The fix is the
 same append-and-supersede model: group by day, newest `loggedAt` wins, no delete. **Size M** (three write
 paths, two readers, a new suite, an audited release). Waits for Aaron's go per Rule 3.
+
+---
+
+## Addendum, same day — Aaron's two questions
+
+### "Are the agents in the right order for working efficiently?"
+
+Not quite. Two moves, both about putting cheap checks before expensive ones and design-time checks
+before build-time ones:
+
+- **The Enhancer moves BEFORE the build**, on the screens the release will touch. Run after the build, its
+  proposals can only go into the *next* release; run before, Aaron picks from the list and the build
+  carries what he picked. Same cost, one release earlier.
+- **`pm.py` runs BEFORE the auditor as well as after.** It is free and takes seconds; the auditor is the
+  only expensive step. Spending an agent on a build that pm.py would have bounced for mechanics is
+  the v69 pattern (built three times).
+
+Revised order: pm.py → cost line → open list → write model → Enhancer table → **build** (push every 30
+min) → suites + falsify + Voice + screenshots → pm.py → **auditor, once, last** → pm.py → release message.
+
+### "Who is checking the actual screens on Android and iPhone?"
+
+**Nobody owns it. Honest answer.** What exists today:
+
+| What | Covers | Does not cover |
+|---|---|---|
+| `harness/overflow-scan.mjs` | 11 emulated sizes, 5 iPhone + 6 Android widths, every screen incl. report details since v70. Asks: does it **fit** (clipping, sideways scroll, 16px floor). | Whether it **looks right**. It is Chromium pretending to be a phone — it cannot render like Safari. It was blindfolded for three releases and nobody noticed. |
+| "Look at the screenshots" | The builder's own eyes, one size (390×844), after the build. Caught 4 defects in v66 and the unreadable v70 refusal. | A practice, not a role. One size. The builder checking the builder. |
+| Aaron's Galaxy, Brandi's iPhone | Everything real. Every iOS-specific bug on the record (scroll behind overlays, zoom on small inputs, the silent file save) was found here. | Only Aaron can do it, and nothing tells him which screens a release changed so he knows where to look. |
+
+**This sandbox has only Chromium.** No WebKit engine is installed, so an iPhone's rendering cannot be
+reproduced here at all; Android's can be approximated (Chrome is Chrome). That is a hard limit and it
+goes on the exemption list of every release: *"iPhone appearance: needs Brandi's phone; screens to
+look at: X, Y."*
+
+**Proposed hire: the Designer** — ChemoWell has had this stage since app-v25 and care-tracker never
+did. Inline on any release that changes layout; an agent only for a big visual release. Its checklist:
+every touched screen at three sizes (320 iPhone SE, 360 Galaxy, 390 iPhone 13), light and dark if the
+app has both, the screenshots **sent to Aaron as they are produced** rather than filed, and a named
+list of what he should open on the two real phones. Cost S per release.
+
+**Possible but bigger (M, Aaron's call):** an Android emulator smoke job in GitHub Actions, as
+ChemoWell already runs — opens the live PWA in real Chrome on a real Android image and captures
+screenshots. Real Android, still not iPhone.
