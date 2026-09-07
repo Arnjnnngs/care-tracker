@@ -144,12 +144,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v71 |
-| **Commit** | `6a419a0` — v71 LIVE on main. The page holds still behind an open menu or pop-up. |
+| **Version** | v72 |
+| **Commit** | `on the working branch, awaiting the Zero Day Audit before main` — v72 on main. A changed bowel, appetite or symptom answer stays changed. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `87f6cfa9099d7c30b3885a39d3374681` |
-| **sw.js md5** | `f587804696d2de97d87b0e6296195083` |
-| **State** | **v71 — the page no longer scrolls around behind an open menu or pop-up.** Aaron found it by using the app: five full-screen overlays and not one held the page still. Measured on the same seed and the same drag, v70 went from a scroll offset of 600 to 1300 with the menu open; v71 does not move, and closing it returns to exactly 600. Four of the five sit on a blurred scrim, so what she sees is the smear behind the blur sliding. Fixed with position:fixed on the body at its current offset — overflow:hidden does NOT stop a touch drag on iOS, which is the bug. **The toast is deliberately exempt and asserted to be so.** **Why nothing caught it:** every gate here asks about a STILL FRAME — does it fit, is the copy true, can she do the job, does the record survive. Scrolling is not a still frame. New Rule 5.5, and harness/scrolllock-test.mjs covers all five overlays plus a completeness check that fails if a sixth is added without a lock. |
+| **index.html md5** | `b40d7ea0fbb702f2da58d2a27d1dbfa5` |
+| **sw.js md5** | `2e39e24fbbb17b653db80fe14b478080` |
+| **State** | **v72 — a changed answer stays changed.** Bowel, appetite and symptom corrections and removals APPEND (a superseding document or a tombstone) instead of deleting — the fifth instance of the root cause fixed in v52/v69/v70, and the last delete-based correction path in the app. The Bowel Issue Active banner's Update on a day older than 48h used to fail with a toast blaming the connection; the symptom edit at any real age did the same. `pm.py`'s delete ratchet now sits at zero. `daily-supersede-test` 37/37 (v71 9/37; clock-guard mutant 32/37). `overflow-scan` 140/140 CLEAN and it now walks History, Bowel Movement and Appetite for the first time. `outputs/SUITES-v72.md`: 28 suites PASS, 4 v43/v44-era patch verifiers EXEMPT with written reasons, 0 failing. **Exempt:** legacy same-day duplicates written before v72 still tie as they did (the first new answer settles the day); iPhone rendering — Chromium only here. **Needs Aaron's phone:** update a bowel answer from the banner for a day three or more days old and confirm it sticks after a reload. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 
