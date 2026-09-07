@@ -310,6 +310,15 @@ console.log('\n7. Today\'s answer from the card, then removed from History: a to
   await nav('Home');
   const cardBack = await page.evaluate(() => !![...document.querySelectorAll('select')].find(x => [...x.options].some(o => o.value === 'very_little') && ![...x.options].some(o => /back to normal/i.test(o.text))));
   t('the end-of-day bowel card is back: today reads unanswered', cardBack, '');
+  // THE AUDITOR'S FINDING, kept as a case: Home's journal must not list the removed answer or its
+  // tombstone. Scoped to the journal section -- never document.body, whose text includes the source.
+  const journal = await page.evaluate(() => {
+    const head = [...document.querySelectorAll('div')].find(d => /^Today.s journal$/i.test((d.innerText || '').trim()));
+    const sec = head && head.closest('section');
+    return sec ? (sec.innerText || '') : null;
+  });
+  t('Home\'s journal exists', journal !== null, '');
+  t('Home\'s journal lists neither the removed bowel answer nor its tombstone', journal !== null && !/bowel movement/i.test(journal), (journal || '').replace(/\s+/g, ' ').slice(0, 120));
 }
 
 console.log('\n-- nothing broke on the way');
