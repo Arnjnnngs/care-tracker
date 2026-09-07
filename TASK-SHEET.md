@@ -1,7 +1,7 @@
 # care-tracker — Task Sheet
 
 **Updated:** 2026-09-07 · **Live version:** v71 (`6a419a0`) · **Live URL:** arnjnnngs.github.io/care-tracker
-**Dispatch:** IDLE — no build in progress.
+**Dispatch:** ACTIVE — v72 in progress.
 
 This file is the done / outstanding list Aaron asked to see after every build and every request. It is
 split by WHO the next step belongs to, so "waiting on you" can never be said while the MINE column has
