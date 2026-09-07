@@ -1,7 +1,7 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-07 · **Live version:** v71 (`6a419a0`) · **Live URL:** arnjnnngs.github.io/care-tracker
-**Dispatch:** ACTIVE — v72 in progress.
+**Updated:** 2026-09-07 · **Live version:** v72 (`62517cd`) · **Live URL:** arnjnnngs.github.io/care-tracker
+**Dispatch:** IDLE — v72 is live; no build in progress.
 
 This file is the done / outstanding list Aaron asked to see after every build and every request. It is
 split by WHO the next step belongs to, so "waiting on you" can never be said while the MINE column has
@@ -24,7 +24,7 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
 - [x] This task sheet refreshed (it said v43.3 was live and fed the dispatch report).
 - [x] `pm.py` requires a suite record from `harness/run-all.sh`; a hidden red or an unexplained exemption blocks. Falsified four ways.
 - [x] **v72 audited: BLOCK (Home journal listed removed rows) → fixed → delta BLOCK (removed paracentesis still standing) → fixed → delta 2 SHIP.** Auditor's probe 28/28, suite 40/40, record 29 PASS / 4 EXEMPT / 0 failing, scan 140/140 clean, pm.py clear.
-- [ ] **v72 to main** once the deactivate-test comparison (v71 21/34 vs v72 15/34, an exempt v43-era suite) is explained.
+- [x] **v72 on main** (`62517cd`); deactivate-test proved identical on v71 and v72 (21/34 both) once given time.
 - [ ] Rebase or retire the four v43/v44-era patch verifiers run-all found red on v71 and v72 alike (S–M).
 - [x] Dispatch routine prompts re-pointed at STATUS.md's live table and this sheet.
 - [x] CLAUDE.md Rule 1.5, NEW-CHAT-PROMPT.md, REQUESTS.md — the approved team and sequence.
@@ -38,6 +38,7 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
 
 ## DONE — live on Brandi's phone
 
+- [x] v72 — a changed bowel, appetite or symptom answer stays changed; corrections append, never delete; the delete ratchet and the suite record are in pm.py.
 - [x] v71 — page holds still behind an open menu or pop-up; scroll-lock suite covers all five overlays.
 - [x] v70 — period start/end move works at any age and cannot swallow another period; overflow scanner unblindfolded.
 - [x] v69 — correct or remove a weight by superseding, never deleting; oncologist report agrees with the screen.

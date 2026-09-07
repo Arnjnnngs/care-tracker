@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -145,7 +145,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | | |
 |---|---|
 | **Version** | v72 |
-| **Commit** | `on the working branch, awaiting the Zero Day Audit before main` — v72 on main. A changed bowel, appetite or symptom answer stays changed. |
+| **Commit** | `62517cd` — v72 LIVE on main. A changed bowel, appetite or symptom answer stays changed. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `29eb5a8202d3df16bbc42fd16205bc4b` |
 | **sw.js md5** | `2e39e24fbbb17b653db80fe14b478080` |
