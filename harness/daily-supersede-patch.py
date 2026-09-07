@@ -274,6 +274,14 @@ rep("""            rows.push(h('div', { style: { display: 'flex', alignItems: 'c
                   nameOf(e.medId),
                   stale ? h('span', { 'data-history-stale': stale.toLowerCase(), style: { fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#7D6974', background: 'rgba(125,105,116,0.10)', border: '1px solid rgba(125,105,116,0.28)', borderRadius: '6px', padding: '2px 6px' } }, stale) : null,""")
 
+# ---- 5c. Today's journal on Home reads RESOLVED (the Zero Day Audit BLOCKED the first build here:
+# after removing today's answer, Home showed the end-of-day card asking again AND the old answer
+# unlabelled with no Remove, plus the tombstone. v71 deleted those within 48h; on the one screen she
+# uses most that was a visible regression. A journal is what she did today, not an audit trail.)
+rep("""  const todayEntries = state.entries.filter(e => e.ts >= d0 && e.medId !== 'inpatient' && e.medId !== 'inpatient_start' && e.medId !== 'inpatient_end' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end').slice().sort((a, b) => a.ts - b.ts);""",
+    """  const todayEntries = state.entries.filter(e => e.ts >= d0 && e.medId !== 'inpatient' && e.medId !== 'inpatient_start' && e.medId !== 'inpatient_end' && e.medId !== 'cycle_start' && e.medId !== 'cycle_end'
+    && !e.cancelled && !dailySuperseded(e) && !symptomSuperseded(e) && !weightSuperseded(e)).slice().sort((a, b) => a.ts - b.ts);""")
+
 # ---- 5a. the printable oncologist report lists symptoms RESOLVED (v69's lesson: a list a clinician
 # reads is a figure, not an audit trail; the CSV keeps every document, this table keeps the truth)
 rep("""  const symptoms = allExportEntries().filter(e => e.medId && e.medId.indexOf('symptom_') === 0)

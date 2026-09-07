@@ -30,7 +30,7 @@ mkdir -p outputs
   echo "|---|---|---|"
 } > "$OUT"
 fails=0
-for f in "$HERE"/*-test.mjs "$HERE"/cycle-merge-probe.mjs "$HERE"/audit-v69-weightreport.mjs "$HERE"/overflow-scan.mjs; do
+for f in "$HERE"/*-test.mjs "$HERE"/cycle-merge-probe.mjs "$HERE"/audit-v69-weightreport.mjs "$HERE"/audit-v72-probe.mjs "$HERE"/overflow-scan.mjs; do
   [ -f "$f" ] || continue
   name="$(basename "$f")"
   if [ "$QUICK" = 1 ] && [ "$name" = "overflow-scan.mjs" ]; then
