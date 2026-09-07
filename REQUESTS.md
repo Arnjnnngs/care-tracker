@@ -1,150 +1,31 @@
-# REQUESTS.md — Aaron's running list
+# care-tracker — REQUESTS (the Scribe's file)
 
-Everything Aaron has asked for, whether or not it has been built. This file exists because things
-he said **got lost** — twice in one week, confirmed, not suspected. care-tracker had no request log
-at all, so chat was the only record, and chat scrolls.
+Every ask Aaron makes, logged the moment he makes it, checked off only when it is live and verified.
+Shown in full — done and outstanding — in every reply after a build or a request. Aaron, on ChemoWell:
+*"I can't remember all the things I've mentioned and still needs to be completed."*
 
-## The rule that makes this work
+## Outstanding
 
-**The moment Aaron asks for something, it is added here — before any code is touched.** Not when
-it is understood, not when it is scheduled, not when it is done. If it is unclear whether something
-he said was a request or a passing remark, it goes in as a request. An extra line costs nothing.
-A dropped ask costs him having to notice and say it again, which is the failure this file exists
-to stop.
+- [ ] **v72 — re-answering bowel / appetite / symptom keeps the new answer, at any age** (2026-09-07,
+      from Enhancer pass 03; Aaron: "do all"). Supersede by appending, never delete. M, audited.
+- [ ] **Take all** — saves some medications, then says nothing saved; re-tap double-logs (standing
+      exception, verified). Ships on its own, on Aaron's word (his 2026-09-01 instruction). S–M, audited.
+- [ ] **Bowel Movement and Appetite reports get add / correct / remove** (Enhancer pass 03, item B). S each.
+- [ ] **Android emulator smoke job** in GitHub Actions, as ChemoWell runs (team review, 2026-09-07). M.
+- [ ] **pm.py runs every harness suite** and fails on any that cannot start (team review). S.
+- [ ] **Phone checks only Aaron can do:** does the iPhone actually save the backup file (open since v50);
+      does v71's page hold still behind the menu on Brandi's phone.
 
-Nothing is deleted when it is finished. It moves to Completed with the version it shipped in.
+## Done — live and verified
 
----
-
-## OPEN — nothing here is done
-
-### Blocked on Aaron, not on work
-
-- [ ] **Live sync between two phones** — the biggest gap in the product, in his words: *"there is
-  no sync. and I still think that is the biggest flaw we will have or people will have."*
-  **Blocked on one legal question**, not on engineering: whether a relay holding only ciphertext it
-  cannot decrypt counts as "collection" under Washington's My Health My Data Act. The backend
-  (`sync-backend/`, 930 lines, no stubs) and the client crypto (AES-GCM + ECDH key exchange, at
-  app-v49) are already written. What is missing is the wiring, the screens, and a deployment.
-  Needs a privacy attorney, ~30 minutes. Cheapest, highest-leverage spend on this project.
-- [ ] **Migrate Brandi from care-tracker to ChemoWell** — he asked for this directly. **Deliberately
-  waiting for sync**, his call and the right one: care-tracker syncs today and ChemoWell does not,
-  so moving her now would take two phones that stay in step and make them stop.
-- [ ] **Real access control for care-tracker** — there is no login; the link is the password and it
-  cannot be revoked. v54 added a warning before sharing. That is not a fix. Scoped in the artifact
-  "Backups and Access"; recommendation is to skip the halfway option and do sign-in plus a
-  revocable caregiver list, in a calm week, rehearsed on the beta.
-
-### Ready to build
-
-- [ ] **The missed-dose banner is a wall of run-on text on a phone.** Visible in Aaron's own
-  screenshot and reproduced by the new render check: every unresolved miss since `MISSED_TRACK_SINCE`
-  is concatenated into ONE paragraph separated by `·`, so a handful of days fills the whole screen
-  and the caregiver scrolls past it rather than reading it. It should be a short count with the
-  detail behind a tap, or one row per miss with the oldest collapsed. **An alert nobody reads is an
-  alert that does not work**, and this is the screen that matters most. Needs the Designer stage.
-
-
-- [ ] **Units picker for CareTracker (°F/°C, lbs/kg) — and the per-entry tagging it depends on.**
-  Raised by Aaron 2026-08-24 while asking about "Litres" vs "Liters". ChemoWell already has this;
-  CareTracker has `CONFIG.tempUnit` with no UI and no weight unit at all. **Order matters:** a
-  reading is stored as `{ temp: 98.6, dose: '98.6 °F' }`, the unit only in a display string, while
-  `tempFever()`/`tempHigh()` already switch thresholds on `CONFIG.tempUnit`. A picker added today
-  would make every historical reading be re-read in the new unit. Port ChemoWell's `entryTempUnit`
-  / `entryWeightIn` tagging FIRST. Own release, own adversarial gate.
-
-- [ ] **Language localisation — DECISION NEEDED, not started.** Both apps are single-file with
-  every string inline; weeks, not a setting. Carries a medical-safety dimension: the copy routing a
-  frightened person to their care team cannot be machine-translated without review.
-
-- [ ] **Undo a restore / snapshot before importing** — 2026-08-22: *"if someone is doing a backup
-  and it fits wrong or they accidentally add to wrong profile. there needs to be a way to undo or
-  capture their live data before input."* Take an automatic snapshot immediately before any restore
-  writes, and offer a single Undo afterwards.
-- [x] **The encryption part** — asked twice. **BUILT: care-tracker v56 and ChemoWell app-v63.**
-  A password switch under the save buttons; the file is AES-256-GCM under a PBKDF2-SHA256 key at
-  310,000 rounds. Fails closed on a wrong password, a tampered byte, a hostile iteration count, and
-  a file that decrypts but is not a backup. See Completed.
-- [x] **In-app logger for errors and improvements** — *"we were also going to build in a logger for
-  errors or improvements."* **BUILT: care-tracker v57 and ChemoWell app-v64.** See Completed.
-- [ ] **ChemoWell hardcoding removal, Phases 1–5** — `HARDCODED_MEDS_PLAN.md`. **LOST ITEM.** He
-  said explicitly *"the hardcode needs to not wait to be built"* and it then waited through six
-  releases. Called out here rather than quietly rescheduled.
-- [ ] **Weight-change reasons in care-tracker** — **LOST ITEM.** From the same message that asked
-  for paracentesis: *"there needs to be a way to log the reason for weight change."* The
-  paracentesis half shipped as v52; the reason half never did. ChemoWell has `WEIGHT_REASONS`;
-  care-tracker has nothing.
-### Known, not urgent
-
-- [ ] **`test/v57-browser-notice.mjs` fails 17 checks in ChemoWell** — pre-existing, present on
-  app-v58 as well, so not caused by any recent release. Those suites need a manually started server
-  on port 8899 and otherwise die with a connection error that reads like infrastructure rather than
-  failure, which is why real design regressions sat unnoticed.
-  **RUN 2026-08-24, and the 17 are now named.** Server started by hand (`python3 -m http.server 8899
-  --directory .`); the 11 static checks pass and the 17 browser ones fail for real. All of them are
-  on the **Help search results screen** — the same screen that carries the care-team safety strip:
-  - **The strip is 216px tall at 360px wide** (`R2D-1` wants under 200; it is 235 at 320px).
-  - **It has no surface of its own** — `rgb(255,255,255)`, the same white as the cards around it
-    (`R2D-4`), so it reads as content rather than as a notice.
-  - **The count line is not on screen at all** (`R2D-3`, three checks: found / above the rows /
-    contrast). The "closest N of M" total the result list is capped against is simply missing.
-  - **The consequence, and why this deserves its own release:** with the strip that tall the first
-    result row has **41px visible above the bottom nav**. On a 360px phone the answers are
-    effectively below the fold — someone searching Help sees a disclaimer and almost no results.
-  - Also failing: `R2D-2` (a welcome toast competes with the notice on a first browser run),
-    `R2D-9` (neither notice nor strip capped at 560px), `M3` (toast lift position).
-  Not fixed here: this is `index.html` layout work, so it needs APP_CLAUDE.md rule 5's Auditor + PM
-  gates and a design pass.
-- [ ] **Quiet-hours vs late-recovery policy** — the 10 PM reminder sits on the 22:05 boundary.
-  Needs a decision from Aaron about which wins.
-
----
-
-## COMPLETED
-
-- [x] **Regenerate chemowell-beta from care-tracker** — asked earlier, noting the place he is
-  supposed to test things was not testable. **Done 2026-08-24, and it was SEVEN releases behind, not
-  one** — stuck at `beta-v52` since Aug 21 while production shipped v53 through v59. Re-derived from
-  v59 with `harness/betaify-patch.py`: 9/9 isolation edits clean, every safety post-condition green,
-  `beta-isolation-test` 9/9, `eod-test` 11/11. **`sw.js` was brought over too**, which the
-  one-command recipe does not cover — the beta still ran the pre-v53 cache-first worker, so a tester
-  could pass or fail a build that was not the one under test. Pushed to the working branch, **not to
-  main**, so it is not live yet.
-
-- [x] **"Litres" or "Liters"** — asked 2026-08-24. **Built as care-tracker v59 / ChemoWell app-v65.**
-  American in every identifier, British in 4 user-facing strings here and 10 there, including a
-  ChemoWell Help page. Normalised to liters, asserted by absence against the shipped bytes.
-
-- [x] **Backup does not belong under Reports; there is no Settings tab** — asked 2026-08-24:
-  *"all the backup stuff shouldn't live under reports. it should be under settings. and i don't
-  even see a settings tab anymore in caretracker."* **v58.** Built the Settings screen this app has
-  never had and moved the backup, its password switch, restore and the share control into it.
-  Reports keeps the spreadsheet and the printable record and now says where the backup went, with a
-  one-tap route. `harness/settings-test.mjs` 11/11, falsified at 8 red on v57.
-
-- [x] **In-app logger for errors and improvements** — asked 2026-08-22. **v57.** A *Report a
-  problem* menu row. The app records its own errors and unhandled rejections without swallowing
-  them; repeats collapse to one counted entry; a full phone does not turn an error into a broken
-  screen; trimming drops the oldest errors first, so a flood cannot evict what the person wrote.
-  Kept in localStorage, never in Firestore — a stack trace is not a medical record and could not be
-  cleaned out of an append-only collection. The file carries version, device and the log, and no
-  dose, temperature, weight, symptom or appointment. `harness/logger-test.mjs` 19/19, falsified at
-  16 red on v55.
-
-- [x] **Password-protected backup files** — asked 2026-08-22, twice. **v56.** The link is already
-  the sharing story for a caregiver trusted with everything; the backup FILE is the one that gets
-  emailed and sits wherever it lands, and it was plain text. Now AES-256-GCM under PBKDF2-SHA256 at
-  310,000 rounds via `crypto.subtle`. Locked files name nothing about their contents until they
-  open, the patient's name is inside the ciphertext and out of the filename, plain files stay at
-  formatVersion 1 so older phones can still read them, and protected files are written at 2 so an
-  older phone says "update first" instead of reporting the backup empty. No recovery path by
-  design. `harness/encbackup-test.mjs` 16/16, falsified at 13 red on v55.
-
-- [x] **ChemoWell backup & restore, destination asked not assumed** — app-v61, 2026-08-22.
-- [x] **Pro stops leading with a feature that does not exist** — app-v60, 2026-08-22.
-- [x] **A restore never leaves the medication list behind in silence** — v55, 2026-08-22.
-- [x] **A saved file says where it went; a second caregiver can be brought in** — v54, 2026-08-22.
-- [x] **Builds reach the phone on the next load; the paracentesis dialog says what it is** — v53.
-- [x] **Paracentesis as its own record, never touching the weight trend** — v52 / app-v59.
-- [x] **Bowel movement and appetite asked at the end of the day, about today** — v51 / app-v58.
-- [x] **Naming pass and clearance screen** — 44 candidates, 21 screened, delivered 2026-08-22.
+- [x] **Team review, hires, merges, sequence** (2026-09-07, "do all") — Rule 1.5 in CLAUDE.md.
+- [x] **Delete ratchet in pm.py** (2026-09-07) — falsified three ways.
+- [x] **Nightly Firestore backup** — confirmed by Aaron 2026-09-07 to be a Cowork desktop task.
+- [x] **v71** — page holds still behind an open menu or pop-up (Aaron, 2026-09-06: "you can still scroll and
+      see the background moving").
+- [x] **v70** — "fix period things that needs fixed" — a period move works at any age and cannot swallow another.
+- [x] **v69** — correct or remove a weight from the Weight report; "Total drained" kept (Aaron asked for it).
+- [x] **Paracentesis average removed** — "this isn't an avg thing."
+- [x] **v66–v68** — "there isn't a way to add a para from the reports screen. there also a way to edit cycles."
+- [x] **Enhancer list in every release message** — "I shouldn't have to ask for enhancer list."
+- [x] **The full record of what went wrong, in the README** — "document in full detail all the challenges."

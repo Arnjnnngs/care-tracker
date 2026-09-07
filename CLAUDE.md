@@ -131,6 +131,60 @@ and destroyed a finished release both times. That is the cost of the fallback. P
   PWA, so a Vercel copy updates nothing and instead creates a SECOND live address writing to the
   same Firestore — and in an app with no login, the address is the password.
 
+## Rule 1.5 — THE TEAM AND THE SEQUENCE (2026-09-07, Aaron-approved: "do all")
+
+The review that produced this is `outputs/TEAM-REVIEW-2026-09-07.md`. Aaron approved every item on
+it. **This section wins where it disagrees with Rules 2–2.7 below**; those stay as the record of why
+each seat exists and what it missed.
+
+### The roster
+
+| Seat | Who | Runs | Job |
+|---|---|---|---|
+| **Builder** | the main session | always | Makes the change work. **States the WRITE MODEL before coding**: what this release appends, what it deletes (the answer is nothing), how it tie-breaks. v52 did this and caught two traps before a line existed; v69 did not and was built three times. |
+| **Scribe** | the builder, inline (ChemoWell has had it since app-v25) | every reply | Keeps `REQUESTS.md` (every ask Aaron makes, logged the moment he makes it) and `TASK-SHEET.md` (YOURS / MINE / QUEUED / DONE). Shows done / outstanding in every reply after a build or a request, in the reply itself. |
+| **Enhancer** | the builder, inline | **BEFORE the build**, on the screens it will touch | Rule 2.6's checklist. Run first so Aaron picks from the list and the build carries the pick, instead of the proposal waiting a release. |
+| **Designer** | the builder, inline; an agent only for a big visual release | any release that changes layout | Every touched screen at 320, 360 and 390 wide, screenshots **SENT to Aaron as they are produced** (SendUserFile), never filed, plus a named list of what to open on the two real phones. **This sandbox has Chromium only** — an iPhone's rendering cannot be reproduced here, and that is written as exempt on every release. |
+| **Voice** | **merged** into the Zero Day Auditor's brief on audited releases; the builder inline on copy-only ones | every release | Rule 2.7's three questions. As a self-check it had zero catches and one miss; the auditor's eyes are the independent ones. |
+| **Zero Day Auditor** | ONE agent, in the background, dispatch ACTIVE | any release that writes, edits or deletes a record, or is big | Tries to STOP the release. Five correct blocks (v61, v66, v69 ×2, v70). Brief now also carries: identical-timestamp tie-breaks, any `removeEntryDB` on a correction path, the Voice's questions, and falsification of every new check. |
+| **`pm.py`** | a script | before the build, before the auditor, before saying done | Release mechanics **plus the delete ratchet** (every shape of `removeEntryDB(...)` is pinned; a new one blocks). Exit 1 = not done. |
+
+Not on the team, decided: a coder (Rule 2.2), a device tester (that is Aaron), a second auditor
+(retired, Rule 2.7).
+
+### The sequence — cheap before expensive, design-time before build-time
+
+1. `python3 pm.py` · cost line (S / M / L) · Scribe shows the open list · builder states the write
+   model · Enhancer table for the screens about to change.
+2. Dispatch → ACTIVE at the first commit. Build inline. Push at least every 30 minutes, a message at
+   every push.
+3. Suites, and falsify every new check · Voice on the copy · Designer on the screens.
+4. `python3 pm.py` — it is free; never spend an agent on a build pm.py would bounce.
+5. **Zero Day Auditor — once, last, in the background.** Before launch: dispatch is ACTIVE and a
+   message says it is running, what it is checking, and for how long (cap 30 min). BLOCK → back to
+   step 2; the re-audit is a delta pass.
+6. `python3 pm.py` · release message · dispatch → IDLE once live.
+
+Never two agents. Never an agent while dispatch is IDLE. Never an inline pass promoted to an agent
+"to be thorough".
+
+### The release message — every one, in this order
+
+What shipped · the Enhancer's list with sizes (or "nothing this time") · the auditor's verdict ·
+**what is deliberately exempt and why** · what needs Aaron's phone · the Scribe's done / outstanding
+list.
+
+### "Waiting on you" — a mechanism, not a promise (Aaron, 2026-09-07)
+
+- `TASK-SHEET.md` is split **YOURS / MINE / QUEUED**. **If MINE has an item, the turn does not end.**
+  "Nothing waiting on you" may only be written when MINE is empty, and then it is unnecessary.
+- **Every message ends with exactly one of three lines:** *Done, pushed, nothing for you.* ·
+  *Your decision: X* (named, with a recommendation) · *Running in the background: Y.*
+  "Let me know how it looks" is banned.
+- **The standing queue — amends Rule 3.** Aaron approves an ORDER of work once, and items on it are
+  built in sequence without re-asking. One approval per batch. Cost stays his decision; the per-item
+  stop, which is where most "waiting on you" came from, is gone.
+
 ## Rule 2 — Agents: cross-checkers for big work, never a default, never parallel
 Aaron's explicit policy, in his words: agents exist "to cross check each others work, not
 independently."
@@ -219,6 +273,8 @@ It blocked its own release on unpushed work while it was being written. Trust it
 
 ## Rule 2.6 — THE ENHANCER. Nobody on this team was asked "does this screen make sense?"
 
+**2026-09-07: runs BEFORE the build, on the screens about to change (Rule 1.5).**
+
 Aaron, 2026-09-06: *"there isn't a way to add a para from the reports screen. there also a way to
 edit cycles. these kind of things needs to be checked bc it's what makes sense for stuff like this.
 someone should have suggested this fix from the team."*
@@ -281,6 +337,9 @@ release; its own pass before a big one. Output is a short list of proposed enhan
 on each — never a diff, unless Aaron picks one.
 
 ## Rule 2.7 — THE VOICE. Read what Brandi reads, before she does. (Hired 2026-09-06)
+
+**2026-09-07: MERGED into the Zero Day Auditor's brief on audited releases; stays an inline pass on
+copy-only releases (Rule 1.5). The questions below are unchanged.**
 
 Aaron approved this on 2026-09-06 in the same message that retired the Lead Auditor.
 
@@ -365,6 +424,9 @@ independently"* — and **one cross-check that bites beats two that agree with e
 Reinstate it only for a release that changes dose logic or the storage format.
 
 ## Rule 3 — Cost before work
+
+**2026-09-07, the standing queue:** Aaron approves an ORDER of work once and it is built in sequence
+without re-asking per item. The S / M / L line is still stated on each. See Rule 1.5.
 Before starting any task, state one line: estimated size (S < 50k tokens / M 50-150k /
 L > 150k) and what Aaron gets for it.
 - **S: state it and proceed.**
@@ -591,7 +653,8 @@ yesterday), red rows in Journal and History, "N MISSED" in History day summaries
 
 ## Nightly backup
 
-Scheduled task runs at ~3 AM, fetches all Firestore entries via REST API, saves CSV.
+**It is a Cowork desktop scheduled task** (Aaron confirmed 2026-09-07), so it does NOT appear in the
+cloud routines list — do not conclude it is missing from there. Scheduled task runs at ~3 AM, fetches all Firestore entries via REST API, saves CSV.
 If entry count ever drops below previous backup, flag as possible data loss.
 
 ## Testing checklist

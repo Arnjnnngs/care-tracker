@@ -7,6 +7,15 @@ Dispatch check-ins and any new chat session should read this file first.
 
 ---
 
+## THE TEAM IS SETTLED — 2026-09-07, Aaron: "do all"
+
+The full roster and sequence are `CLAUDE.md` **Rule 1.5**; the review behind it is
+`outputs/TEAM-REVIEW-2026-09-07.md`. Hired: the **Scribe** (`REQUESTS.md`, `TASK-SHEET.md`) and the
+**Designer**. Merged: the **Voice** into the auditor's brief. Added to `pm.py`: the **delete ratchet**.
+The **nightly backup** is a Cowork desktop task (Aaron confirmed) and does not appear in the cloud
+routines list. The **standing queue** is in force: `TASK-SHEET.md` QUEUED is built in order without
+re-asking per item. Next up: **v72**.
+
 ## MOVING TO A NEW CHAT — read this first (added 2026-09-07)
 
 Aaron, 2026-09-07: *"document in full detail all the challenges we've had together and the stopping

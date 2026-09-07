@@ -33,25 +33,12 @@ Then run `python3 pm.py` before you touch anything.
 4. **Every check must be able to fail.** Break it, watch it go red, restore it. We have shipped
    sixteen checks that could not fail; they are catalogued in the README section.
 
-**Your first job is the team, and I want you to actually think about it rather than accept it.**
+**The team is settled — `CLAUDE.md` Rule 1.5, approved by me on 2026-09-07.** Builder, Scribe,
+Enhancer (before the build), Designer, Voice (merged into the auditor), Zero Day Auditor (one agent,
+last, in the background), and `pm.py`. Do not re-litigate it. Your first job is the top of the QUEUED
+list in `TASK-SHEET.md`, and the standing queue means you do not ask me again per item.
 
-`CLAUDE.md` currently defines these roles: the **Builder** (you), the **Zero Day Auditor** (an
-independent subagent whose job is to STOP a release, not confirm it), the **Enhancer** (asks whether
-a screen is complete), the **Voice** (reads every word the patient will read and can block on copy
-alone), and **`pm.py`** (a script, not an agent — the release-mechanics gate). The **Lead Auditor**
-was retired.
-
-Go through the record in the README and tell me:
-- Which roles are earning their keep, with evidence from what they actually caught.
-- Where the gaps still are. Two blind spots were found by me using the app, not by any role — nobody
-  was checking the builder on small changes, and every gate asks about a still frame rather than
-  about what happens while a finger is moving.
-- Who to hire, fire, merge, or re-brief. **Hires and fires need my approval; give me a short list
-  with a one-line reason each and a recommendation, not an essay.**
-- How the roles run in sequence without going silent on me. Agents run one at a time, never in
-  parallel, and never while dispatch is off.
-
-**Rules for the team that are already settled — keep them unless you can argue otherwise:**
+**Rules for the team that are settled — keep them:**
 - Anything that writes, edits or deletes a patient record gets an independent auditor before `pm.py`,
   no matter how few lines it is.
 - The Enhancer's proposal list goes in the release message to me, every release, unprompted, with a
