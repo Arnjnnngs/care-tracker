@@ -11,12 +11,7 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
 
 ## YOURS — decisions only you can make
 
-- [ ] **Approve the team changes** in `outputs/TEAM-REVIEW-2026-09-07.md`: hire the Designer, hire the
-      Scribe, merge the Voice into the auditor's brief, re-brief the auditor and builder.
-- [ ] **Say the word on v72** — bowel, appetite and symptom corrections supersede instead of delete.
-      Size M, audited release. Cost gate (Rule 3).
-- [ ] **Nightly Firestore backup** — CLAUDE.md says one runs at ~3 AM. It is not among this account's
-      cloud routines. Do you see it in Cowork's scheduled tasks? If not, I rebuild it (S).
+- [x] Team changes, v72, and the backup question — all answered 2026-09-07 ("do all", backup is in Cowork).
 - [ ] **Two phone checks** that only a real device can answer: does the iPhone actually save the backup
       file (open since v50); does v71's page hold still behind the menu on Brandi's phone.
 
@@ -27,10 +22,11 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
       blocks; the four delete-based corrections show as a warning until v72 removes them. Falsified
       three ways.
 - [x] This task sheet refreshed (it said v43.3 was live and fed the dispatch report).
-- [ ] `pm.py` runs every harness suite and fails on any that cannot start (S).
-- [ ] Re-point the dispatch routine prompt away from "the v44 table" (needs your OK — it pushes to
-      your phone).
-- [ ] CLAUDE.md / NEW-CHAT-PROMPT.md updated with the approved team and sequence (after your approval).
+- [x] `pm.py` requires a suite record from `harness/run-all.sh`; a hidden red or an unexplained exemption blocks. Falsified four ways.
+- [ ] **v72 Zero Day Audit running in the background** (one agent, ~25 min). SHIP → push to main; BLOCK → fix and delta-audit.
+- [ ] Rebase or retire the four v43/v44-era patch verifiers run-all found red on v71 and v72 alike (S–M).
+- [x] Dispatch routine prompts re-pointed at STATUS.md's live table and this sheet.
+- [x] CLAUDE.md Rule 1.5, NEW-CHAT-PROMPT.md, REQUESTS.md — the approved team and sequence.
 
 ## QUEUED — built on your word, in this order unless you reorder
 
