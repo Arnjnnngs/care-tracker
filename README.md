@@ -10,6 +10,376 @@ Real-time family medication & vitals tracker — a progressive web app (PWA) for
 
 CareTracker is a single-page PWA built with vanilla JavaScript and Firebase Firestore. It tracks daily medication doses, temperature readings, and weight for a caregiver workflow. The app uses real-time Firestore listeners for instant multi-device sync and Firebase Cloud Messaging (FCM) for scheduled push notification reminders via GitHub Actions.
 
+## WORKING RELATIONSHIP — the full record of what has gone wrong, and why
+
+**Read this before doing anything else in a new chat.** It is written at Aaron's direction, in his
+words where possible, and nothing in it is softened. `PROCESS-RESET.md` covers the first reset
+(Aug 18, 2026); this section covers everything since, and it is the honest version — the failures,
+the ones that repeated after being written down, the things that were genuinely hard from both
+sides, and what actually works now.
+
+Aaron, 2026-09-07: *"document in full detail all the challenges we've had together and the stopping
+when you should be working. I need everything that has been challenging and frustrating for both of
+us."*
+
+---
+
+### 1. THE BIGGEST ONE: stopping to talk instead of working
+
+This is the failure Aaron has raised more than any other, and it is the one to read twice.
+
+> *"youre stuck or still doing the same thing. I've put you in charge of this project and you keep
+> pausing instead or working bc you're giving an update. fix this first before you touch anything
+> else. can't have any more delays over this"* — Aaron, 2026-09-04
+
+**The shape of it, exactly.** Say *"I'm measuring it now, about 20 minutes, I'll come back with the
+result"* — and then end the turn. Nothing runs. Aaron has to send another message just to restart
+work that was never blocked on him. The message announcing the work and the message reporting its
+result should have been **the same message**.
+
+It happened repeatedly on 2026-09-01 and 09-02. It is the single most expensive habit on this
+project after the sandbox rollbacks, because every instance costs a full round trip of his
+attention for zero progress.
+
+**Why it kept happening, honestly.** Writing a clear recap *feels* like delivering something. It
+reads like progress, it is easy to produce, and it arrives with none of the risk of actually doing
+the work. That is exactly what makes it seductive and exactly why it is worthless to him. A plan is
+not a deliverable. A diagnosis is not a deliverable. An estimate of how long something will take is
+not a deliverable.
+
+**The rule that came out of it (CLAUDE.md Rule 0.5): there are exactly three legitimate reasons to
+end a turn.**
+
+1. The work is genuinely finished, verified, pushed, and `python3 pm.py` is not exit 1.
+2. Aaron has to decide something that cannot be decided for him, said in plain words — *"say the
+   word"*, *"your call"*, *"I need you to approve X"*. A vague *"let me know how it looks"* tacked
+   onto unfinished work is **not** this.
+3. A background agent or job is running and the harness will wake the session when it finishes.
+
+**Anything else — go back and finish.** If you catch yourself writing a future-tense sentence about
+your own work, that sentence is the work you should be doing instead of writing it.
+
+#### 1a. The same failure wearing different clothes: "nothing waiting on you"
+
+2026-09-07. Three release messages in a row ended with some version of *"nothing waiting on you"* —
+directly above a list of open items that were all mine to do.
+
+> *"why do you keep saying on the list, nothing waiting on me? you list looks like there is stuff
+> that can still be done"*
+
+He is right, and it is Rule 0.5 in disguise. Announcing that the ball is in nobody's court, while
+holding a list of work, is a way of stopping without saying so. **If the list has items on it and
+none of them need his decision, the correct next action is to do one, not to describe the list.**
+
+#### 1b. And the worst version: turning a blocked guard into homework for him
+
+A Stop hook was drafted that would refuse the turn-ending mechanically — the `pm.py` principle
+applied to stopping. The permission classifier refuses to install auto-executing hook code from a
+cloud session, three separate ways.
+
+**The response to that was to write Aaron a to-do list about installing it.** He replied:
+
+> *"soooo..what am I supposed to be doing with a hook and where? I'm on my tablet"*
+
+He is the owner, not the deploy pipeline, and he reads these on a tablet. **Never turn a blocked
+mechanical guard into a chore for him.** The draft sits in `outputs/STOP-HOOK-PROPOSAL.md` for a
+future session that can install it unassisted. The rule stands on its own, enforced by being read.
+
+---
+
+### 2. Asking Aaron to do things he should never be asked
+
+The most corrosive category, and it has recurred in three different forms.
+
+- **Uploading files to GitHub himself**, twice, hand-walked through the browser — *while a working
+  `file_upload` tool existed that had never been looked for.*
+  > *"why did I have to do that and you couldn't add those files yourself?"*
+  > *"I definitely shouldn't be the one to tell you that you can use my chrome."*
+  > *"A employee doesn't stop work and go to the boss and ask them to upload a file on the employees
+  > computer."*
+- **The hook to-do list** (above).
+- **Handing him decisions about things that were simply wrong.** He closed this one himself:
+  > *"it doesn't sit well with me that the new enhancer person missed this. that is not ok. what's
+  > waiting on me. if something is off, then we need it correct. I don't need to make that decision.
+  > don't tell me something is wrong and not fix it. tell me what was wrong AFTER you fixed it"*
+
+  The distinction that matters: **a cost decision is his** (Rule 3 — M and L work waits for his go).
+  **A correctness decision is not.** If something is broken, fix it and report afterwards.
+
+**Rule 4 is the counter-measure: blocked means try three things, not ask the boss.** Search your own
+tools — a needed tool sat unused for two releases because nobody looked. Try two alternative
+approaches. Read the docs. Only then does it go to him, as a decision memo with a recommendation,
+never as *"please do this for me."*
+
+---
+
+### 3. Long silences
+
+42 minutes. Then 202 minutes. Then, after being told twice, ~109 minutes again — that last one
+after **turning the dispatch flag off and starting a long agent anyway.**
+
+> *"it's been 42 min of radio silence"* … *"202 min is unacceptable"* … *"the checkers are both
+> paused and there have been no updates in almost an hour."*
+
+**The structural part, stated plainly so nobody re-litigates it:** a subagent call blocks the main
+session completely. Not a word can be sent until it returns. So the workflow itself guaranteed the
+silence — the fix was not "try harder to remember", it was to stop designing work that makes silence
+inevitable, and to turn dispatch ON before going quiet, every time, without exception.
+
+**A silence longer than ~10 minutes while able to speak is a defect in the work, exactly like a
+failing test.** He is a non-technical founder who cannot see the terminal; silence reads as
+"nothing is happening" or "it broke."
+
+---
+
+### 4. The sandbox destroying finished work
+
+Nine-plus rollbacks, several mid-task. The worst destroyed **four finished, tested features** held
+locally for hours instead of pushed — calendar, tour, backup/restore, cleanup — all rebuilt at full
+cost. A later one destroyed a completed audit and its evidence. Two more destroyed a finished
+release while the Chrome extension was down for six hours.
+
+> *"no more 'I lost it and it reset'... it has to be done 3 times over!"*
+
+**Rule 0: GitHub is the only real computer.** Nothing may exist unpushed for more than ~30 minutes —
+not "when the feature is done." A fixed file, including a test file, is not fixed until it is
+pushed: one unpushed test fix sent a later agent chasing a bug in a suite that had already been
+repaired.
+
+This one has largely stopped hurting, because the rule is now obeyed — the current practice is to
+push a work-in-progress commit to the working branch within minutes, long before a release is ready.
+
+---
+
+### 5. Cost, and agents used wrongly
+
+Seven specialist agents at 170k–300k tokens each in a single day, roughly **half of it rebuilding
+work the rollbacks destroyed.**
+
+> *"what was the point of using 7 agents?"*
+> *"I'm getting notifications that I'm approaching my weekly limit and it's only Monday with NOTHING
+> to show for it."*
+
+And when he asked for the full team, they were run **in parallel**, multiplying both tokens and
+silence:
+
+> *"when I tell you I want to run the full team, that doesn't mean at the same time. it needs to go
+> in order."*
+
+His policy, verbatim: agents exist *"to cross check each others work, not independently."* Small
+changes work inline, solo. One cross-check that bites beats two that agree with each other — which
+is why the Lead Auditor role was retired on 2026-09-06.
+
+---
+
+### 6. Checks that could not fail — the longest-running problem on this project
+
+This is the category that keeps producing new instances, and every single one of them was green
+while the product was broken.
+
+| The check | What was actually wrong |
+|---|---|
+| a literal `\|\| true` | it could not fail by construction |
+| a CSV leak check | read the **screen** for three rounds while appointments leaked into the file |
+| assertions on `document.body.textContent` | in a single-file app the source code is in the body, so string checks always match |
+| version literals (`'v43.3'`) pinned in patches and suites | broke on every legitimate release; three patches and several suites, an agent-diagnosis cycle each |
+| a download helper | grabbed whatever file came last instead of selecting by filename |
+| v66's "2 of 2 return paths fixed" | it counted `return [` occurrences, and the broken path was a **ternary** return, so the count agreed with itself |
+| the v66 Weight check | seeded **no** weight readings, so it tested the empty state — the one state no real phone is in — and passed on a build that was broken for every real device |
+| v69's row counts | counted **Edit buttons**, and a row showing a Delete/Keep confirmation has no Edit button, so arming a confirmation read as a deletion that had not happened |
+| v69's "Total drained is present" | a case-sensitive regex against text the CSS renders in **uppercase** |
+| `anyWeightWrites >= 0` | a count is never negative; the clause sat inside a guard contributing nothing |
+| "the move did not duplicate the period" | asserted `=== 1`, true only because the suite seeded exactly one period |
+| `Math.max(Date.now(), prevStamp + 1)` | replacing it with a bare `Date.now()` left the suite green, because every seeded marker was in the past |
+| `overflow-scan` | had **never once opened a report detail screen** — it walked the reports *menu* — and reported "80/80 CLEAN" across three releases that added row controls to exactly those screens |
+| `overflow-scan`, again | passed `Math.max(dev.w, layout.inner)` as the screen width; under mobile emulation Chromium widens `innerWidth` the moment a page overflows, so the scanner was told the screen had grown to fit. A deliberately 400px-wide element was named **zero** times |
+| `export-test` | **dead since v64** — the What's-New pop-up swallowed its first click and it errored out. Nobody had run it |
+| `para-test` | found a dialog button by "nearest ancestor with `position: fixed` in its style" — which stopped meaning "the dialog" the moment the app put `position: fixed` on the body |
+
+**The counter-measure that works, every time it is applied: falsification.** Break the thing, watch
+the check go RED, restore it. It has caught something real on every single release where it was
+used. A check that cannot fail is worse than no check, because it buys false confidence.
+
+**And the deeper lesson from the last three:** a gate can rot without anyone noticing. Suites need
+to be run, and their *coverage* — not just their pass count — needs to be looked at.
+
+---
+
+### 7. Shipping things that damaged, or nearly damaged, the record
+
+This is a real patient's medical record. Four separate incidents, all the same root cause.
+
+- **v66 shipped a one-tap period delete that destroyed a whole period, permanently.** Removing the
+  end reopened the period; `cyclePeriods()`'s merge rule then swallowed the next start; after the
+  merge nothing in the app could write an end for a past day. It could not be undone from the app.
+  Withdrawn in v67.
+- **v69's first build corrected a weight by deleting the old one.** The Firestore rules refuse a
+  delete by document *age*, so on any reading older than two days the correction would have been
+  **added and the old reading left behind** — two weights for one weigh-in, forever, on the screen a
+  clinician reads a trend off. The audit reproduced it: 2 rows became 3.
+- **v69's second build made the printable oncologist report say she GAINED 35 lbs while the app's
+  own screen said she LOST 10.** The report's net-change tile still summed raw records, so a
+  corrected weight and a removed one both kept counting.
+- **v70's first build let a period start be dragged onto a date inside an earlier period, and the
+  later period vanished** — toast saying "moved", nothing on any screen pointing at the orphaned
+  records.
+
+**The single root cause behind three of those four:** `BYPASS_48H_IDS` in `index.html` **only shows
+or hides a button. It does not grant a delete the Firestore rules refuse.** STATUS.md has said so
+since v52. The rules file is not in this repo and cannot be read from a session, so the claim cannot
+be settled from inside — **which is the argument for the fix, not against it.** Every correction in
+this app now works by appending a superseding record, never by deleting: paracentesis (v52),
+appointments, weight (v69), cycle markers (v70).
+
+**Never bet a patient's record on a premise you cannot verify.**
+
+---
+
+### 8. Copy that told the patient something untrue
+
+Four consecutive releases shipped a false in-app note, and every time a person looking at a
+screenshot caught it — never a check.
+
+- **v64** — written in developer language.
+- **v65** — *"The frosted glass is gone."* False; four scrims kept it, and the blur behind the open
+  menu is the most visible frosted glass in the app. The same note re-promised a flicker fix that
+  v64 had already promised and not delivered.
+- **v66** — *"and so can the Weight screen."* False twice, and the new destructive Remove control
+  was not mentioned at all.
+- **v66 pre-ship** — a hint reading *"Tap Start or End"* when the buttons said *"Move start"*, and
+  *"Defaults to now"* printed above a field showing a date three days old.
+- **v69** — *"could only be fixed from History."* History cannot fix a weight; it can only delete it.
+
+That is an unowned surface, not bad luck, and it is **the only part of this work that speaks to the
+patient directly.** Hence the Voice (Rule 2.7), which can block a release on copy alone, and the
+standing rule: **never promise a fix that has not been confirmed on the patient's own phone.**
+
+---
+
+### 9. Over-reach — nearly deleting something Aaron asked for
+
+Aaron had the paracentesis **average** removed, correctly: a drain takes off whatever has
+accumulated, so the mean of those volumes describes nothing and invites *"she's averaging 5.6, this
+one was 3, she's improving."*
+
+The next patch then carried that reasoning across and **deleted "Total drained" as well** — a figure
+Aaron had specifically asked for, recorded in STATUS.md:
+
+> *"there can be notes for weight that can add the para together to see how much was drained."*
+
+It was caught by reading the project's own history before shipping, not by any check. **A rule
+derived from one number is not a rule about every number.** The average invited a false comparison;
+a plain total invites none. It stays, and a test now guards it.
+
+---
+
+### 10. Roles that were created and then missed the thing they were created for
+
+- **The Enhancer** (Rule 2.6) was created because a screen could delete a paracentesis but not add
+  one. Its first pass then walked that same screen and **never asked whether what was already
+  displayed should be there**, missing the meaningless average. That blind spot now has a name and a
+  checklist item: *looking for what is missing is not the same as looking at what is there.*
+- **The Voice** (Rule 2.7) was created hours before it missed the same number — because the wording
+  was fine and the *number* was the problem. Question 3 exists for that reason: **does this figure
+  belong on the screen at all?**
+- **The Enhancer's output never reached Aaron.** Two full passes sat in `outputs/`, written,
+  committed, unread. He had to ask for the list twice:
+  > *"I shouldn't have to ask for enhancer list...otherwise, what is it doing?"*
+
+  **A role whose output is a file in a repo the owner does not read is not a role, it is a habit.**
+  The list now goes in the release message, every release, unprompted.
+- **Process drift between the two apps.** ChemoWell had carried a copy-review role since app-v23;
+  care-tracker had none. **When one project fixes a process gap, check whether the other has it.**
+
+---
+
+### 11. The structural blind spots — two of them, both found by Aaron using the app
+
+- **Nobody checked the builder below the "big changes" line.** The auditor only ran on big work;
+  everything else was built and checked by the same person, with only `pm.py` after it — and `pm.py`
+  is a **release-mechanics** script that has never once looked at whether code is right. v66 was
+  small, and it destroyed a period. Fixed by Rule 2.2: **anything that writes, edits or deletes a
+  record gets an independent auditor, however few lines it is.**
+- **Every gate here asks about a still frame.** Does the screen fit; is the copy true; can she do the
+  job; does the record survive; did the release mechanics happen. **Not one asked what happens while
+  a finger is moving** — so five full-screen overlays shipped for many releases with the page free to
+  scroll behind them:
+  > *"when there is a toast pop up or with the 3 elipsies, you can still scroll and see the
+  > background moving when trying to scroll. why haven't this been caught. eyes should be actively
+  > looking at stuff to verify. there should be cases written for everything to test for."*
+
+  Fixed in v71, with Rule 5.5: **a release that changes anything a finger touches ships a case for
+  the interaction, written for the whole class rather than the one instance reported** — and
+  anything deliberately exempt is asserted, because an exemption nobody wrote down is
+  indistinguishable from an oversight.
+
+---
+
+### 12. What has genuinely been hard from this side — stated for fairness, not as excuses
+
+Aaron asked for both sides. These are real constraints, and none of them justify a single failure
+above; they are here so the next session does not waste time rediscovering them.
+
+- **The sandbox is not durable and gives no warning.** It has rolled back mid-task. This is why
+  everything is pushed continuously and why key findings go in *messages* as well as files —
+  messages survive a rollback, files do not.
+- **A subagent blocks the session completely.** No message can be sent while one runs. Any workflow
+  built on long agents is a workflow built on silence.
+- **The Firestore security rules cannot be read from a session.** They are not in the repo. A
+  load-bearing question — does a delete actually work after 48 hours? — cannot be answered from
+  inside, and the repo contradicts itself about it (`BYPASS_48H_IDS` implies an exemption; STATUS.md
+  says there is none). The only safe response is to design so the answer does not matter.
+- **The live site cannot be fetched from this session** (the network policy denies
+  `arnjnnngs.github.io`), so a deploy is verified through the GitHub API and blob SHAs instead of by
+  loading the real URL. Anything about the *patient's actual phone* therefore needs Aaron.
+- **Never write test data to the real Firestore.** Every harness stubs the three Firebase modules
+  and aborts all other network. This is non-negotiable and it means some things simply cannot be
+  measured directly.
+- **The project's own documents can be stale and still sound authoritative.** A standing exception in
+  CLAUDE.md described a bug that had been fixed ten releases earlier and sent work at an
+  already-solved problem. **Verify a standing exception before acting on it.**
+- **The cost of being wrong here is not a bug report.** It is a wrong number on a document handed to
+  an oncologist, or a period of a patient's record that cannot be recovered. That is why the process
+  looks heavy for an app this size. It is not ceremony.
+
+---
+
+### 13. What actually works — keep doing these
+
+Everything below earned its place by catching something real.
+
+1. **Push within minutes, always.** Work-in-progress commits to the working branch; releases to
+   `main`.
+2. **Falsify every new check** — break it, watch it go red, restore it. It has never once been a
+   waste.
+3. **An independent adversarial auditor on anything that touches the record.** It BLOCKED v69 twice
+   and v70 once, and every block was correct and would have reached the patient.
+4. **Look at the screenshots.** v70's refusal message was technically correct and rendered *behind*
+   the dialog's blur, unreadable. Every assertion passed. Only looking found it.
+5. **Read the project's own history before removing anything.** It is what saved "Total drained".
+6. **`python3 pm.py` twice on every piece of work** — once before starting, once before saying
+   anything is done. Exit 1 means it is not done, no judgement calls.
+7. **Reproducible releases**: a base version in `outputs/rollback-vNN/` plus a patch in `harness/`,
+   with the version stamp *inside* the patch so a rebuild cannot come out mislabelled.
+8. **Deliver files as they are produced** (screenshots especially) rather than batching them.
+9. **Say what is deliberately exempt, out loud.**
+
+---
+
+### 14. Starting a new chat on this project
+
+Read in this order: **CLAUDE.md** (the operating model — every rule was paid for), **this section**,
+**PROCESS-RESET.md** (the first reset), **CARETRACKER_HANDOFF.md** (project detail), **STATUS.md**
+(what is live right now and what is in flight).
+
+Then, before touching anything: `python3 pm.py`.
+
+**The one-line version of everything above:** *do the work in the same turn, push it immediately,
+prove every check can fail, never delete a record when you can supersede it, look at the screen with
+your own eyes, and never hand Aaron a chore or a decision that is not his to make.*
+
+---
+
 ## Tech Stack
 
 - **Frontend:** Vanilla JavaScript (ES modules), inline CSS, single-file `index.html` (1042 lines)

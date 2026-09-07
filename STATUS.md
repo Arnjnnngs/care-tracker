@@ -7,6 +7,24 @@ Dispatch check-ins and any new chat session should read this file first.
 
 ---
 
+## MOVING TO A NEW CHAT — read this first (added 2026-09-07)
+
+Aaron, 2026-09-07: *"document in full detail all the challenges we've had together and the stopping
+when you should be working. we need to move this to a new chat. I need everything that has been
+challenging and frustrating for both of us. this all needs to go into the readme file."*
+
+**It is in `README.md`, in the section `WORKING RELATIONSHIP`, near the top of the file.** Fourteen
+parts: the stopping-instead-of-working failure and its two disguises, asking Aaron to do things he
+should never be asked, the silences, the sandbox destroying finished work, cost and agents used
+wrongly, the full catalogue of checks that could not fail, the four releases that damaged or nearly
+damaged the patient's record, the copy that told her something untrue, the over-reach that nearly
+deleted a figure he asked for, the roles that missed the thing they were created for, the two
+structural blind spots he found by using the app, what is genuinely hard from this side, what
+actually works, and how to start a new chat.
+
+`CLAUDE.md`'s READ FIRST list points at it as item 3. A new session should not have to rediscover
+any of it.
+
 ## RULE 0.5 — a recap is not a stopping point (added 2026-09-04, Aaron's most urgent complaint)
 
 Aaron: *"you keep pausing instead or working bc you're giving an update. fix this first before you

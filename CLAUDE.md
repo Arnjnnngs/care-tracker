@@ -6,9 +6,15 @@ Before making any changes, read these docs in order:
 1. **This file (CLAUDE.md)** — the operating model, rules, quality standards, deploy workflow
 2. **PROCESS-RESET.md** — the top-10 failure analysis this operating model came from. Read it
    so you understand WHY each rule exists. Every rule below was paid for.
-3. **CARETRACKER_HANDOFF.md** — full project context, tech stack, med definitions,
+3. **README.md — the section "WORKING RELATIONSHIP"**, near the top. The full record of what has
+   gone wrong between Aaron and this work, in his words: the stopping-instead-of-working failure,
+   the checks that could not fail, the four times a release damaged or nearly damaged the patient's
+   record, the copy that told her something untrue, and what is genuinely hard from this side.
+   Written at his direction on 2026-09-07 so a new chat starts where the last one ended rather than
+   repeating it.
+4. **CARETRACKER_HANDOFF.md** — full project context, tech stack, med definitions,
    Firebase setup, version history, known issues
-4. **STATUS.md** — what is live right now, what is in flight, what needs Aaron
+5. **STATUS.md** — what is live right now, what is in flight, what needs Aaron
 
 These are non-negotiable. Skipping them leads to regressions — and to repeating expensive,
 documented failures.
