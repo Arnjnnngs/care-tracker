@@ -8,7 +8,7 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | cal-test.mjs | PASS |     [iPhone-390x844] sheet field font sizes: title=16px, when=16px, note=16px (floor 16) |
 | chemo-offset-test.mjs | PASS | 17/17 checks passed |
 | daily-supersede-test.mjs | PASS | 40/40 checks passed |
-| deactivate-test.mjs | EXEMPT | v43.3 deactivate-patch verifier, pinned to v43.3 per pm.py; 15/34 on v72, times out on v71; rebase or retire queued |
+| deactivate-test.mjs | EXEMPT | v43.3 deactivate-patch verifier, pinned to v43.3 per pm.py; 21/34 on v71 and on v72 with identical failures (the 600s gate cuts it to 15/34); rebase or retire queued |
 | encbackup-test.mjs | PASS | 16/16 checks passed |
 | enhance-test.mjs | PASS | 37/37 checks passed |
 | eod-test.mjs | PASS | 11/11 checks passed |

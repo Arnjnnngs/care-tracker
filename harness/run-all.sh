@@ -46,7 +46,7 @@ for f in "$HERE"/*-test.mjs "$HERE"/cycle-merge-probe.mjs "$HERE"/audit-v69-weig
     tour-test.mjs)       echo "| $name | EXEMPT | v44 tour-patch verifier: compares a patched build to an unpatched base; fails 'APP_VERSION equals base' on v71 and v72 alike |" >> "$OUT"; continue ;;
     medsync-test.mjs)    echo "| $name | EXEMPT | v44 medsync-patch verifier; hangs past the 600s limit on v71 and v72 alike; rebase or retire queued |" >> "$OUT"; continue ;;
     reason-test.mjs)     echo "| $name | EXEMPT | v43.4 reason-patch verifier; 34/41 on v71 and on v72 (identical), so nothing in the current release moved it |" >> "$OUT"; continue ;;
-    deactivate-test.mjs) echo "| $name | EXEMPT | v43.3 deactivate-patch verifier, pinned to v43.3 per pm.py; 15/34 on v72, times out on v71; rebase or retire queued |" >> "$OUT"; continue ;;
+    deactivate-test.mjs) echo "| $name | EXEMPT | v43.3 deactivate-patch verifier, pinned to v43.3 per pm.py; 21/34 on v71 and on v72 with identical failures (the 600s gate cuts it to 15/34); rebase or retire queued |" >> "$OUT"; continue ;;
   esac
   echo "== $name"
   # Every suite is handed the real file. The v43-era suites default to harness/work/index.html, a
