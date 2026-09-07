@@ -383,6 +383,42 @@ Every one of these was learned from a check that passed while the product was br
 - Select downloads by FILENAME, elements by explicit `data-` hooks — never "most recent
   file" or text selectors (three buttons on one card made both wrong).
 
+## Rule 5.5 — EVERY GATE HERE ASKS ABOUT A STILL FRAME. Aaron found the one that moves.
+
+Aaron, 2026-09-06: *"when there is a toast pop up or with the 3 elipsies, you can still scroll and
+see the background moving when trying to scroll. why haven't this been caught. eyes should be
+actively looking at stuff to verify. there should be cases written for everything to test for."*
+
+**He is right, and the reason is structural rather than careless.** Look at what this project checks:
+
+| Gate | The question it asks |
+|---|---|
+| `overflow-scan` | Does the screen **fit**? |
+| the Voice | Is the copy **true**? |
+| the Enhancer | Can she **do the job** here? |
+| the Zero Day Auditor | Does the **record** survive? |
+| `pm.py` | Did the **release mechanics** happen? |
+
+**Every one of them is a question about a still frame.** Not one asks what happens while a finger is
+moving. So five full-screen overlays shipped for many releases with the page free to scroll behind
+them — and the only way it was ever going to be found was somebody using the app, which is what
+happened.
+
+### The rule
+
+**A release that adds or changes an overlay, a screen, or anything a finger touches must ship at
+least one case for the INTERACTION, not only for the rendered result.** Scrolling behind it.
+Focus after it closes. Where the back gesture goes. What a second tap does.
+
+And when a case is written, write it for **the whole class, not the one instance Aaron reported.**
+`harness/scrolllock-test.mjs` covers all five overlays and carries a completeness check that fails
+if a sixth is added without a lock — because the specific bug is fixed either way, and the class is
+what keeps coming back.
+
+**Say out loud what is deliberately exempt.** A toast is not a modal, so it is asserted to stay
+scrollable rather than quietly skipped. An exemption nobody wrote down is indistinguishable from
+an oversight.
+
 ## Rule 6 — Communication is part of the deliverable
 - START and FINISH messages for every work block, stating dispatch state (ACTIVE/IDLE).
 - Task sheet re-sent after every push, unprompted.

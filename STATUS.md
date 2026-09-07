@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: IDLE
+DISPATCH: ACTIVE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -117,12 +117,12 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v70 |
-| **Commit** | `cb93ba8` — v70 LIVE on main. Moving a period date works at any age, and cannot swallow another period. |
+| **Version** | v71 |
+| **Commit** | v71 — the page holds still behind an open menu or pop-up. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `5ada87ff87c762edeb40f88e9fc12fa2` |
-| **sw.js md5** | `0df0e038b75a912f132f6de5c5b7198b` |
-| **State** | **v70 — moving a period's start or end works at any age, and is now guarded so it cannot destroy another period.** Live since v68, the move did add-then-delete; the Firestore rules refuse a delete by document age, so on any marker older than two days it added the corrected date and kept the original, and the failure toast told her to move it again — which fails the same way. Rebuilt as an append, the third use of the model already shipped for paracentesis, appointments and weight. **The audit blocked the first build on something worse than the bug:** a start moved backwards into an earlier period's span hit cyclePeriods()'s UC20 merge rule and swallowed the later period whole — two periods, one tap, one period left, toast saying "moved". The guard simulates the move and refuses anything that would leave the record worse, rather than enumerating geometry it might get wrong. **Also fixed: the app scrolled sideways by 14px at 320px**, live since at least v65 — one missed-dose chip with white-space:nowrap that could not wrap. **And the reason nobody caught it: overflow-scan was blindfolded**, passing window.innerWidth as the screen width, which Chromium widens under mobile emulation the moment a page overflows. A deliberately 400px-wide element was named zero times by the old scanner and on every screen by the fixed one. |
+| **index.html md5** | `87f6cfa9099d7c30b3885a39d3374681` |
+| **sw.js md5** | `f587804696d2de97d87b0e6296195083` |
+| **State** | **v71 — the page no longer scrolls around behind an open menu or pop-up.** Aaron found it by using the app: five full-screen overlays and not one held the page still. Measured on the same seed and the same drag, v70 went from a scroll offset of 600 to 1300 with the menu open; v71 does not move, and closing it returns to exactly 600. Four of the five sit on a blurred scrim, so what she sees is the smear behind the blur sliding. Fixed with position:fixed on the body at its current offset — overflow:hidden does NOT stop a touch drag on iOS, which is the bug. **The toast is deliberately exempt and asserted to be so.** **Why nothing caught it:** every gate here asks about a STILL FRAME — does it fit, is the copy true, can she do the job, does the record survive. Scrolling is not a still frame. New Rule 5.5, and harness/scrolllock-test.mjs covers all five overlays plus a completeness check that fails if a sixth is added without a lock. |
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 

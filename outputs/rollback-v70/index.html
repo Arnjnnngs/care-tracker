@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v71';
+const APP_VERSION = 'v70';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,11 +1092,6 @@ const APP_VERSION = 'v71';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
-  { v: 'v71', date: 'Sep 7, 2026', title: 'The screen stays put behind the menu',
-    points: [
-      'Open the menu, or any pop-up, and the page underneath no longer slides around when you drag your finger. It holds still until you close it, then puts you back exactly where you were.',
-      'Toasts \u2014 the little messages that say something was logged \u2014 still let you scroll, on purpose. They are not pop-ups you have to close.'
-    ] },
   { v: 'v70', date: 'Sep 6, 2026', title: 'Moving a period date now actually works',
     points: [
       'Moving a period start or end only worked if the date was less than two days old. Older than that, the app said it had moved the date and quietly kept the old one as well. It works at any age now.',
@@ -2904,45 +2899,6 @@ function renderContent(now, mg, pct, tyColor, ceiling) {
   return [...renderToday(now, mg, pct, tyColor, ceiling)];
 }
 
-// ---- BODY SCROLL LOCK (v71) ----
-// The list is the five overlays render() actually mounts, each keyed on the SAME state the
-// overlay's own render function checks, so an overlay cannot appear without being locked or stay
-// locked after it closes. The loading splash is excluded: nothing is scrollable yet. The tour is
-// excluded too, and on purpose -- it walks the caregiver around the app and needs the page to move.
-function anyOverlayOpen() {
-  return !!(state.drawerOpen || state.timeModal || state.whatsNewOpen || state.apptSheet || state.missReasonSheet);
-}
-let _scrollLockY = null;
-function applyScrollLock() {
-  const want = anyOverlayOpen();
-  const locked = _scrollLockY !== null;
-  if (want === locked) return;
-  const b = document.body;
-  if (want) {
-    _scrollLockY = window.scrollY || window.pageYOffset || 0;
-    // position:fixed, not overflow:hidden. On iOS Safari overflow:hidden on body does NOT stop a
-    // touch drag -- the page keeps moving under the overlay, which is the bug this is fixing.
-    b.style.position = 'fixed';
-    b.style.top = (-_scrollLockY) + 'px';
-    b.style.left = '0';
-    b.style.right = '0';
-    b.style.width = '100%';
-    b.style.overflow = 'hidden';
-  } else {
-    const y = _scrollLockY;
-    _scrollLockY = null;
-    b.style.position = '';
-    b.style.top = '';
-    b.style.left = '';
-    b.style.right = '';
-    b.style.width = '';
-    b.style.overflow = '';
-    // PUT HER BACK WHERE SHE WAS. Without this, closing the menu drops her at the top of a long
-    // History screen -- a fix that trades one annoyance for a worse one.
-    window.scrollTo(0, y);
-  }
-}
-
 function render() {
   // THE ONCE-A-SECOND REPAINT, SKIPPED WHEN NOTHING VISIBLE WOULD CHANGE. This guard applies ONLY
   // to the tick's own call -- tickRepaint is set around that one line and nowhere else -- so every
@@ -2998,9 +2954,6 @@ function render() {
   // replaced, so re-glue the highlight to the new node now instead of leaving it on stale
   // coordinates for up to a second.
   if (state.tour) positionTour(false);
-  // AFTER the DOM is in place, so the lock reflects what is actually on screen rather than what
-  // state said a moment ago.
-  applyScrollLock();
 }
 
 function renderTimeModal() {
@@ -3037,7 +2990,7 @@ function renderTimeModal() {
   const medForPain = m.type === 'med' ? state.meds.find(x => x.id === m.medId) : null;
   const showPainScale = !!(medForPain && medForPain.painScale);
 
-  return h('div', { 'data-time-modal': 'true', style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.42)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '60', padding: '20px' }, onClick: (e) => { if (e.target === e.currentTarget) setState({ timeModal: null }); } },
+  return h('div', { style: { position: 'fixed', inset: '0', background: 'rgba(60,30,50,0.42)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '60', padding: '20px' }, onClick: (e) => { if (e.target === e.currentTarget) setState({ timeModal: null }); } },
     h('div', { style: { background: 'rgba(255,245,248,0.96)', border: '1px solid rgba(212,104,138,0.18)', borderRadius: '22px', padding: '24px 22px', width: '320px', maxWidth: '100%', boxShadow: '0 24px 64px rgba(120,60,90,0.18), 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 0 rgba(255,255,255,0.7)' } },
       h('div', { style: { fontSize: '16px', fontWeight: '800', marginBottom: '22px', textAlign: 'center', letterSpacing: '-0.01em' } }, title),
       m.type === 'symptom' ? h('div', { style: { marginBottom: '16px' } },

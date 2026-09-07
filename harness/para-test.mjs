@@ -142,7 +142,15 @@ const logPara = (page, litres) => page.evaluate(async (v) => {
   [...card.querySelectorAll('button')].find(b=>b.textContent.trim()==='Log').click();
   await new Promise(r=>setTimeout(r,600));
   // The time modal confirms; press its primary action.
-  const confirm=[...document.querySelectorAll('button')].find(b=>/^(Log|Confirm|Save)$/i.test(b.textContent.trim()) && b.closest('[style*="position: fixed"], [style*="position:fixed"]'));
+  // SCOPED TO THE DIALOG BY ITS OWN HOOK. This used to ask for the nearest ancestor whose style
+  // attribute contained "position: fixed", which stopped meaning "the dialog" the moment the app
+  // put position:fixed on the BODY to stop the page scrolling behind an overlay (v71). The search
+  // then matched the whole document and returned the Home card's Log button, so the suite reported
+  // a broken paracentesis flow that worked perfectly. Rule 5: explicit data- hooks, never a style
+  // substring. Falls back to the datetime field's own dialog so this still runs on older builds.
+  const dlg=document.querySelector('[data-time-modal]') ||
+    (document.querySelector('input[type="datetime-local"]') || {}).closest?.('div')?.parentElement || null;
+  const confirm=dlg ? [...dlg.querySelectorAll('button')].find(b=>/^(Log|Confirm|Save)$/i.test(b.textContent.trim())) : null;
   if(confirm){ confirm.click(); await new Promise(r=>setTimeout(r,900)); }
   return 'ok';
 }, litres);

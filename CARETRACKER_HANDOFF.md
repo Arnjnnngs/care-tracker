@@ -8,8 +8,9 @@
 
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
-> **Last updated:** September 6, 2026
-> **Current version:** v70 (move a period's start or end at any age, guarded so a move cannot
+> **Last updated:** September 7, 2026
+> **Current version:** v71 (the page holds still behind an open menu or pop-up; move a period's
+> start or end at any age, guarded so a move cannot
 > swallow another period; correct or remove a weight from the Weight report — by appending a
 > superseding record, never by deleting, so it works past the 48-hour window; add and correct a
 > paracentesis; move a period's start or end; no misleading average on the Paracentesis report)
