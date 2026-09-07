@@ -118,3 +118,42 @@ list of what he should open on the two real phones. Cost S per release.
 **Possible but bigger (M, Aaron's call):** an Android emulator smoke job in GitHub Actions, as
 ChemoWell already runs — opens the live PWA in real Chrome on a real Android image and captures
 screenshots. Real Android, still not iPhone.
+
+---
+
+## Addendum 2 — "any other agents?" and "waiting on you"
+
+### More agents? No. Two more scripts and one habit.
+
+The record says the machine never lacked roles. It lacked outputs that reached Aaron, checks that could
+fail, and turns that finished. Every agent costs money and a silence. What was found today, none of
+which an agent would have caught, all of which a script or a list does:
+
+1. **The dispatch routine reads a task sheet 28 versions old.** Both hourly dispatch prompts say "read
+   TASK-SHEET.md and the v44 table in STATUS.md". TASK-SHEET.md said v43.3 was live. Had the flag gone
+   ACTIVE, the report to Aaron's phone would have been built from it. Task sheet refreshed today; the
+   prompt wording needs Aaron's OK to change because it pushes to his phone.
+2. **The nightly Firestore backup is not among this account's routines.** Only two dispatch routines
+   and one poke-only live check exist. Cowork desktop tasks do not show in that list, so it may live
+   there. Unverified, and it is the only copy of the record. Needs one word from Aaron.
+3. **A fourth delete-based correction: symptom edit** (`if (editId) await removeEntryDB(editId)`),
+   found while pinning the delete shapes. Same bug as bowel and appetite. Added to v72's scope.
+4. **The delete ratchet is in `pm.py` now**, falsified three ways. It is the first rule in pm.py about
+   the *content* of a change rather than the mechanics of a release, and it is the right home for a
+   class of bug that has shipped five times: a script cannot be talked out of it.
+
+The one agent-shaped addition still worth it is the **Designer**, already proposed, and only because
+looking at a screen is not something a grep can do.
+
+### "Waiting on you" — the mechanism, not the promise
+
+1. **The task sheet is split YOURS / MINE / QUEUED.** If MINE has an item, the turn does not end.
+   "Nothing waiting on you" may only be written when MINE is empty, and then the sentence is
+   unnecessary because the sheet shows it.
+2. **Every message ends with exactly one of three lines**, nothing else: *"Done, pushed, nothing for
+   you"* · *"Your decision: X"* (named, with a recommendation) · *"Running in the background: Y"*.
+   "Let me know how it looks" is banned.
+3. **The standing queue** (needs Aaron's approval, since Rule 3 is his gate): he approves an ORDER of
+   work once, and items on it are built in sequence without re-asking. Most "waiting on you" stops
+   are cost-gate stops on M items. One approval per batch instead of one per item removes them
+   without touching the principle that cost is his decision.

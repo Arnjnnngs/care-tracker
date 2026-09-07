@@ -1,69 +1,48 @@
 # care-tracker — Task Sheet
 
-**Updated:** Aug 17 · **Live version:** v43.3 (`87e89bb`) · **Live URL:** arnjnnngs.github.io/care-tracker
+**Updated:** 2026-09-07 · **Live version:** v71 (`6a419a0`) · **Live URL:** arnjnnngs.github.io/care-tracker
+**Dispatch:** IDLE — no build in progress.
+
+This file is the done / outstanding list Aaron asked to see after every build and every request. It is
+split by WHO the next step belongs to, so "waiting on you" can never be said while the MINE column has
+items on it. If YOURS is empty, the next item under MINE starts in the same turn.
 
 ---
 
-## DONE — shipped and verified live on Brandi's app
+## YOURS — decisions only you can make
 
-- [x] **v43.1** — Export buttons fixed (`fc2c345`)
-- [x] **v43.2** — Missed-dose calculation fixed (`e4eb5c9`)
-- [x] **v43.3** — Renderer `value` trap fixed at source (`87e89bb`)
-- [x] **v43.3** — Appetite card: saved note no longer renders empty
-- [x] **v43.3** — Symptom logger: typing before choosing no longer wipes the entry
-- [x] **v43.3** — Medication editor: **the serious one.** Correcting a wrongly-displayed
-      schedule type was silently disabling that medication's missed-dose alerts while
-      the app said "updated"
-- [x] Deploy path documented in `CLAUDE.md` + handoff (survives future chats)
-- [x] Progress-checkpoint rule written into `CLAUDE.md` + handoff + every agent brief
+- [ ] **Approve the team changes** in `outputs/TEAM-REVIEW-2026-09-07.md`: hire the Designer, hire the
+      Scribe, merge the Voice into the auditor's brief, re-brief the auditor and builder.
+- [ ] **Say the word on v72** — bowel, appetite and symptom corrections supersede instead of delete.
+      Size M, audited release. Cost gate (Rule 3).
+- [ ] **Nightly Firestore backup** — CLAUDE.md says one runs at ~3 AM. It is not among this account's
+      cloud routines. Do you see it in Cowork's scheduled tasks? If not, I rebuild it (S).
+- [ ] **Two phone checks** that only a real device can answer: does the iPhone actually save the backup
+      file (open since v50); does v71's page hold still behind the menu on Brandi's phone.
 
-**Verification:** re-cloned from GitHub, md5 match on `index.html` and `sw.js`,
-version stamps confirmed, zero console errors, zero Firestore writes during testing.
+## MINE — no decision needed; started in order, nothing waits
 
----
+- [x] Team review written and pushed (`outputs/TEAM-REVIEW-2026-09-07.md`).
+- [x] **Delete ratchet in `pm.py`** — every shape of `removeEntryDB(...)` call is pinned; a new one
+      blocks; the four delete-based corrections show as a warning until v72 removes them. Falsified
+      three ways.
+- [x] This task sheet refreshed (it said v43.3 was live and fed the dispatch report).
+- [ ] `pm.py` runs every harness suite and fails on any that cannot start (S).
+- [ ] Re-point the dispatch routine prompt away from "the v44 table" (needs your OK — it pushes to
+      your phone).
+- [ ] CLAUDE.md / NEW-CHAT-PROMPT.md updated with the approved team and sequence (after your approval).
 
-## BUILT, PASSED, THEN LOST TO A SANDBOX ROLLBACK
+## QUEUED — built on your word, in this order unless you reorder
 
-All four were finished and green. None of it was pushed to GitHub, so none of it survived.
-That is my error — the rule is push every increment, and I held four features locally for hours.
+1. **v72** — bowel / appetite / symptom-edit supersede (M, audited).
+2. **Take all** partial-write fix — saves some, reports none saved, re-tap double-logs (S–M, audited).
+3. Add / correct / remove controls on the Bowel Movement and Appetite reports (S each).
+4. Android emulator smoke job in GitHub Actions, as ChemoWell runs (M).
 
-- [ ] **Calendar** — 151 checks passed. Found 2 real mobile defects: day cells 43.6px
-      (under the 44px minimum) and a 14px Note field (makes iOS zoom in and never back)
-- [ ] **Guided tour** — 26 checks, 16 falsified. Skippable, re-runnable from the menu,
-      never blocks the app. 10 steps including calendar + backup
-- [ ] **Backup / restore** — 93 checks. Appointments now survive a restore; they were
-      the one thing "Save a copy" could not bring back
-- [ ] **Concurrent-edit notice** — "this changed while you had it open"
-- [ ] **Dead code removal** — `seedDemo()` and the demo banner
-- [ ] **`send-reminders.js` rewrite** — data-driven instead of 4 hardcoded if-statements
-      naming 5 medications. 362,880 simulated ticks, zero behaviour differences
-- [ ] **Audit found + fixed:** restore silently dropped records whose id collided with
-      JavaScript built-ins, while reporting success
+## DONE — live on Brandi's phone
 
----
-
-## LEFT TO DO — after the rebuild
-
-- [ ] **Reminder ledger** — late GitHub Actions runs currently send nothing, silently
-- [ ] **Notes** port from ChemoWell
-- [ ] **Settings** port
-- [ ] **Help & FAQ** (118 topics)
-- [ ] **Medication config → shared database** (currently device-local, so Aaron's and
-      Brandi's phones can disagree about her medications)
-- [ ] **Generic reminder engine**
-- [ ] **6 missing symptom types**
-- [ ] **Daily check-in** replacing the 3 banners
-- [ ] **Commit `harness/`** — test files have never been pushed, lost on every rollback
-
----
-
-## NEEDS AARON — I cannot do these
-
-- [ ] **Test "Save spreadsheet" AND the backup on your iPhone.** Both use a download
-      path with no failure detection. iOS can fail silently while the app says "saved."
-      **Until you confirm a file actually lands, neither one is a backup.**
-- [ ] **Check your medication list** — if you ever "corrected" a schedule type that
-      looked wrong, that may have disabled its missed-dose alerts. Protonix especially
-- [ ] **Authorize the 3 repos as session sources** — this is what forces every deploy
-      through manual browser upload instead of `git push`, and it is the root cause of
-      the rollback losses
+- [x] v71 — page holds still behind an open menu or pop-up; scroll-lock suite covers all five overlays.
+- [x] v70 — period start/end move works at any age and cannot swallow another period; overflow scanner unblindfolded.
+- [x] v69 — correct or remove a weight by superseding, never deleting; oncologist report agrees with the screen.
+- [x] v66–v68 — add a paracentesis from its report; edit rows; period Remove withdrawn after it destroyed a period.
+- [x] v62–v65 — What's new shown once; frosted glass and repaint work; honest changelog copy.

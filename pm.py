@@ -262,6 +262,48 @@ if _rc == 0 and _changed.strip():
         else:
             notes.append("notes moved with the code (%s + all three docs)" % ", ".join(sorted(_app_touched)))
 
+
+# ---- DELETE RATCHET (added 2026-09-07). ----
+# The Firestore rules refuse a delete past 48 hours, so every correction in this app must supersede
+# by APPENDING. A correction that deletes has shipped five times (v52 para, v66 cycle, v69 weight,
+# v70 cycle move; bowel, appetite and symptom edit are still in v71) and every one was found AFTER
+# the fact by a person. So every SHAPE of delete call is pinned here, by the expression itself
+# (`removeEntryDB(<arg>)`), not by line, so a move or a re-indent cannot fool it. A shape this list
+# does not know is a NEW delete path and BLOCKS. Retiring the last call of a shape: delete its line
+# here in the SAME commit. Falsified 2026-09-07: an injected `removeEntryDB(sneaky.id)` -> STOP;
+# all three `existing.id` sites removed -> WARN; every call renamed -> STOP (cannot see).
+if 'html' in dir():
+    _known_deletes = {
+        # legitimate: an explicit Remove or Undo the caregiver asked for
+        "removeEntryDB(id)",              # History Remove (removeEntry), removeSymptom
+        "removeEntryDB(cur.startId)",     # In-Patient Undo
+        # DELETE-BASED CORRECTIONS — the open defect. Each line leaves here when it is fixed.
+        "removeEntryDB(editId)",          # symptom edit: delete-then-add
+        "removeEntryDB(existing.id)",     # bowel x2, appetite x1: delete-then-add
+    }
+    _dsrc = re.sub(r"async function removeEntryDB\(id\)", "", _strip_comments(html))  # drop the definition
+    _dcalls = [m.group(0) for m in re.finditer(r"removeEntryDB\([^()]*\)", _dsrc)]
+    _dnew = sorted(set(c for c in _dcalls if c not in _known_deletes))
+    if _dnew:
+        blockers.append("NEW DELETE PATH — %d call shape(s) pm.py does not know:\n      %s\n"
+                        "    A correction must APPEND a superseding record, never delete: the rules\n"
+                        "    refuse deletes past 48h and this bug has shipped five times. If it is a\n"
+                        "    genuine Remove the caregiver asked for, pin it in _known_deletes."
+                        % (len(_dnew), "\n      ".join(_dnew)))
+    _dgone = sorted(k for k in _known_deletes if k not in _dcalls)
+    if _dgone:
+        warnings.append("a pinned delete shape is gone — drop it from _known_deletes in pm.py:\n      "
+                        + "\n      ".join(_dgone))
+    _dcorr = [c for c in _dcalls if 'existing' in c or 'editId' in c]
+    if _dcorr:
+        warnings.append("%d DELETE-BASED CORRECTION path(s) still in the build (bowel, appetite, symptom\n"
+                        "    edit) — silently keeps the old answer past 48h. Open item; supersede, never delete."
+                        % len(_dcorr))
+    else:
+        notes.append("no delete-based correction paths remain")
+    if not _dcalls:
+        blockers.append("DELETE RATCHET CANNOT SEE — zero removeEntryDB calls found; the pattern is broken, not the app.")
+
 print("=" * 74)
 print("PM CHECK — %s" % REPO)
 print("=" * 74)
