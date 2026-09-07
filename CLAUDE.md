@@ -16,6 +16,9 @@ Before making any changes, read these docs in order:
    Firebase setup, version history, known issues
 5. **STATUS.md** — what is live right now, what is in flight, what needs Aaron
 
+`NEW-CHAT-PROMPT.md` in the repo root is the prompt Aaron pastes to start a fresh session. If the
+operating model changes, update that file too — it is the first thing a new session ever sees.
+
 These are non-negotiable. Skipping them leads to regressions — and to repeating expensive,
 documented failures.
 
