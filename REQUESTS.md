@@ -7,7 +7,8 @@ Shown in full — done and outstanding — in every reply after a build or a req
 ## Outstanding
 
 - [ ] **v72 — re-answering bowel / appetite / symptom keeps the new answer, at any age** (2026-09-07,
-      from Enhancer pass 03; Aaron: "do all"). Supersede by appending, never delete. M, audited.
+      from Enhancer pass 03; Aaron: "do all"). Built, audited three passes, SHIP; going to main.
+- [ ] **v73 — Remove on a corrected weight/paracentesis row in Home or History must tombstone, not delete the correction** (both v72 auditors). S, audited.
 - [ ] **Take all** — saves some medications, then says nothing saved; re-tap double-logs (standing
       exception, verified). Ships on its own, on Aaron's word (his 2026-09-01 instruction). S–M, audited.
 - [ ] **Bowel Movement and Appetite reports get add / correct / remove** (Enhancer pass 03, item B). S each.

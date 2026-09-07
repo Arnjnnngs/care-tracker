@@ -23,14 +23,15 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
       three ways.
 - [x] This task sheet refreshed (it said v43.3 was live and fed the dispatch report).
 - [x] `pm.py` requires a suite record from `harness/run-all.sh`; a hidden red or an unexplained exemption blocks. Falsified four ways.
-- [ ] **v72 Zero Day Audit running in the background** (one agent, ~25 min). SHIP → push to main; BLOCK → fix and delta-audit.
+- [x] **v72 audited: BLOCK (Home journal listed removed rows) → fixed → delta BLOCK (removed paracentesis still standing) → fixed → delta 2 SHIP.** Auditor's probe 28/28, suite 40/40, record 29 PASS / 4 EXEMPT / 0 failing, scan 140/140 clean, pm.py clear.
+- [ ] **v72 to main** once the deactivate-test comparison (v71 21/34 vs v72 15/34, an exempt v43-era suite) is explained.
 - [ ] Rebase or retire the four v43/v44-era patch verifiers run-all found red on v71 and v72 alike (S–M).
 - [x] Dispatch routine prompts re-pointed at STATUS.md's live table and this sheet.
 - [x] CLAUDE.md Rule 1.5, NEW-CHAT-PROMPT.md, REQUESTS.md — the approved team and sequence.
 
 ## QUEUED — built on your word, in this order unless you reorder
 
-1. **v72** — bowel / appetite / symptom-edit supersede (M, audited).
+1. **v73 — History and Home Remove on a corrected weight or paracentesis row routes to the tombstone** (both auditors named it; today it hard-deletes the correction and resurrects the original within 48h). S, audited.
 2. **Take all** partial-write fix — saves some, reports none saved, re-tap double-logs (S–M, audited).
 3. Add / correct / remove controls on the Bowel Movement and Appetite reports (S each).
 4. Android emulator smoke job in GitHub Actions, as ChemoWell runs (M).
