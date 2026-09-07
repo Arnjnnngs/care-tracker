@@ -277,9 +277,8 @@ if 'html' in dir():
         # legitimate: an explicit Remove or Undo the caregiver asked for
         "removeEntryDB(id)",              # History Remove (removeEntry), removeSymptom
         "removeEntryDB(cur.startId)",     # In-Patient Undo
-        # DELETE-BASED CORRECTIONS — the open defect. Each line leaves here when it is fixed.
-        "removeEntryDB(editId)",          # symptom edit: delete-then-add
-        "removeEntryDB(existing.id)",     # bowel x2, appetite x1: delete-then-add
+        # v72 retired the last four delete-based corrections (bowel x2, appetite, symptom edit).
+        # Nothing may be added here that is not an explicit Remove the caregiver asked for.
     }
     _dsrc = re.sub(r"async function removeEntryDB\(id\)", "", _strip_comments(html))  # drop the definition
     _dcalls = [m.group(0) for m in re.finditer(r"removeEntryDB\([^()]*\)", _dsrc)]
