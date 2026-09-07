@@ -14,6 +14,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"; REPO="$(dirname "$HERE")"
 cd "$REPO"
 VER="$(grep -o "const APP_VERSION = '[^']*'" index.html | sed "s/.*'\(.*\)'/\1/")"
 OUT="outputs/SUITES-${VER}.md"
+# the newest rollback bundle is the previous release -- the base the patch-comparison suites need
+PREV="$(ls -d outputs/rollback-v* 2>/dev/null | sed 's/.*rollback-//' | sort -V | tail -1)"
 QUICK=0; [ "${1:-}" = "--quick" ] && QUICK=1
 # The suites refuse to start with a proxy set (they must never reach the network); clear it for them.
 unset HTTPS_PROXY https_proxy HTTP_PROXY http_proxy
@@ -35,7 +37,16 @@ for f in "$HERE"/*-test.mjs "$HERE"/cycle-merge-probe.mjs "$HERE"/audit-v69-weig
     echo "| $name | SKIPPED | --quick run; the scan must be recorded separately in RENDER-${VER}.md |" >> "$OUT"; continue
   fi
   echo "== $name"
-  log="$(timeout 600 node "$f" 2>&1)"; rc=$?
+  # Every suite is handed the real file. The v43-era suites default to harness/work/index.html, a
+  # directory that stopped existing with the sandbox that made it -- that is how export-test could be
+  # dead for six releases with nobody noticing.
+  extra=""
+  case "$name" in
+    overflow-scan.mjs) extra="" ;;
+    tour-test.mjs|medsync-test.mjs) extra="--file $REPO/index.html --base $REPO/outputs/rollback-${PREV}/index.html" ;;
+    *) extra="--file $REPO/index.html" ;;
+  esac
+  log="$(timeout 600 node "$f" $extra 2>&1)"; rc=$?
   last="$(printf '%s\n' "$log" | grep -v '^\s*$' | tail -1 | sed 's/|/\\|/g' | cut -c1-140)"
   if [ $rc -eq 0 ]; then res="PASS"; else res="FAIL"; fails=$((fails+1)); fi
   # a suite that dies before its first check is an ERROR, not a FAIL -- the gate could not start
