@@ -81,7 +81,7 @@ rep("""function bowelMovementEntriesByDay() {
 // v72 write is stamped strictly newer than the winner it supersedes (dailyNextStamp), so the first
 // new answer settles a day for good and nothing is ever deleted.
 function dailyStamp(e) { return (e && (e.loggedAt || e.ts)) || 0; }
-function dailySupersedes(a, b) { return dailyStamp(a) > dailyStamp(b); }
+function dailySupersedes(a, b) { return dailyStamp(a) >= dailyStamp(b); }   // >= keeps v71's tie-break for legacy duplicates: the later document wins
 function dailyNextStamp(prev) { return Math.max(Date.now(), dailyStamp(prev) + 1); }
 function dailyEntriesByDay(medId) {
   const map = new Map();
@@ -273,6 +273,19 @@ rep("""            rows.push(h('div', { style: { display: 'flex', alignItems: 'c
                 h('div', { style: { fontSize: '15px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' } },
                   nameOf(e.medId),
                   stale ? h('span', { 'data-history-stale': stale.toLowerCase(), style: { fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#7D6974', background: 'rgba(125,105,116,0.10)', border: '1px solid rgba(125,105,116,0.28)', borderRadius: '6px', padding: '2px 6px' } }, stale) : null,""")
+
+# ---- 5b. data- hooks so the suite counts ROWS, never text (Rule 5) ----------------------------
+def rep_in(section_start, old, new):
+    global s
+    i = s.index(section_start)
+    j = s.index('\n}\n', i) + 3
+    seg = s[i:j]
+    if seg.count(old) != 1: sys.exit('REFUSING: hook anchor not unique inside ' + section_start)
+    s = s[:i] + seg.replace(old, new) + s[j:]
+ROW = "...entries.map(e => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px'"
+rep_in('function renderAppetite(now) {', ROW, "...entries.map(e => h('div', { 'data-appetite-row': String(dayStart(e.ts)), 'data-answer': String(e.value), style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px'")
+rep_in('function renderBowelMovementReport(now) {', ROW, "...entries.map(e => h('div', { 'data-bowel-row': String(dayStart(e.ts)), 'data-answer': String(e.value), style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px'")
+rep_in('function symptomRow(e) {', "return h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.16)'", "return h('div', { 'data-symptom-row': e.symptomId || String(e.id), style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.16)'")
 
 # ---- 6. version and the note she reads ----------------------------------------------------------
 rep("const APP_VERSION = '%s';" % FROM_V, "const APP_VERSION = '%s';" % TO_V)

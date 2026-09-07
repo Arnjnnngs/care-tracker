@@ -2307,7 +2307,7 @@ function dailyAlertStyle(level) {
 // v72 write is stamped strictly newer than the winner it supersedes (dailyNextStamp), so the first
 // new answer settles a day for good and nothing is ever deleted.
 function dailyStamp(e) { return (e && (e.loggedAt || e.ts)) || 0; }
-function dailySupersedes(a, b) { return dailyStamp(a) > dailyStamp(b); }
+function dailySupersedes(a, b) { return dailyStamp(a) >= dailyStamp(b); }   // >= keeps v71's tie-break for legacy duplicates: the later document wins
 function dailyNextStamp(prev) { return Math.max(Date.now(), dailyStamp(prev) + 1); }
 function dailyEntriesByDay(medId) {
   const map = new Map();
@@ -7008,7 +7008,7 @@ function renderAppetite(now) {
   const history = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Appetite History'),
     entries.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-      ...entries.map(e => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      ...entries.map(e => h('div', { 'data-appetite-row': String(dayStart(e.ts)), 'data-answer': String(e.value), style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('span', { style: { flexShrink: '0', width: '10px', height: '10px', marginTop: '6px', borderRadius: '50%', background: e.value === 'normal' ? '#0F9D6B' : e.value === 'little' ? '#C77800' : '#C0453B', display: 'inline-block' } }),
         h('div', { style: { flex: '1', minWidth: '0' } },
           h('div', { style: { fontSize: '15px', fontWeight: '700', color: '#3D2B3A' } }, new Date(e.ts).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ' — ' + (APPETITE_LABELS[e.value] || e.value)),
@@ -7029,7 +7029,7 @@ function renderBowelMovementReport(now) {
   const history = h('section', null,
     h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '10px' } }, 'Bowel Movement History'),
     entries.length ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-      ...entries.map(e => h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+      ...entries.map(e => h('div', { 'data-bowel-row': String(dayStart(e.ts)), 'data-answer': String(e.value), style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.12)', borderRadius: '16px', padding: '13px 15px', display: 'flex', alignItems: 'flex-start', gap: '12px', boxShadow: '0 4px 24px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
         h('span', { style: { flexShrink: '0', width: '10px', height: '10px', marginTop: '6px', borderRadius: '50%', background: BOWEL_ISSUE_VALUES.has(e.value) ? '#C0453B' : e.value === 'very_little' ? '#C77800' : '#0F9D6B', display: 'inline-block' } }),
         h('div', { style: { flex: '1', minWidth: '0' } },
           h('div', { style: { fontSize: '15px', fontWeight: '700', color: '#3D2B3A' } }, new Date(e.ts).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ' — ' + (BOWEL_MOVEMENT_LABELS[e.value] || e.value))
@@ -7087,7 +7087,7 @@ const SYMPTOM_COLORS = { nausea: '#9A6419', vomiting: '#C0453B', diarrhea: '#C04
 function symptomRow(e) {
   const color = SYMPTOM_COLORS[e.symptomType] || '#AA5375';
   const editing = false;
-  return h('div', { style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '16px', padding: '13px 15px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
+  return h('div', { 'data-symptom-row': e.symptomId || String(e.id), style: { background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '16px', padding: '13px 15px', boxShadow: '0 3px 14px rgba(180,130,150,0.10), inset 0 1px 0 rgba(255,255,255,0.7)' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
       h('div', { style: { minWidth: '0', flex: '1' } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
