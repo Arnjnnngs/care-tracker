@@ -1094,7 +1094,7 @@ const APP_VERSION = 'v72';
 const CHANGELOG = [
   { v: 'v72', date: 'Sep 7, 2026', title: 'A changed answer now stays changed',
     points: [
-      'Updating a bowel movement answer from the red banner now sticks, even when the day it is about is more than two days old. Before, the app could quietly keep the old answer.',
+      'Updating a bowel movement answer from the Bowel Issue Active banner now sticks, even when the day it is about is more than two days old. Before, it could fail with a message blaming your connection, and the old answer stayed.',
       'Editing or removing a symptom works at any age now. Nothing is deleted \u2014 the correction is recorded on top of the old one, the same way a corrected weight or period date already works.',
       'In History, an answer that was replaced is marked Superseded and one that was removed is marked Removed, and the day\u2019s dose count no longer counts them as doses.'
     ] },
@@ -6018,7 +6018,7 @@ function buildReportDoc(now) {
   // has to hold here too: this table is inside the document handed to an oncologist, and without
   // the guard a corrupt document printed "Invalid Date", and a ts:0 printed "Dec 31, 1969".
   const usableTs = (v) => (typeof v === 'number' && isFinite(v) && v > 0) ? v : 0;
-  const symptoms = allExportEntries().filter(e => e.medId && e.medId.indexOf('symptom_') === 0)
+  const symptoms = symptomResolvedFrom(allExportEntries())
     .sort((a, b) => usableTs(a.ts) - usableTs(b.ts))
     .map(e => { const ts = usableTs(e.ts); return '<tr><td>' + escHtml(ts ? fmtD(new Date(ts)) : '') + '</td><td>' + escHtml(ts ? fmtTime(ts) : '') + '</td><td>' + escHtml(nameOf(e.medId)) + '</td><td>' + escHtml(e.note || exportDetailFor(e)) + '</td></tr>'; }).join('');
 

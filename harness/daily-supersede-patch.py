@@ -274,6 +274,13 @@ rep("""            rows.push(h('div', { style: { display: 'flex', alignItems: 'c
                   nameOf(e.medId),
                   stale ? h('span', { 'data-history-stale': stale.toLowerCase(), style: { fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#7D6974', background: 'rgba(125,105,116,0.10)', border: '1px solid rgba(125,105,116,0.28)', borderRadius: '6px', padding: '2px 6px' } }, stale) : null,""")
 
+# ---- 5a. the printable oncologist report lists symptoms RESOLVED (v69's lesson: a list a clinician
+# reads is a figure, not an audit trail; the CSV keeps every document, this table keeps the truth)
+rep("""  const symptoms = allExportEntries().filter(e => e.medId && e.medId.indexOf('symptom_') === 0)
+    .sort((a, b) => usableTs(a.ts) - usableTs(b.ts))""",
+    """  const symptoms = symptomResolvedFrom(allExportEntries())
+    .sort((a, b) => usableTs(a.ts) - usableTs(b.ts))""")
+
 # ---- 5b. data- hooks so the suite counts ROWS, never text (Rule 5) ----------------------------
 def rep_in(section_start, old, new):
     global s
@@ -292,7 +299,7 @@ rep("const APP_VERSION = '%s';" % FROM_V, "const APP_VERSION = '%s';" % TO_V)
 rep("""  { v: 'v71', date: 'Sep 7, 2026', title: 'The screen stays put behind the menu',""",
     """  { v: 'v72', date: 'Sep 7, 2026', title: 'A changed answer now stays changed',
     points: [
-      'Updating a bowel movement answer from the red banner now sticks, even when the day it is about is more than two days old. Before, the app could quietly keep the old answer.',
+      'Updating a bowel movement answer from the Bowel Issue Active banner now sticks, even when the day it is about is more than two days old. Before, it could fail with a message blaming your connection, and the old answer stayed.',
       'Editing or removing a symptom works at any age now. Nothing is deleted \\u2014 the correction is recorded on top of the old one, the same way a corrected weight or period date already works.',
       'In History, an answer that was replaced is marked Superseded and one that was removed is marked Removed, and the day\\u2019s dose count no longer counts them as doses.'
     ] },
