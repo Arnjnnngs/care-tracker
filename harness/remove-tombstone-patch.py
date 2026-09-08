@@ -106,9 +106,9 @@ rep("const APP_VERSION = '%s';" % FROM_V, "const APP_VERSION = '%s';" % TO_V)
 rep("""  { v: 'v72', date: 'Sep 7, 2026', title: 'A changed answer now stays changed',""",
     """  { v: 'v73', date: 'Sep 8, 2026', title: 'Removing a corrected weight no longer brings the old number back',
     points: [
-      'If you corrected a weight or a paracentesis and then removed it from Today or History, the reading you had corrected could come back in its place. Remove now clears the whole reading, the same way the Weight and Paracentesis screens already did.',
+      'If you corrected a weight or a paracentesis and then removed it from Today or History, the reading you had corrected could come back in its place. Remove now clears the whole reading, the same way the Weight and Paracentesis screens already did \\u2014 including on older weights, where it used to fail without saying so. History still lists what was recorded, marked Removed.',
       'A row that has already been replaced by a correction no longer offers a Remove button \\u2014 there is nothing left on it to remove.',
-      'Removing a paracentesis could quietly do nothing when two phones\\u2019 clocks disagreed. It always takes effect now.'
+      'Removing a paracentesis could quietly do nothing when two phones\\u2019 clocks disagreed. It takes effect now, as long as you have a connection.'
     ] },
   { v: 'v72', date: 'Sep 7, 2026', title: 'A changed answer now stays changed',""")
 

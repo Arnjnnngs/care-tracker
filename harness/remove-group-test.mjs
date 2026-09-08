@@ -63,13 +63,26 @@ if (!html.includes('return ' + NOW)) { console.error('clock freeze failed'); pro
 
 // ---- seed: a corrected weight and a corrected paracentesis, BOTH TODAY ----------------------------
 const H = 3600000;
+// BOTH CORRECTIONS ARE STAMPED AHEAD OF THE REAL WALL CLOCK, and this is the whole guard.
+// The app's tombstone uses Math.max(Date.now(), previousStamp + 1) so it can never lose the tie; a
+// build that used a bare Date.now() must lose it. The FIRST version of this suite derived the
+// correction's stamp from the FROZEN 15:00 app clock -- which is only ahead of Date.now() while the
+// real time is before noon, so after lunch the bare-Date.now() bug passed this suite 20/20. The Zero
+// Day Audit caught that and it is the project's oldest failure class: a check that cannot fail.
+// Deriving the stamp from the REAL clock makes the check hour-independent, which is proved by
+// running the reverted build with Date.now() shifted forward and watching it stay red.
+// Ahead of BOTH clocks: the frozen 15:00 app clock the other seeds derive from, and the real wall
+// clock the app stamps a tombstone with. Deriving it from only one of them fails at some hours --
+// from the app clock alone the bug passes after noon (what the audit caught); from the real clock
+// alone the seeded ORIGINAL outranks the correction before 09:00 and the suite red-herrings.
+const AHEAD = Math.max(NOW, Date.now()) + 6 * H;
 const seed = [
   // 156.2 was typed wrong and corrected to 142.0 an hour later. Same weightId = one weigh-in.
   { id: 'seed_w_orig', medId: 'weight', weightId: 'w_group_1', weight: 156.2, dose: '156.2 lbs', mg: 0, ts: NOW - 5 * H, loggedAt: NOW - 5 * H },
-  { id: 'seed_w_corr', medId: 'weight', weightId: 'w_group_1', weight: 142.0, dose: '142 lbs (corrected)', mg: 0, ts: NOW - 5 * H, loggedAt: NOW - 4 * H },
+  { id: 'seed_w_corr', medId: 'weight', weightId: 'w_group_1', weight: 142.0, dose: '142 lbs (corrected)', mg: 0, ts: NOW - 5 * H, loggedAt: AHEAD },
   // 4.0 L corrected to 4.5 L. Same paraId = one procedure.
   { id: 'seed_p_orig', medId: 'paracentesis', paraId: 'p_group_1', liters: 4.0, dose: '4.0 L', mg: 0, ts: NOW - 6 * H, loggedAt: NOW - 6 * H },
-  { id: 'seed_p_corr', medId: 'paracentesis', paraId: 'p_group_1', liters: 4.5, dose: '4.5 L', mg: 0, ts: NOW - 6 * H, loggedAt: NOW - 3 * H },
+  { id: 'seed_p_corr', medId: 'paracentesis', paraId: 'p_group_1', liters: 4.5, dose: '4.5 L', mg: 0, ts: NOW - 6 * H, loggedAt: AHEAD },
   // AN ORDINARY DOSE. Its Remove must still be a plain delete -- the fix must not swallow the normal
   // path, which is the way a narrow fix usually breaks something.
   { id: 'seed_dose', medId: 'compazine', dose: '10 mg', mg: 10, ts: NOW - 2 * H }
@@ -203,6 +216,12 @@ console.log('\n4. The same for a corrected paracentesis');
   const all = await entries();
   t('a paracentesis tombstone was appended', all.length === before + 1 && all.slice(-1)[0].cancelled === true && all.slice(-1)[0].paraId === 'p_group_1',
     all.length + ' entries');
+  // THE STAMP GUARD, asserted directly rather than only through its effect on the screen. The
+  // correction is stamped ahead of the wall clock, so a bare Date.now() tombstone comes out OLDER
+  // than what it removes and the procedure survives.
+  const tomb = (await entries()).slice(-1)[0];
+  t('the tombstone is stamped strictly newer than the record it removes', tomb && tomb.loggedAt > AHEAD,
+    tomb ? ('loggedAt=' + tomb.loggedAt + ' vs correction ' + AHEAD) : 'no tombstone');
   await openReport('Paracentesis');
   const rows = await page.evaluate(() => [...document.querySelectorAll('[data-para-row]')].length);
   t('the procedure is GONE — the 4.0 L it replaced did not come back', rows === 0, rows + ' row(s) still shown');
