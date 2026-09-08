@@ -1793,7 +1793,7 @@ const MED_PURPOSE = {
   'zofran': 'Prevents and settles nausea and vomiting.',
   'compazine': 'Settles nausea and vomiting.',
   'morphine': 'A strong pain reliever for moderate to severe pain.',
-  'lidocaine': 'Numbs the part of the body it is used on.',
+  'lidocaine': 'Numbs the area where it is used.',
   'protonix': 'Lowers stomach acid, which protects the stomach and eases reflux.',
   'buspirone': 'Eases anxiety.',
   'paroxetine': 'Treats depression, and is also used for anxiety.',
@@ -4605,7 +4605,7 @@ function renderMedicationManager(now) {
         h('div', { style: { minWidth: '0', flex: '1' } },
           h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, med.name),
           h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name'),
-          purposeOf(med) ? h('div', { 'data-med-purpose': med.id, style: { fontSize: '12.5px', color: '#5F4A56', fontWeight: '500', marginTop: '4px', lineHeight: '1.35' } }, purposeOf(med)) : null
+          purposeOf(med) ? h('div', { 'data-med-purpose': med.id, style: { fontSize: '12.5px', color: '#5F4A56', fontWeight: '500', marginTop: '4px', lineHeight: '1.35', overflowWrap: 'anywhere' } }, purposeOf(med)) : null
         ),
         h('div', { style: { display: 'flex', gap: '5px', flexShrink: '0' } },
           h('button', { onClick: () => openMedicationEditor(med), 'aria-label': 'Edit ' + med.name, style: { width: '34px', height: '34px', borderRadius: '10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.10)', color: '#8E3D61', border: '1px solid rgba(170,83,117,0.18)' } }, appIcon('edit', 16)),

@@ -137,14 +137,36 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   const fevery = ids.filter(k => /fever|antipyretic|temperature/i.test(TABLE[k]));
   t('NO entry tells anyone a medication brings down a fever', fevery.length === 0,
     fevery.map(k => k + ': ' + TABLE[k]).join(' | '));
-  // A LINE MUST DESCRIBE THE DRUG, NOT A PRODUCT. ChemoWell's audit blocked on lidocaine being
-  // called "a numbing cream", then blocked AGAIN on "This is Tylenol in liquid form" -- and the
-  // first version of that guard passed the second one, because it pinned eleven words and
-  // `liquid` was not among them. A guard that lists words is only as good as its list.
-  const FORMY = /\b(cream|ointment|patch|gel|rinse|suppository|injection|infusion|syrup|lozenge|liquid|tablet|tablets|capsule|capsules|by mouth|topical|rub on|rubbed on|applied to|on the skin|under the tongue)\b/i;
+  // A LINE DESCRIBES THE DRUG. IT NEVER SAYS WHAT THE THING LOOKS LIKE OR WHERE TO PUT IT.
+  // Three audit passes went at this one check and the list was too short every time:
+  //   pass 1 blocked  "a numbing CREAM ... ON THE SKIN"          -> cream, on the skin added
+  //   pass 2 blocked  "This is Tylenol in LIQUID form"           -> liquid, tablet, capsule added,
+  //                   and the check written for that exact case had reported PASS on it
+  //   pass 3 broke it with "a PILL you SWALLOW", "as a SHOT under the skin", "through a DRIP",
+  //                   "Numbs the SKIN", "under your TONGUE", "RUB onto", "APPLIED where it hurts"
+  //                   -- eight sentences, every one green.
+  // THE LESSON, WRITTEN DOWN SO A FOURTH PASS DOES NOT HAVE TO FIND IT AGAIN. A list of words can
+  // never enforce "names no dosage form", so this check no longer CLAIMS to. It is named for exactly
+  // what it does: it rejects a word from the list. A check that prints a false sentence in green is
+  // worse than no check -- the app-v70 ruling, on this same class.
+  // THE LIST BANS FORM AND ROUTE, NOT ANATOMY. "Lowers stomach acid" and "slows the gut down" name
+  // the organ a drug ACTS ON, which is the description; "on the skin", "under the tongue" and "as a
+  // shot" name where a caregiver PUTS it, which is a dosage instruction this app must never give.
+  const FORMY = /\b(pill|pills|tablet|tablets|capsule|capsules|caplet|caplets|liquid|syrup|elixir|lozenge|troche|powder|sachet|patch|patches|cream|ointment|gel|lotion|rinse|mouthwash|gargle|suppository|enema|spray|drops|inhaler|inhaled|injection|injected|inject|shot|shots|infusion|infused|drip|intravenous|subcutaneous|intramuscular|swallow|swallowed|chew|chewable|dissolve|dissolved|topical|topically|oral|orally|rub|rubbed|rubs|applied|apply|smear|dab|by mouth|under the tongue|under your tongue|on the skin|onto the skin|into the skin|under the skin|through a vein|into a vein|into a muscle|skin|tongue|vein|rectally|rectal)\b/i;
   const formy = ids.filter(k => FORMY.test(TABLE[k]));
-  t('NO entry names a dosage form, route or body site', formy.length === 0,
+  t('NO entry uses a word from the dosage-form / route list', formy.length === 0,
     formy.map(k => k + ': ' + TABLE[k]).join(' | '));
+
+  // ---- CAN THESE CHECKS FIRE AT ALL? -----------------------------------------------------------
+  // The beta's copy of the form guard was written with a DOUBLED backslash, so the pattern looked
+  // for a literal backslash and could never match anything. It sat green for weeks over the exact
+  // sentence the first audit had blocked, in a suite that ran on every release.
+  // A guard nobody can prove fires is not a guard. Each one is now handed a sentence it MUST reject,
+  // so a typo that kills the pattern turns this red instead of turning the whole table green.
+  t('the form/route guard can actually fire', FORMY.test('A numbing cream you rub on the skin.'), '');
+  t('the schedule guard can actually fire', SCHEDULEY.test('Take one at bedtime as needed.'), '');
+  t('the fever guard can actually fire', /fever|antipyretic|temperature/i.test('Brings down a fever.'), '');
+  t('the number guard can actually fire', /\d/.test('Eases pain for 4 hours.'), '');
   const tooLong = ids.filter(k => TABLE[k].length > 110);
   t('every entry is short enough to read on a phone', tooLong.length === 0, tooLong.join(', '));
 }
@@ -335,6 +357,46 @@ console.log('\n7. A medication named after a JavaScript built-in must not destro
   const afterReload = await page.evaluate(() =>
     [...document.querySelectorAll('button')].filter(b => /^Edit /.test(b.getAttribute('aria-label') || '')).length);
   t('after a reload the Meds screen still lists medications', afterReload > 0, afterReload + ' editable rows');
+}
+
+console.log('\nTyped text — it survives a reload, and a long one does not blow the card open');
+{
+  const LONG = 'Prescribed' + 'x'.repeat(300) + 'end';
+  await goMeds();
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /^Edit Zofran$/i.test(x.getAttribute('aria-label') || ''));
+    if (b) b.click();
+  });
+  await page.waitForTimeout(500);
+  const typed = await page.evaluate((v) => {
+    const lab = [...document.querySelectorAll('label')].find(l => /what it/i.test(l.innerText || ''));
+    const inp = lab && lab.querySelector('input, textarea');
+    if (!inp) return false;
+    inp.value = v; inp.dispatchEvent(new Event('input', { bubbles: true })); return true;
+  }, LONG);
+  t('the editor took a long typed line', typed, '');
+  await clickText(/^Save changes$/);
+  await page.waitForTimeout(800);
+
+  // 320px is the narrowest phone this app is expected to survive. A page that scrolls sideways there
+  // is the failure -- not a wide element inside its own scroller, which is why this asserts on the
+  // DOCUMENT rather than on the line.
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.waitForTimeout(500);
+  const w = await page.evaluate(() => ({
+    doc: document.documentElement.scrollWidth,
+    view: window.innerWidth,
+    line: (document.querySelector('[data-med-purpose="zofran"]') || {}).scrollWidth || -1
+  }));
+  t('a very long typed line does not push the page sideways at 320px', w.doc <= w.view + 1, JSON.stringify(w));
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2500);
+  await goMeds();
+  const back = (await purposeMap())['zofran'] || '';
+  t('the typed line is still there after closing and reopening the app', back === LONG,
+    back.slice(0, 24) + ' (' + back.length + ' chars)');
 }
 
 console.log('\n-- nothing broke on the way');

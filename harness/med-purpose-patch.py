@@ -90,7 +90,7 @@ const MED_PURPOSE = {
   'zofran': 'Prevents and settles nausea and vomiting.',
   'compazine': 'Settles nausea and vomiting.',
   'morphine': 'A strong pain reliever for moderate to severe pain.',
-  'lidocaine': 'Numbs the part of the body it is used on.',
+  'lidocaine': 'Numbs the area where it is used.',
   'protonix': 'Lowers stomach acid, which protects the stomach and eases reflux.',
   'buspirone': 'Eases anxiety.',
   'paroxetine': 'Treats depression, and is also used for anxiety.',
@@ -148,7 +148,7 @@ rep("""      h('label', null, fieldLabel('Generic name'), formInput({ value: for
 rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
         ),""",
     """          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name'),
-          purposeOf(med) ? h('div', { 'data-med-purpose': med.id, style: { fontSize: '12.5px', color: '#5F4A56', fontWeight: '500', marginTop: '4px', lineHeight: '1.35' } }, purposeOf(med)) : null
+          purposeOf(med) ? h('div', { 'data-med-purpose': med.id, style: { fontSize: '12.5px', color: '#5F4A56', fontWeight: '500', marginTop: '4px', lineHeight: '1.35', overflowWrap: 'anywhere' } }, purposeOf(med)) : null
         ),""")
 
 # ---- 4. one honest line on the screen that now carries medical text ----------------------------
