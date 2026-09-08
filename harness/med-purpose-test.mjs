@@ -137,6 +137,10 @@ console.log('\n2. The Meds screen shows a line for every medication');
   t('each line on screen matches the table it came from', mismatched.length === 0, mismatched.slice(0, 3).join(' | '));
   const disc = await page.evaluate(() => document.querySelectorAll('[data-med-disclaimer]').length);
   t('the "general information, not medical advice" line appears exactly once', disc === 1, disc + ' found');
+  // Scroll to the cards themselves before the picture -- the top of this screen is the reorder
+  // list, and a screenshot of the part that did not change proves nothing about the part that did.
+  await page.evaluate(() => { const el = document.querySelector('[data-med-purpose]'); if (el) el.scrollIntoView({ block: 'center' }); });
+  await page.waitForTimeout(400);
   await shot('1-meds-screen');
 }
 
