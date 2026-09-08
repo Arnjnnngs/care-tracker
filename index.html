@@ -1783,7 +1783,7 @@ function fmtCountdown(ms) {
 const MED_PURPOSE = {
   'dexamethasone': 'A steroid that calms nausea, swelling and allergic reactions.',
   'tylenol': 'Eases pain.',
-  'tylenol-liquid': 'Eases pain. The liquid form of the same medicine.',
+  'tylenol-liquid': 'Eases pain. This is Tylenol in liquid form.',
   'zofran': 'Prevents and settles nausea and vomiting.',
   'compazine': 'Settles nausea and vomiting.',
   'morphine': 'A strong pain reliever for moderate to severe pain.',
@@ -1797,11 +1797,20 @@ const MED_PURPOSE = {
 };
 // What the caregiver typed wins; the built-in line is the fallback; otherwise nothing at all --
 // never an empty label under a medication nobody has described.
+// hasOwnProperty, NOT a bare index. MED_PURPOSE is a plain object, so MED_PURPOSE['constructor']
+// reads back Object.prototype.constructor -- a FUNCTION, truthy and not a string -- and h() then
+// throws inside the Meds list render. The medication persists, so every later render throws too:
+// the Meds screen comes up with ZERO cards, which is the only place edit and delete live, and the
+// broken list publishes to the other phone. `constructor` is the one prototype key that survives
+// this app's id slug. nameOf() thirteen lines below carries the identical guard for the identical
+// reason, and it was added after this exact bug printed the literal string "Object" as a
+// medication name.
 function purposeOf(med) {
   if (!med) return '';
   const typed = String(med.purpose || '').trim();
   if (typed) return typed;
-  return MED_PURPOSE[med.id] || '';
+  const built = Object.prototype.hasOwnProperty.call(MED_PURPOSE, med.id) ? MED_PURPOSE[med.id] : '';
+  return typeof built === 'string' ? built : '';
 }
 function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'paracentesis') return 'Paracentesis'; if (id === 'chemo_date') return 'Chemo treatment'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); /* hasOwnProperty, not a bare index: state.archivedMeds is a plain object, so archivedMeds['constructor'] resolves to Object.prototype.constructor even when the map is EMPTY and this returned the literal string "Object" as a medication name. */ const archived = (state.archivedMeds && Object.prototype.hasOwnProperty.call(state.archivedMeds, id)) ? state.archivedMeds[id] : null; return m ? m.name : (archived ? archived.name : id); }
 function nowLocalISO() { return toLocalISO(simNow()); }
@@ -4519,7 +4528,7 @@ function renderMedicationEditor() {
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '11px' } },
       h('label', null, fieldLabel('Medication name'), formInput({ value: form.name, placeholder: 'Medication name', onInput: event => updateMedicationForm('name', event.target.value) })),
       h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
-      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\u2019s for'), formInput({ value: form.purpose, placeholder: (MED_PURPOSE[state.medEditor && state.medEditor.sourceId] || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),
+      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\u2019s for'), formInput({ value: form.purpose, placeholder: (purposeOf({ id: state.medEditor && state.medEditor.sourceId }) || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),
       h('label', null, fieldLabel('Dosage options', 'Separate choices with commas.'), formInput({ value: form.dosesText, placeholder: '500 mg, 1000 mg', onInput: event => updateMedicationForm('dosesText', event.target.value) })),
       h('label', null, fieldLabel('Schedule type'), h('select', { value: form.type, onChange: event => updateMedicationForm('type', event.target.value, true), style: { width: '100%', minHeight: '43px', border: '1px solid rgba(212,104,138,0.22)', borderRadius: '11px', padding: '0 10px', fontSize: '16px', background: 'rgba(255,255,255,0.72)', color: '#342530' } }, h('option', { value: 'gap' }, 'As needed / gap-based'), h('option', { value: 'win' }, 'Scheduled window'))),
       scheduled ? h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('Schedule windows', 'Use 24-hour times, e.g. 08:00-12:00 Morning, 20:00-22:00 Evening.'), formInput({ value: form.windowsText, placeholder: '08:00-12:00 Morning, 20:00-22:00 Evening', onInput: event => updateMedicationForm('windowsText', event.target.value) })) : h('label', null, fieldLabel('Minimum gap hours'), formInput({ type: 'number', min: '0', step: '0.5', value: String(form.gapH), onInput: event => updateMedicationForm('gapH', event.target.value) })),

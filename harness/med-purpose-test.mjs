@@ -122,7 +122,11 @@ console.log('\n1. The table itself — what the app is willing to say about a me
     withDigits.map(k => k + ': ' + TABLE[k]).join(' | '));
   // A SCHEDULE IN WORDS passed the digit guard: "given around chemo" carries a when, not a what, and
   // the audit caught it while the check stayed green. Words as well as digits now.
-  const SCHEDULEY = /\b(daily|hourly|every|twice|once a day|per day|dose|doses|tablet|tablets|capsule|capsules|teaspoon|mg|ml|before bed|with food|around chemo)\b/i;
+  // WRONG BOTH WAYS in its first form, per the delta audit: it rejected "the tablets" -- a dosage
+  // FORM, not a dose -- and it hardcoded the literal phrase "around chemo", so "on chemo days",
+  // "at bedtime", "before meals" and "when needed" all walked through. Dosage forms are allowed;
+  // WHEN and HOW MUCH are not.
+  const SCHEDULEY = /\b(daily|hourly|nightly|weekly|every \w+|twice|once a|per day|a day|as needed|when needed|at bedtime|before bed|before meals|after meals|with food|on an empty stomach|in the morning|in the evening|on chemo days|around chemo|with chemo|dose|doses|mg|ml|mcg)\b/i;
   const scheduley = ids.filter(k => SCHEDULEY.test(TABLE[k]));
   t('NO entry states a schedule or a dose in words either', scheduley.length === 0,
     scheduley.map(k => k + ': ' + TABLE[k]).join(' | '));
@@ -207,7 +211,11 @@ console.log('\n4b. Clearing the box is a real action, not a no-op (the audit BLO
     return inp ? { value: inp.value, placeholder: inp.placeholder } : null;
   });
   t('the box is EMPTY for a medication nobody has described', state0 && state0.value === '', JSON.stringify(state0 && state0.value));
-  t('the built-in sentence shows as the placeholder instead', !!(state0 && state0.placeholder && /nausea/i.test(state0.placeholder)),
+  // COMPARE TO THE TABLE, not to a word. /nausea/i also matches the fallback literal
+  // "For example: settles nausea", so this check stayed green on a build with the placeholder
+  // reverted to that literal -- found by the delta audit.
+  t('the built-in sentence shows as the placeholder instead',
+    !!(state0 && state0.placeholder === (TABLE['zofran'] || '\u0000')),
     JSON.stringify(state0 && state0.placeholder));
   await clickText(/^Save changes$/);
   await page.waitForTimeout(800);
@@ -279,6 +287,39 @@ console.log('\n6. A medication with nothing to say shows no empty label');
   const map = await purposeMap();
   const stray = Object.keys(map).filter(k => !map[k]);
   t('the new medication renders NO purpose element rather than an empty one', stray.length === 0, stray.join(', '));
+}
+
+console.log('\n7. A medication named after a JavaScript built-in must not destroy the Meds screen');
+{
+  // THE DELTA AUDIT BLOCKED ON THIS. MED_PURPOSE is a plain object, so a bare MED_PURPOSE['constructor']
+  // reads back Object.prototype.constructor -- a function, truthy, not a string -- and h() throws
+  // inside the list render. The medication PERSISTS, so every later render throws too: the Meds
+  // screen comes up empty, and the Meds screen is the only place edit and delete live. There is no
+  // way back from inside the app, and the broken list publishes to the other phone.
+  // `constructor` is the one prototype key that survives this app's id slug.
+  const errsBefore = errs.length;
+  await goMeds();
+  const added = await clickText(/^Add$/);
+  t('the add form opens', added, '');
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const lab = [...document.querySelectorAll('label')].find(l => /medication name/i.test(l.innerText || ''));
+    const inp = lab && lab.querySelector('input');
+    if (inp) { inp.value = 'Constructor'; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+  });
+  await clickText(/^Add medication$/);
+  await page.waitForTimeout(900);
+  t('adding it raises no page error', errs.length === errsBefore, errs.slice(errsBefore).join(' | ').slice(0, 200));
+  const cardCount = await page.evaluate(() => document.querySelectorAll('[data-med-purpose]').length +
+    [...document.querySelectorAll('button')].filter(b => /^Edit /.test(b.getAttribute('aria-label') || '')).length);
+  t('the medication list still renders', cardCount > 0, cardCount + ' cards/rows');
+  // AND IT MUST SURVIVE A RELOAD -- the config is persisted, so a render that throws once throws forever.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2500);
+  await goMeds();
+  const afterReload = await page.evaluate(() =>
+    [...document.querySelectorAll('button')].filter(b => /^Edit /.test(b.getAttribute('aria-label') || '')).length);
+  t('after a reload the Meds screen still lists medications', afterReload > 0, afterReload + ' editable rows');
 }
 
 console.log('\n-- nothing broke on the way');

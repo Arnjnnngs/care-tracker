@@ -80,7 +80,7 @@ rep("""function nameOf(id) {""", """// ---- WHAT EACH MEDICATION IS FOR (v74) --
 const MED_PURPOSE = {
   'dexamethasone': 'A steroid that calms nausea, swelling and allergic reactions.',
   'tylenol': 'Eases pain.',
-  'tylenol-liquid': 'Eases pain. The liquid form of the same medicine.',
+  'tylenol-liquid': 'Eases pain. This is Tylenol in liquid form.',
   'zofran': 'Prevents and settles nausea and vomiting.',
   'compazine': 'Settles nausea and vomiting.',
   'morphine': 'A strong pain reliever for moderate to severe pain.',
@@ -94,11 +94,20 @@ const MED_PURPOSE = {
 };
 // What the caregiver typed wins; the built-in line is the fallback; otherwise nothing at all --
 // never an empty label under a medication nobody has described.
+// hasOwnProperty, NOT a bare index. MED_PURPOSE is a plain object, so MED_PURPOSE['constructor']
+// reads back Object.prototype.constructor -- a FUNCTION, truthy and not a string -- and h() then
+// throws inside the Meds list render. The medication persists, so every later render throws too:
+// the Meds screen comes up with ZERO cards, which is the only place edit and delete live, and the
+// broken list publishes to the other phone. `constructor` is the one prototype key that survives
+// this app's id slug. nameOf() thirteen lines below carries the identical guard for the identical
+// reason, and it was added after this exact bug printed the literal string "Object" as a
+// medication name.
 function purposeOf(med) {
   if (!med) return '';
   const typed = String(med.purpose || '').trim();
   if (typed) return typed;
-  return MED_PURPOSE[med.id] || '';
+  const built = Object.prototype.hasOwnProperty.call(MED_PURPOSE, med.id) ? MED_PURPOSE[med.id] : '';
+  return typeof built === 'string' ? built : '';
 }
 function nameOf(id) {""")
 
@@ -127,7 +136,7 @@ rep("""    sub: String(form.sub || '').trim(),""",
     purpose: String(form.purpose || '').trim(),""")
 rep("""      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),""",
     """      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
-      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: (MED_PURPOSE[state.medEditor && state.medEditor.sourceId] || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
+      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: (purposeOf({ id: state.medEditor && state.medEditor.sourceId }) || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
 
 # ---- 3. the Meds screen shows it under the generic name ---------------------------------------
 rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
