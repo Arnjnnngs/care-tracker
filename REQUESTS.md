@@ -44,3 +44,14 @@ Shown in full — done and outstanding — in every reply after a build or a req
 - [x] **v66–v68** — "there isn't a way to add a para from the reports screen. there also a way to edit cycles."
 - [x] **Enhancer list in every release message** — "I shouldn't have to ask for enhancer list."
 - [x] **The full record of what went wrong, in the README** — "document in full detail all the challenges."
+
+## Standing rules Aaron set on 2026-09-08, recorded so no session has to be told twice
+
+- **Do not report until it is done.** Two reasons to send a message: he must approve or decide
+  something, or the work is complete. Not "a job is running", not "the audit found something".
+  `CLAUDE.md` Rule 0.6.
+- **Work end to end.** From the ask to live: build, check, fix what the checks find, audit, ship,
+  update the docs and the lists, port to the sibling app. The two exceptions above are the only
+  interruptions.
+- **The Enhancer's proposal list goes at the TOP of the release message**, before any technical
+  detail. It was there before and buried, which for him is the same as absent.
