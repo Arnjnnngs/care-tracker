@@ -120,6 +120,12 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   const withDigits = ids.filter(k => /\d/.test(TABLE[k]));
   t('NO entry contains a number — no dose, no schedule, no duration', withDigits.length === 0,
     withDigits.map(k => k + ': ' + TABLE[k]).join(' | '));
+  // A SCHEDULE IN WORDS passed the digit guard: "given around chemo" carries a when, not a what, and
+  // the audit caught it while the check stayed green. Words as well as digits now.
+  const SCHEDULEY = /\b(daily|hourly|every|twice|once a day|per day|dose|doses|tablet|tablets|capsule|capsules|teaspoon|mg|ml|before bed|with food|around chemo)\b/i;
+  const scheduley = ids.filter(k => SCHEDULEY.test(TABLE[k]));
+  t('NO entry states a schedule or a dose in words either', scheduley.length === 0,
+    scheduley.map(k => k + ': ' + TABLE[k]).join(' | '));
   const tooLong = ids.filter(k => TABLE[k].length > 110);
   t('every entry is short enough to read on a phone', tooLong.length === 0, tooLong.join(', '));
 }
@@ -163,17 +169,57 @@ console.log('\n4. Editing a medication must not wipe its line (the v43.3 failure
   });
   t('its editor opens', opened, '');
   await page.waitForTimeout(500);
-  // The field must be SEEDED with what the screen shows, not left blank under visible text.
-  const seeded = await page.evaluate(() => {
-    const lab = [...document.querySelectorAll('label')].find(l => /what it/i.test(l.innerText || ''));
-    const inp = lab && lab.querySelector('input, textarea');
-    return inp ? inp.value : null;
-  });
-  t('the "What it’s for" box is seeded with the line on screen', seeded === before, JSON.stringify(seeded));
+  // (The box is deliberately EMPTY here with the built-in line as its placeholder -- section 4b
+  // asserts that directly. Seeding it as a VALUE is what the audit blocked.)
   await clickText(/^Save changes$/);
   await page.waitForTimeout(800);
   const after = (await purposeMap())['zofran'] || '';
   t('after saving with no changes, the line is still there', after === before, JSON.stringify(after));
+  // THE AUDIT FOUND THIS SECTION COULD NOT FAIL FOR ITS OWN SUBJECT: deleting the `purpose` line
+  // from saveMedicationEditor -- the v43.3 bug itself -- left every check above green, because the
+  // built-in line covers for a lost value. So assert what was SAVED, not only what is on screen.
+  // `state` is module-scoped in this single-file app and is NOT on window; the saved list is read
+  // back out of the medication config in localStorage, which is what the app actually persists.
+  const saved = await page.evaluate((k) => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(k) || '{}');
+      const m = (raw.meds || []).find(x => x.id === 'zofran');
+      return m ? (m.purpose === undefined ? '<<missing>>' : m.purpose) : '<<no med>>';
+    } catch (e) { return '<<unreadable>>'; }
+  }, 'caretracker-medication-config-v1');
+  t('the save path carries the purpose field at all', saved !== '<<missing>>' && saved !== '<<no med>>', String(saved));
+}
+
+console.log('\n4b. Clearing the box is a real action, not a no-op (the audit BLOCKED on this)');
+{
+  const opened = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /^Edit Zofran$/.test(x.getAttribute('aria-label') || ''));
+    if (b) { b.click(); return true; } return false;
+  });
+  t('the editor opens', opened, '');
+  await page.waitForTimeout(500);
+  // The built-in line must be a PLACEHOLDER, not a value: an unset medication shows an EMPTY box
+  // with the sentence in grey behind it. Seeded as a value, clearing it did nothing at all and the
+  // app still said "updated", and every saved edit froze that day's wording into the record.
+  const state0 = await page.evaluate(() => {
+    const lab = [...document.querySelectorAll('label')].find(l => /what it/i.test(l.innerText || ''));
+    const inp = lab && lab.querySelector('input, textarea');
+    return inp ? { value: inp.value, placeholder: inp.placeholder } : null;
+  });
+  t('the box is EMPTY for a medication nobody has described', state0 && state0.value === '', JSON.stringify(state0 && state0.value));
+  t('the built-in sentence shows as the placeholder instead', !!(state0 && state0.placeholder && /nausea/i.test(state0.placeholder)),
+    JSON.stringify(state0 && state0.placeholder));
+  await clickText(/^Save changes$/);
+  await page.waitForTimeout(800);
+  const stored = await page.evaluate((k) => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(k) || '{}');
+      const m = (raw.meds || []).find(x => x.id === 'zofran');
+      return m ? String(m.purpose || '') : '<<no med>>';
+    } catch (e) { return '<<unreadable>>'; }
+  }, 'caretracker-medication-config-v1');
+  t('saving an untouched medication stores NOTHING — the wording is never frozen into the record', stored === '',
+    JSON.stringify(stored));
 }
 
 console.log('\n5. What the caregiver types wins');
@@ -194,6 +240,27 @@ console.log('\n5. What the caregiver types wins');
   const after = (await purposeMap())['zofran'] || '';
   t('the typed line replaces the built-in one', after === 'Her oncologist prescribed this for sickness', after);
   await shot('2-typed-purpose');
+  // ...and clearing it puts the built-in line back, rather than silently doing nothing.
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /^Edit Zofran$/.test(x.getAttribute('aria-label') || ''));
+    if (b) b.click();
+  });
+  await page.waitForTimeout(500);
+  const held = await page.evaluate(() => {
+    const lab = [...document.querySelectorAll('label')].find(l => /what it/i.test(l.innerText || ''));
+    const inp = lab && lab.querySelector('input, textarea');
+    return inp ? inp.value : null;
+  });
+  t('the box holds the typed line when there is one', held === 'Her oncologist prescribed this for sickness', JSON.stringify(held));
+  await page.evaluate(() => {
+    const lab = [...document.querySelectorAll('label')].find(l => /what it/i.test(l.innerText || ''));
+    const inp = lab && lab.querySelector('input, textarea');
+    if (inp) { inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+  });
+  await clickText(/^Save changes$/);
+  await page.waitForTimeout(800);
+  const cleared = (await purposeMap())['zofran'] || '';
+  t('clearing the box returns to the built-in line', /nausea/i.test(cleared) && cleared !== 'Her oncologist prescribed this for sickness', cleared);
 }
 
 console.log('\n6. A medication with nothing to say shows no empty label');

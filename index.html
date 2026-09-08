@@ -1773,10 +1773,17 @@ function fmtCountdown(ms) {
 // any site or label -- see this patch's header on why that is the safe answer rather than the risky
 // one. No dose, no schedule, no advice: only what the medication is generally used for.
 // KEYED BY ID so a device whose saved medication list predates v74 gets the text with no migration.
+// TWO SENTENCES WERE CHANGED ON THE AUDITOR'S CLINICAL READING, and both changes matter more than
+// they look. Tylenol said "brings down a fever": true of the drug, and the one sentence here likely
+// to change what a caregiver does at 2am in the wrong direction -- a fever during chemo is a thing
+// to report, not to suppress, and this same app tracks Temperature. Senokot said "a GENTLE
+// laxative": senna is a stimulant laxative, and "gentle" was an editorial claim rather than a fact.
+// Dexamethasone said "given around chemo", which is a schedule written in words and slipped past a
+// guard that only looks for digits.
 const MED_PURPOSE = {
-  'dexamethasone': 'A steroid given around chemo to calm nausea, swelling and reactions.',
-  'tylenol': 'Eases pain and brings down a fever.',
-  'tylenol-liquid': 'Eases pain and brings down a fever. Same medicine as the tablets, in liquid form.',
+  'dexamethasone': 'A steroid that calms nausea, swelling and allergic reactions.',
+  'tylenol': 'Eases pain.',
+  'tylenol-liquid': 'Eases pain. The liquid form of the same medicine.',
   'zofran': 'Prevents and settles nausea and vomiting.',
   'compazine': 'Settles nausea and vomiting.',
   'morphine': 'A strong pain reliever for moderate to severe pain.',
@@ -1785,7 +1792,7 @@ const MED_PURPOSE = {
   'buspirone': 'Eases anxiety.',
   'paroxetine': 'Treats depression, and is also used for anxiety.',
   'iron': 'An iron supplement, for low iron levels.',
-  'senokot': 'A gentle laxative for constipation.',
+  'senokot': 'A laxative for constipation.',
   'imodium': 'Slows the gut down to control diarrhea.'
 };
 // What the caregiver typed wins; the built-in line is the fallback; otherwise nothing at all --
@@ -4324,7 +4331,7 @@ function medicationFormFrom(med) {
   return {
     name: base.name || '',
     sub: base.sub || '',
-    purpose: purposeOf(base),
+    purpose: base.purpose || '',
     note: base.note || '',
     type: base.type === 'win' ? 'win' : 'gap',
     gapH: base.gapH || 0,
@@ -4512,7 +4519,7 @@ function renderMedicationEditor() {
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '11px' } },
       h('label', null, fieldLabel('Medication name'), formInput({ value: form.name, placeholder: 'Medication name', onInput: event => updateMedicationForm('name', event.target.value) })),
       h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
-      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\u2019s for'), formInput({ value: form.purpose, placeholder: 'For example: settles nausea', onInput: event => updateMedicationForm('purpose', event.target.value) })),
+      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\u2019s for'), formInput({ value: form.purpose, placeholder: (MED_PURPOSE[state.medEditor && state.medEditor.sourceId] || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),
       h('label', null, fieldLabel('Dosage options', 'Separate choices with commas.'), formInput({ value: form.dosesText, placeholder: '500 mg, 1000 mg', onInput: event => updateMedicationForm('dosesText', event.target.value) })),
       h('label', null, fieldLabel('Schedule type'), h('select', { value: form.type, onChange: event => updateMedicationForm('type', event.target.value, true), style: { width: '100%', minHeight: '43px', border: '1px solid rgba(212,104,138,0.22)', borderRadius: '11px', padding: '0 10px', fontSize: '16px', background: 'rgba(255,255,255,0.72)', color: '#342530' } }, h('option', { value: 'gap' }, 'As needed / gap-based'), h('option', { value: 'win' }, 'Scheduled window'))),
       scheduled ? h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('Schedule windows', 'Use 24-hour times, e.g. 08:00-12:00 Morning, 20:00-22:00 Evening.'), formInput({ value: form.windowsText, placeholder: '08:00-12:00 Morning, 20:00-22:00 Evening', onInput: event => updateMedicationForm('windowsText', event.target.value) })) : h('label', null, fieldLabel('Minimum gap hours'), formInput({ type: 'number', min: '0', step: '0.5', value: String(form.gapH), onInput: event => updateMedicationForm('gapH', event.target.value) })),

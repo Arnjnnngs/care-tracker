@@ -70,10 +70,17 @@ rep("""function nameOf(id) {""", """// ---- WHAT EACH MEDICATION IS FOR (v74) --
 // any site or label -- see this patch's header on why that is the safe answer rather than the risky
 // one. No dose, no schedule, no advice: only what the medication is generally used for.
 // KEYED BY ID so a device whose saved medication list predates v74 gets the text with no migration.
+// TWO SENTENCES WERE CHANGED ON THE AUDITOR'S CLINICAL READING, and both changes matter more than
+// they look. Tylenol said "brings down a fever": true of the drug, and the one sentence here likely
+// to change what a caregiver does at 2am in the wrong direction -- a fever during chemo is a thing
+// to report, not to suppress, and this same app tracks Temperature. Senokot said "a GENTLE
+// laxative": senna is a stimulant laxative, and "gentle" was an editorial claim rather than a fact.
+// Dexamethasone said "given around chemo", which is a schedule written in words and slipped past a
+// guard that only looks for digits.
 const MED_PURPOSE = {
-  'dexamethasone': 'A steroid given around chemo to calm nausea, swelling and reactions.',
-  'tylenol': 'Eases pain and brings down a fever.',
-  'tylenol-liquid': 'Eases pain and brings down a fever. Same medicine as the tablets, in liquid form.',
+  'dexamethasone': 'A steroid that calms nausea, swelling and allergic reactions.',
+  'tylenol': 'Eases pain.',
+  'tylenol-liquid': 'Eases pain. The liquid form of the same medicine.',
   'zofran': 'Prevents and settles nausea and vomiting.',
   'compazine': 'Settles nausea and vomiting.',
   'morphine': 'A strong pain reliever for moderate to severe pain.',
@@ -82,7 +89,7 @@ const MED_PURPOSE = {
   'buspirone': 'Eases anxiety.',
   'paroxetine': 'Treats depression, and is also used for anxiety.',
   'iron': 'An iron supplement, for low iron levels.',
-  'senokot': 'A gentle laxative for constipation.',
+  'senokot': 'A laxative for constipation.',
   'imodium': 'Slows the gut down to control diarrhea.'
 };
 // What the caregiver typed wins; the built-in line is the fallback; otherwise nothing at all --
@@ -102,17 +109,25 @@ function nameOf(id) {""")
 # missed-dose alerts and the app said "updated". Seeded with purposeOf() rather than base.purpose so
 # the box shows what the screen shows: a built-in line is visible and editable rather than an empty
 # box under text the caregiver can see.
+#
+# CORRECTED AFTER THE ZERO DAY AUDIT BLOCKED THE FIRST BUILD. Seeding the box with purposeOf() made
+# "deliberately blank" and "never set" the same state twice over: clearing the box and saving did
+# NOTHING (the app said "updated" and the built-in sentence stayed), and saving ANY edit froze that
+# day's wording into the patient's stored config and published it by medsync -- so a later
+# correction to a sentence that turned out to be wrong would never reach a medication anyone had
+# edited. The built-in line is a PLACEHOLDER now: unset stays unset, typing overrides, clearing
+# returns to the built-in, and nothing is ever frozen.
 rep("""    name: base.name || '',
     sub: base.sub || '',""",
     """    name: base.name || '',
     sub: base.sub || '',
-    purpose: purposeOf(base),""")
+    purpose: base.purpose || '',""")
 rep("""    sub: String(form.sub || '').trim(),""",
     """    sub: String(form.sub || '').trim(),
     purpose: String(form.purpose || '').trim(),""")
 rep("""      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),""",
     """      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
-      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: 'For example: settles nausea', onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
+      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: (MED_PURPOSE[state.medEditor && state.medEditor.sourceId] || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
 
 # ---- 3. the Meds screen shows it under the generic name ---------------------------------------
 rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
