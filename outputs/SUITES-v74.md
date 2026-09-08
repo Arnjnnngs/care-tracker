@@ -39,3 +39,7 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | whatsnew-test.mjs | PASS | 30/30 checks passed |
 | cycle-merge-probe.mjs | PASS | 24/24 checks passed |
 | audit-v69-weightreport.mjs | PASS |   11 passed, 0 failed |
+| audit-v72-probe.mjs | PASS | 28/28 checks passed |
+| overflow-scan.mjs | SKIPPED | --quick run; the scan must be recorded separately in RENDER-v74.md |
+
+Failing or erroring suites: 1
