@@ -33,6 +33,10 @@ const { chromium } = (() => {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const APP_FILE = argv.indexOf('--file') >= 0 ? argv[argv.indexOf('--file') + 1] : path.join(HERE, '..', 'index.html');
+// The Designer's evidence: a picture of each state this release changes, taken by the same run that
+// asserts on it, so the screenshot and the check can never describe different builds.
+const SHOTS = argv.indexOf('--shots') >= 0 ? argv[argv.indexOf('--shots') + 1] : null;
+if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
 for (const v of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'])
   if (process.env[v]) { console.error('REFUSING: ' + v + ' set.'); process.exit(3); }
 
@@ -115,6 +119,7 @@ await page.addInitScript((v) => { try { localStorage.setItem('caretracker-seen-v
 await page.goto('http://127.0.0.1:' + PORT + '/index.html', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(2500);
 
+const shot = async (name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, name + '.png'), fullPage: false }); };
 const entries = () => page.evaluate(() => globalThis.__entries());
 const deleted = () => page.evaluate(() => globalThis.__deleted.slice());
 const clickText = async (re) => page.evaluate(([src, flags]) => {
@@ -165,6 +170,7 @@ console.log('\n2. History offers Remove on the correction only, never on the row
   t('the superseded original offers NO Remove', !onOrig, 'a Remove on a row nothing reads deletes a document for no reason');
   const stale = await page.evaluate(() => { const c = document.querySelector('[data-history-row="seed_w_orig"] [data-history-stale]'); return c ? c.getAttribute('data-history-stale') : null; });
   t('the superseded original is still listed, marked Superseded', stale === 'superseded', 'stale=' + stale);
+  await shot('1-history-corrected-weight');
 }
 
 console.log('\n3. THE DEFECT: removing the corrected weight must not bring 156.2 back');
@@ -181,6 +187,7 @@ console.log('\n3. THE DEFECT: removing the corrected weight must not bring 156.2
   t('the weigh-in is GONE from the Weight report — the old 156.2 did not take its place', rows === 0, rows + ' row(s) still shown');
   const body = await page.evaluate(() => { const g = document.querySelector('[data-weight-row]'); return g ? (g.innerText || '') : ''; });
   t('no 156.2 anywhere in the readings list', !/156/.test(body), body.replace(/\s+/g, ' ').slice(0, 60));
+  await shot('2-weight-report-after-remove');
 }
 
 console.log('\n4. The same for a corrected paracentesis');
@@ -199,6 +206,7 @@ console.log('\n4. The same for a corrected paracentesis');
   await openReport('Paracentesis');
   const rows = await page.evaluate(() => [...document.querySelectorAll('[data-para-row]')].length);
   t('the procedure is GONE — the 4.0 L it replaced did not come back', rows === 0, rows + ' row(s) still shown');
+  await shot('3-para-report-after-remove');
 }
 
 console.log('\n5. The ordinary path is untouched: a dose still deletes');
