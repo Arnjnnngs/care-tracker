@@ -1,6 +1,6 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-08 · **Live version:** v72 (`62517cd`) · **v73 built, in checks** · **Live URL:** arnjnnngs.github.io/care-tracker
+**Updated:** 2026-09-08 · **Live version:** v73 (`705121a`) · **Live URL:** arnjnnngs.github.io/care-tracker
 **Dispatch:** ACTIVE — v73 in progress.
 
 This file is the done / outstanding list Aaron asked to see after every build and every request. It is
@@ -17,7 +17,7 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
 
 ## MINE — no decision needed; started in order, nothing waits
 
-- [x] **v73 built** — Remove on a corrected weight or paracentesis clears the reading instead of restoring the old number; a second, older bug fixed alongside it (removing a paracentesis could silently do nothing). Suite 20/20, and 10/20 against v72. In checks now.
+- [x] **v73 LIVE** (`705121a`) — Remove on a corrected weight or paracentesis clears the reading instead of restoring the old number; a second, older bug fixed alongside it (removing a paracentesis could silently do nothing). Suite 20/20, and 10/20 against v72. In checks now.
 - [x] Team review written and pushed (`outputs/TEAM-REVIEW-2026-09-07.md`).
 - [x] **Delete ratchet in `pm.py`** — every shape of `removeEntryDB(...)` call is pinned; a new one
       blocks; the four delete-based corrections show as a warning until v72 removes them. Falsified
@@ -39,6 +39,7 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
 
 ## DONE — live on Brandi's phone
 
+- [x] v73 — removing a corrected weight or paracentesis clears it instead of restoring the old number; removing an older weight works instead of failing silently.
 - [x] v72 — a changed bowel, appetite or symptom answer stays changed; corrections append, never delete; the delete ratchet and the suite record are in pm.py.
 - [x] v71 — page holds still behind an open menu or pop-up; scroll-lock suite covers all five overlays.
 - [x] v70 — period start/end move works at any age and cannot swallow another period; overflow scanner unblindfolded.

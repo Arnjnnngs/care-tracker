@@ -1,6 +1,6 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
@@ -145,7 +145,7 @@ started or ended from anywhere other than a direct message, that is a miss.
 | | |
 |---|---|
 | **Version** | v73 |
-| **Commit** | `on the working branch, in audit` — v73. v72 remains live on main until it passes. |
+| **Commit** | `705121a` — v73 LIVE on main. Removing a corrected reading no longer restores the wrong number. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `05c5af8afcdd393862daf362d525a10f` |
 | **sw.js md5** | `08af1a1947bc65292c293ee179a589d6` |
