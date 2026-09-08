@@ -23,3 +23,6 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | medsync-test.mjs | EXEMPT | v44 medsync-patch verifier; hangs past the 600s limit on v71 and v72 alike; rebase or retire queued |
 | missed-banner-test.mjs | PASS | 16/16 checks passed |
 | missedcard-test.mjs | PASS | 7/7 checks passed |
+| para-test.mjs | PASS | 16/16 checks passed |
+| reason-test.mjs | EXEMPT | v43.4 reason-patch verifier; 34/41 on v71 and on v72 (identical), so nothing in the current release moved it |
+| remove-group-test.mjs | PASS | 20/20 checks passed |

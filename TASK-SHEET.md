@@ -1,6 +1,6 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-07 · **Live version:** v72 (`62517cd`) · **Live URL:** arnjnnngs.github.io/care-tracker
+**Updated:** 2026-09-08 · **Live version:** v72 (`62517cd`) · **v73 built, in checks** · **Live URL:** arnjnnngs.github.io/care-tracker
 **Dispatch:** ACTIVE — v73 in progress.
 
 This file is the done / outstanding list Aaron asked to see after every build and every request. It is
@@ -17,6 +17,7 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
 
 ## MINE — no decision needed; started in order, nothing waits
 
+- [x] **v73 built** — Remove on a corrected weight or paracentesis clears the reading instead of restoring the old number; a second, older bug fixed alongside it (removing a paracentesis could silently do nothing). Suite 20/20, and 10/20 against v72. In checks now.
 - [x] Team review written and pushed (`outputs/TEAM-REVIEW-2026-09-07.md`).
 - [x] **Delete ratchet in `pm.py`** — every shape of `removeEntryDB(...)` call is pinned; a new one
       blocks; the four delete-based corrections show as a warning until v72 removes them. Falsified
@@ -31,7 +32,7 @@ items on it. If YOURS is empty, the next item under MINE starts in the same turn
 
 ## QUEUED — built on your word, in this order unless you reorder
 
-1. **v73 — History and Home Remove on a corrected weight or paracentesis row routes to the tombstone** (both auditors named it; today it hard-deletes the correction and resurrects the original within 48h). S, audited.
+1. **Take all** partial-write fix — saves some, reports none saved, re-tap double-logs (S–M, audited).
 2. **Take all** partial-write fix — saves some, reports none saved, re-tap double-logs (S–M, audited).
 3. Add / correct / remove controls on the Bowel Movement and Appetite reports (S each).
 4. Android emulator smoke job in GitHub Actions, as ChemoWell runs (M).
