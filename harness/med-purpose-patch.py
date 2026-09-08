@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""
+med-purpose-patch.py -- v74. Every medication says what it is for.
+
+Aaron, 2026-09-08: "I've asked before to have something pulled from another site to say what the med
+is intended for... it wasn't webMD, it was something else that couldn't sue me for using their
+stuff." And: it never shipped, and the ask was never written down in any of the three repos.
+
+ON THE SOURCE, because it was his actual worry. What cannot be copied is somebody's PROSE; the fact
+that ondansetron prevents nausea is not ownable by anyone. So this ships SHORT ORIGINAL sentences
+written for a caregiver -- nothing is copied from WebMD, from a drug label, or from any site -- and
+the app cites nothing, because a citation to a document nobody here read would be a lie. US federal
+sources (openFDA, DailyMed, MedlinePlus) are public domain and would also have been safe to quote;
+every one of them is blocked by this sandbox's network policy, which is why the text is original
+rather than quoted. If Aaron later wants the exact federal label wording, that is a data refresh
+into the same table, not a rebuild.
+
+WHAT IT DOES
+  * MED_PURPOSE: one plain sentence per medication the app ships, KEYED BY ID rather than added to
+    DEFAULT_MEDS. This matters: every device already has its medication list saved in localStorage
+    and Firestore from before v74, and those saved records carry no new field. A lookup by id gives
+    every existing phone the text on the next load with no migration and nothing to re-enter.
+  * purposeOf(med) prefers what the caregiver typed, falls back to the built-in line, else nothing.
+    A medication with no purpose shows no empty label.
+  * "What it's for" is a real field in the medication editor, so a medication Aaron adds later can
+    carry its own line. It is optional and free text.
+  * The Meds screen shows it under the generic name. ONE honest disclaimer sits at the top of that
+    screen: general information, not medical advice.
+
+WHAT IT DELIBERATELY DOES NOT DO
+  * It does not touch the Home quick-log cards. Those are the screen a caregiver taps at 2am under
+    time pressure, and every extra line there is a line between her and the dose button.
+  * It does not fetch anything at runtime. A live lookup would send this patient's medication list
+    to a third-party server from an app that has no login, and would fail exactly when she is
+    offline. The text is in the file.
+  * It states no dose, no schedule and no advice. Only what the medication is generally for.
+
+Usage:  python3 harness/med-purpose-patch.py [--base outputs/rollback-v73/index.html] [--out index.html]
+The version stamp lives INSIDE this patch: it refuses a base that is not v73 and emits v74.
+"""
+import re, sys, os
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)
+FROM_V, TO_V = 'v73', 'v74'
+
+args = sys.argv[1:]
+base = args[args.index('--base') + 1] if '--base' in args else os.path.join(REPO, 'outputs', 'rollback-' + FROM_V, 'index.html')
+out = args[args.index('--out') + 1] if '--out' in args else os.path.join(REPO, 'index.html')
+sw_in = os.path.join(os.path.dirname(base), 'sw.js')
+sw_out = os.path.join(os.path.dirname(out), 'sw.js')
+
+s = open(base, encoding='utf-8').read()
+m = re.search(r"const APP_VERSION = '([^']+)';", s)
+if not m or m.group(1) != FROM_V:
+    sys.exit('REFUSING: base is %s, this patch transforms %s -> %s' % (m.group(1) if m else '?', FROM_V, TO_V))
+
+
+def rep(old, new, n=1):
+    global s
+    c = s.count(old)
+    if c != n:
+        sys.exit('REFUSING: expected %d match(es), found %d for:\n%s' % (n, c, old[:200]))
+    s = s.replace(old, new)
+
+
+# ---- 1. the table, and the reader that prefers what the caregiver typed -----------------------
+rep("""function nameOf(id) {""", """// ---- WHAT EACH MEDICATION IS FOR (v74) ----
+// Short original sentences, written for a caregiver rather than a clinician. Nothing is copied from
+// any site or label -- see this patch's header on why that is the safe answer rather than the risky
+// one. No dose, no schedule, no advice: only what the medication is generally used for.
+// KEYED BY ID so a device whose saved medication list predates v74 gets the text with no migration.
+const MED_PURPOSE = {
+  'dexamethasone': 'A steroid given around chemo to calm nausea, swelling and reactions.',
+  'tylenol': 'Eases pain and brings down a fever.',
+  'tylenol-liquid': 'Eases pain and brings down a fever. Same medicine as the tablets, in liquid form.',
+  'zofran': 'Prevents and settles nausea and vomiting.',
+  'compazine': 'Settles nausea and vomiting.',
+  'morphine': 'A strong pain reliever for moderate to severe pain.',
+  'lidocaine': 'A numbing cream for soreness in one spot on the skin.',
+  'protonix': 'Lowers stomach acid, which protects the stomach and eases reflux.',
+  'buspirone': 'Eases anxiety.',
+  'paroxetine': 'Treats depression, and is also used for anxiety.',
+  'iron': 'An iron supplement, for low iron levels.',
+  'senokot': 'A gentle laxative for constipation.',
+  'imodium': 'Slows the gut down to control diarrhea.'
+};
+// What the caregiver typed wins; the built-in line is the fallback; otherwise nothing at all --
+// never an empty label under a medication nobody has described.
+function purposeOf(med) {
+  if (!med) return '';
+  const typed = String(med.purpose || '').trim();
+  if (typed) return typed;
+  return MED_PURPOSE[med.id] || '';
+}
+function nameOf(id) {""")
+
+# ---- 2. the editor carries it, so a medication added later can have its own line ---------------
+# medicationFormFrom() SEEDS THE FORM. It did not carry `purpose`, so opening any medication's
+# editor and saving would have written purpose:'' over whatever was there -- the v43.3 failure
+# exactly, where correcting one field in this same editor silently disabled that medication's
+# missed-dose alerts and the app said "updated". Seeded with purposeOf() rather than base.purpose so
+# the box shows what the screen shows: a built-in line is visible and editable rather than an empty
+# box under text the caregiver can see.
+rep("""    name: base.name || '',
+    sub: base.sub || '',""",
+    """    name: base.name || '',
+    sub: base.sub || '',
+    purpose: purposeOf(base),""")
+rep("""    sub: String(form.sub || '').trim(),""",
+    """    sub: String(form.sub || '').trim(),
+    purpose: String(form.purpose || '').trim(),""")
+rep("""      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),""",
+    """      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
+      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: 'For example: settles nausea', onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
+
+# ---- 3. the Meds screen shows it under the generic name ---------------------------------------
+rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
+        ),""",
+    """          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name'),
+          purposeOf(med) ? h('div', { 'data-med-purpose': med.id, style: { fontSize: '12.5px', color: '#5F4A56', fontWeight: '500', marginTop: '4px', lineHeight: '1.35' } }, purposeOf(med)) : null
+        ),""")
+
+# ---- 4. one honest line on the screen that now carries medical text ----------------------------
+# The app is stating what medications are for. That earns exactly one sentence saying what this text
+# is and is not -- said once, at the top of the list, not repeated under all thirteen cards.
+rep("""    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)""",
+    """    h('div', { 'data-med-disclaimer': 'true', style: { fontSize: '11.5px', color: '#7D6974', lineHeight: '1.4', margin: '2px 0 10px' } },
+      'The line under each medication is general information, not medical advice. Her care team is the answer for anything specific.'),
+    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)""")
+
+if "const APP_VERSION = '%s';" % FROM_V not in s: sys.exit('REFUSING: version stamp missing')
+rep("const APP_VERSION = '%s';" % FROM_V, "const APP_VERSION = '%s';" % TO_V)
+rep("""  { v: 'v73', date: 'Sep 8, 2026', title: 'Removing a corrected weight no longer brings the old number back',""",
+    """  { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what it is for',
+    points: [
+      'The Meds screen shows a short line under each medication saying what it is generally used for \\u2014 "settles nausea and vomiting", "lowers stomach acid".',
+      'When you add or edit a medication there is a "What it\\u2019s for" box, so anything you add later can carry its own line.',
+      'It is general information, not medical advice, and it never mentions a dose. Her care team is still the answer for anything specific.'
+    ] },
+  { v: 'v73', date: 'Sep 8, 2026', title: 'Removing a corrected weight no longer brings the old number back',""")
+
+open(out, 'w', encoding='utf-8').write(s)
+
+sw = open(sw_in, encoding='utf-8').read()
+if "const CACHE = 'caretracker-%s';" % FROM_V not in sw: sys.exit('REFUSING: sw.js base is not %s' % FROM_V)
+open(sw_out, 'w', encoding='utf-8').write(sw.replace("const CACHE = 'caretracker-%s';" % FROM_V, "const CACHE = 'caretracker-%s';" % TO_V))
+print('patched %s -> %s: %s and %s' % (FROM_V, TO_V, out, sw_out))

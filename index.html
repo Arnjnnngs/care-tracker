@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v73';
+const APP_VERSION = 'v74';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,6 +1092,12 @@ const APP_VERSION = 'v73';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
+  { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what it is for',
+    points: [
+      'The Meds screen shows a short line under each medication saying what it is generally used for \u2014 "settles nausea and vomiting", "lowers stomach acid".',
+      'When you add or edit a medication there is a "What it\u2019s for" box, so anything you add later can carry its own line.',
+      'It is general information, not medical advice, and it never mentions a dose. Her care team is still the answer for anything specific.'
+    ] },
   { v: 'v73', date: 'Sep 8, 2026', title: 'Removing a corrected weight no longer brings the old number back',
     points: [
       'Removing a weight or paracentesis you had corrected now clears it properly. Before, the wrong number you had replaced could come back in its place.',
@@ -1761,6 +1767,34 @@ function fmtCountdown(ms) {
   if (h > 0) return h + 'h ' + m + 'm';
   if (m >= 1) { if (m < 5) { const s = Math.floor((ms % 60000) / 1000); return m + 'm ' + s + 's'; } return m + 'm'; }
   return Math.max(1, Math.floor(ms / 1000)) + 's';
+}
+// ---- WHAT EACH MEDICATION IS FOR (v74) ----
+// Short original sentences, written for a caregiver rather than a clinician. Nothing is copied from
+// any site or label -- see this patch's header on why that is the safe answer rather than the risky
+// one. No dose, no schedule, no advice: only what the medication is generally used for.
+// KEYED BY ID so a device whose saved medication list predates v74 gets the text with no migration.
+const MED_PURPOSE = {
+  'dexamethasone': 'A steroid given around chemo to calm nausea, swelling and reactions.',
+  'tylenol': 'Eases pain and brings down a fever.',
+  'tylenol-liquid': 'Eases pain and brings down a fever. Same medicine as the tablets, in liquid form.',
+  'zofran': 'Prevents and settles nausea and vomiting.',
+  'compazine': 'Settles nausea and vomiting.',
+  'morphine': 'A strong pain reliever for moderate to severe pain.',
+  'lidocaine': 'A numbing cream for soreness in one spot on the skin.',
+  'protonix': 'Lowers stomach acid, which protects the stomach and eases reflux.',
+  'buspirone': 'Eases anxiety.',
+  'paroxetine': 'Treats depression, and is also used for anxiety.',
+  'iron': 'An iron supplement, for low iron levels.',
+  'senokot': 'A gentle laxative for constipation.',
+  'imodium': 'Slows the gut down to control diarrhea.'
+};
+// What the caregiver typed wins; the built-in line is the fallback; otherwise nothing at all --
+// never an empty label under a medication nobody has described.
+function purposeOf(med) {
+  if (!med) return '';
+  const typed = String(med.purpose || '').trim();
+  if (typed) return typed;
+  return MED_PURPOSE[med.id] || '';
 }
 function nameOf(id) { if (id === 'temp') return 'Temperature'; if (id === 'weight') return 'Weight'; if (id === 'paracentesis') return 'Paracentesis'; if (id === 'chemo_date') return 'Chemo treatment'; if (id === 'cycle_start') return 'Period Start'; if (id === 'cycle_end') return 'Period End'; if (id === 'inpatient') return 'In-Patient Day'; if (id === 'inpatient_start') return 'In-Patient Start'; if (id === 'inpatient_end') return 'In-Patient End'; if (id === 'bowel_movement') return 'Bowel Movement'; if (id === 'appetite') return 'Appetite'; if (id && id.indexOf('symptom_') === 0) return SYMPTOM_TYPES[id.slice(8)] || id.slice(8); const m = state.meds.find(x => x.id === id); /* hasOwnProperty, not a bare index: state.archivedMeds is a plain object, so archivedMeds['constructor'] resolves to Object.prototype.constructor even when the map is EMPTY and this returned the literal string "Object" as a medication name. */ const archived = (state.archivedMeds && Object.prototype.hasOwnProperty.call(state.archivedMeds, id)) ? state.archivedMeds[id] : null; return m ? m.name : (archived ? archived.name : id); }
 function nowLocalISO() { return toLocalISO(simNow()); }
@@ -4290,6 +4324,7 @@ function medicationFormFrom(med) {
   return {
     name: base.name || '',
     sub: base.sub || '',
+    purpose: purposeOf(base),
     note: base.note || '',
     type: base.type === 'win' ? 'win' : 'gap',
     gapH: base.gapH || 0,
@@ -4371,6 +4406,7 @@ function saveMedicationEditor() {
     id,
     name,
     sub: String(form.sub || '').trim(),
+    purpose: String(form.purpose || '').trim(),
     note: String(form.note || '').trim(),
     type,
     gapH,
@@ -4476,6 +4512,7 @@ function renderMedicationEditor() {
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: '11px' } },
       h('label', null, fieldLabel('Medication name'), formInput({ value: form.name, placeholder: 'Medication name', onInput: event => updateMedicationForm('name', event.target.value) })),
       h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
+      h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\u2019s for'), formInput({ value: form.purpose, placeholder: 'For example: settles nausea', onInput: event => updateMedicationForm('purpose', event.target.value) })),
       h('label', null, fieldLabel('Dosage options', 'Separate choices with commas.'), formInput({ value: form.dosesText, placeholder: '500 mg, 1000 mg', onInput: event => updateMedicationForm('dosesText', event.target.value) })),
       h('label', null, fieldLabel('Schedule type'), h('select', { value: form.type, onChange: event => updateMedicationForm('type', event.target.value, true), style: { width: '100%', minHeight: '43px', border: '1px solid rgba(212,104,138,0.22)', borderRadius: '11px', padding: '0 10px', fontSize: '16px', background: 'rgba(255,255,255,0.72)', color: '#342530' } }, h('option', { value: 'gap' }, 'As needed / gap-based'), h('option', { value: 'win' }, 'Scheduled window'))),
       scheduled ? h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('Schedule windows', 'Use 24-hour times, e.g. 08:00-12:00 Morning, 20:00-22:00 Evening.'), formInput({ value: form.windowsText, placeholder: '08:00-12:00 Morning, 20:00-22:00 Evening', onInput: event => updateMedicationForm('windowsText', event.target.value) })) : h('label', null, fieldLabel('Minimum gap hours'), formInput({ type: 'number', min: '0', step: '0.5', value: String(form.gapH), onInput: event => updateMedicationForm('gapH', event.target.value) })),
@@ -4545,7 +4582,8 @@ function renderMedicationManager(now) {
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
         h('div', { style: { minWidth: '0', flex: '1' } },
           h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, med.name),
-          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
+          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name'),
+          purposeOf(med) ? h('div', { 'data-med-purpose': med.id, style: { fontSize: '12.5px', color: '#5F4A56', fontWeight: '500', marginTop: '4px', lineHeight: '1.35' } }, purposeOf(med)) : null
         ),
         h('div', { style: { display: 'flex', gap: '5px', flexShrink: '0' } },
           h('button', { onClick: () => openMedicationEditor(med), 'aria-label': 'Edit ' + med.name, style: { width: '34px', height: '34px', borderRadius: '10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(170,83,117,0.10)', color: '#8E3D61', border: '1px solid rgba(170,83,117,0.18)' } }, appIcon('edit', 16)),
@@ -4581,6 +4619,8 @@ function renderMedicationManager(now) {
     renderMedsyncCard(),
     renderMedicationEditor(),
     homeOrderSection,
+    h('div', { 'data-med-disclaimer': 'true', style: { fontSize: '11.5px', color: '#7D6974', lineHeight: '1.4', margin: '2px 0 10px' } },
+      'The line under each medication is general information, not medical advice. Her care team is the answer for anything specific.'),
     h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)
   ];
 }
