@@ -26,3 +26,19 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | para-test.mjs | PASS | 16/16 checks passed |
 | reason-test.mjs | EXEMPT | v43.4 reason-patch verifier; 34/41 on v71 and on v72 (identical), so nothing in the current release moved it |
 | remove-group-test.mjs | PASS | 20/20 checks passed |
+| repaint-test.mjs | PASS | 17/17 checks passed |
+| scrolllock-test.mjs | PASS | 23/23 checks passed |
+| settings-test.mjs | PASS | 11/11 checks passed |
+| share-test.mjs | PASS | 9/9 checks passed |
+| swfresh-test.mjs | PASS | 7/7 checks passed |
+| syncguard-test.mjs | PASS | 5/5 checks passed |
+| takeall-test.mjs | PASS | 29/29 checks passed |
+| tour-test.mjs | EXEMPT | v44 tour-patch verifier: compares a patched build to an unpatched base; fails 'APP_VERSION equals base' on v71 and v72 alike |
+| treatment-window-test.mjs | PASS | 32/32 checks passed |
+| whatsnew-test.mjs | PASS | 30/30 checks passed |
+| cycle-merge-probe.mjs | PASS | 24/24 checks passed |
+| audit-v69-weightreport.mjs | PASS |   11 passed, 0 failed |
+| audit-v72-probe.mjs | PASS | 28/28 checks passed |
+| overflow-scan.mjs | SKIPPED | --quick run; the scan must be recorded separately in RENDER-v73.md |
+
+Failing or erroring suites: 0
