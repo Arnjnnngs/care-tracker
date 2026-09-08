@@ -149,8 +149,12 @@ rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWei
 # The app is stating what medications are for. That earns exactly one sentence saying what this text
 # is and is not -- said once, at the top of the list, not repeated under all thirteen cards.
 rep("""    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)""",
-    """    h('div', { 'data-med-disclaimer': 'true', style: { fontSize: '11.5px', color: '#7D6974', lineHeight: '1.4', margin: '2px 0 10px' } },
-      'The line under each medication is general information, not medical advice. Her care team is the answer for anything specific.'),
+    """    // ONLY when at least one medication actually carries a line. ChemoWell's audit found this
+    // notice printing above a list with no lines in it -- the app describing something that is not
+    // on the screen. Not reachable here today with thirteen defaults, but a caregiver can delete
+    // medications, and the sibling app proved the shape of the bug.
+    sortedMeds.some(m => purposeOf(m)) ? h('div', { 'data-med-disclaimer': 'true', style: { fontSize: '11.5px', color: '#7D6974', lineHeight: '1.4', margin: '2px 0 10px' } },
+      'The line under each medication is general information, not medical advice. Her care team is the answer for anything specific.') : null,
     h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)""")
 
 if "const APP_VERSION = '%s';" % FROM_V not in s: sys.exit('REFUSING: version stamp missing')

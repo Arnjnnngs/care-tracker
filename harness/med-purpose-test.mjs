@@ -126,10 +126,17 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   // FORM, not a dose -- and it hardcoded the literal phrase "around chemo", so "on chemo days",
   // "at bedtime", "before meals" and "when needed" all walked through. Dosage forms are allowed;
   // WHEN and HOW MUCH are not.
-  const SCHEDULEY = /\b(daily|hourly|nightly|weekly|every \w+|twice|once a|per day|a day|as needed|when needed|at bedtime|before bed|before meals|after meals|with food|on an empty stomach|in the morning|in the evening|on chemo days|around chemo|with chemo|dose|doses|mg|ml|mcg)\b/i;
+  const SCHEDULEY = /\b(daily|hourly|nightly|weekly|every \w+|twice|once a|per day|a day|as needed|when needed|at bedtime|before bed|before meals|after meals|with food|on an empty stomach|in the morning|in the evening|on chemo days|around chemo|with chemo|after chemo|before chemo|dose|doses|mg|ml|mcg)\b/i;
   const scheduley = ids.filter(k => SCHEDULEY.test(TABLE[k]));
   t('NO entry states a schedule or a dose in words either', scheduley.length === 0,
     scheduley.map(k => k + ': ' + TABLE[k]).join(' | '));
+  // NO FEVER CLAUSE, EVER. Removing them was this release's safety decision -- a fever during chemo
+  // is a thing to REPORT, not to suppress -- and nothing was holding it. The patch header says a
+  // later refresh to federal label wording is planned, and federal wording says "reduces fever", so
+  // this guard is what stops that refresh quietly undoing the decision. Raised by ChemoWell's audit.
+  const fevery = ids.filter(k => /fever|antipyretic/i.test(TABLE[k]));
+  t('NO entry tells anyone a medication brings down a fever', fevery.length === 0,
+    fevery.map(k => k + ': ' + TABLE[k]).join(' | '));
   const tooLong = ids.filter(k => TABLE[k].length > 110);
   t('every entry is short enough to read on a phone', tooLong.length === 0, tooLong.join(', '));
 }
