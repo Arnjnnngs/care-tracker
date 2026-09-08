@@ -195,6 +195,13 @@ console.log('\n3. THE DEFECT: removing the corrected weight must not bring 156.2
   const all = await entries();
   t('a tombstone was APPENDED instead', all.length === before + 1 && all.slice(-1)[0].cancelled === true && all.slice(-1)[0].weightId === 'w_group_1',
     all.length + ' entries, newest ' + JSON.stringify(all.slice(-1)[0] || {}).slice(0, 90));
+  // The WEIGHT stamp guard, asserted directly — the mirror of the paracentesis one in section 4.
+  // Without it the weight guard was only ever tested through its effect on a screen, which the
+  // delta audit pointed out as an asymmetry: the weight mutant scored 20/21 where the para mutant
+  // scored 19/21, and the missing point was this assertion.
+  const wTomb = all.slice(-1)[0];
+  t('the weight tombstone is stamped strictly newer than the record it removes', wTomb && wTomb.loggedAt > AHEAD,
+    wTomb ? ('loggedAt=' + wTomb.loggedAt + ' vs correction ' + AHEAD) : 'no tombstone');
   await openReport('Weight');
   const rows = await page.evaluate(() => [...document.querySelectorAll('[data-weight-row]')].length);
   t('the weigh-in is GONE from the Weight report — the old 156.2 did not take its place', rows === 0, rows + ' row(s) still shown');
