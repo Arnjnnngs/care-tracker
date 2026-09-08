@@ -1073,7 +1073,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v72';
+const APP_VERSION = 'v73';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1092,6 +1092,12 @@ const APP_VERSION = 'v72';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
+  { v: 'v73', date: 'Sep 8, 2026', title: 'Removing a corrected weight no longer brings the old number back',
+    points: [
+      'If you corrected a weight or a paracentesis and then removed it from Today or History, the reading you had corrected could come back in its place. Remove now clears the whole reading, the same way the Weight and Paracentesis screens already did.',
+      'A row that has already been replaced by a correction no longer offers a Remove button \u2014 there is nothing left on it to remove.',
+      'Removing a paracentesis could quietly do nothing when two phones\u2019 clocks disagreed. It always takes effect now.'
+    ] },
   { v: 'v72', date: 'Sep 7, 2026', title: 'A changed answer now stays changed',
     points: [
       'Updating a bowel movement answer from the Bowel Issue Active banner now sticks, even when the day it is about is more than two days old. Before, it could fail with a message blaming your connection, and the old answer stayed.',
@@ -3557,14 +3563,30 @@ function bypasses48h(medId) { return BYPASS_48H_IDS.has(medId) || (medId && medI
 // Append-only record types remove by TOMBSTONE, never by delete: a delete is refused by the rules
 // past 48 hours, and deleting the newest document of a corrected group would resurrect the one it
 // superseded. Everything else (doses, temperatures) keeps the plain delete inside its 48-hour window.
+// The group key each resolver uses, so a row rendered raw can be matched to its live group.
+function weightKey(d) { return (typeof d.weightId === 'string' && d.weightId) ? d.weightId : ('doc:' + String(d.id)); }
+function paraKey(d) { return (typeof d.paraId === 'string' && d.paraId) ? d.paraId : ('doc:' + String(d.id)); }
 async function removeEntryFor(e) {
   if (e.medId === 'bowel_movement' || e.medId === 'appetite') return removeDailyAnswer(e);
   if (e.medId && e.medId.indexOf('symptom_') === 0) return removeSymptom(symptomKey(e));
+  // A CORRECTED reading's row IS the correction. Deleting that one document hands the group back to
+  // the wrong number it replaced -- inside 48h the delete succeeds, so this really happened. The
+  // tombstone removes the whole group, which is what the report screens' Remove has always done.
+  if (e.medId === 'weight') {
+    const gid = weightKey(e);
+    if (weightResolved().some(x => x.weightId === gid)) return removeWeightReading(gid);
+  }
+  if (e.medId === PARA_MED_ID) {
+    const gid = paraKey(e);
+    if (paracentesisResolved().some(x => x.paraId === gid)) return removeParacentesis(gid);
+  }
+  // Not in the resolved set (an unusable value the resolver skips, a corrupt document): fall through
+  // rather than become a button that does nothing. Inside 48h this delete still works.
   return removeEntry(e.id);
 }
 function removeBtn(e) {
   if (!bypasses48h(e.medId) && state.now - e.ts > 48 * 3600000) return null; // entries older than 48h are permanent history
-  if (e.cancelled || dailySuperseded(e) || symptomSuperseded(e) || paraSuperseded(e)) return null; // a row that no longer stands has nothing to remove
+  if (e.cancelled || dailySuperseded(e) || symptomSuperseded(e) || paraSuperseded(e) || weightSuperseded(e)) return null; // a row that no longer stands has nothing to remove
   if (state.confirmRemove === e.id) {
     return h('div', { style: { display: 'flex', gap: '6px', alignItems: 'center', flexShrink: '0' } },
       h('button', { onClick: () => { setState({ confirmRemove: null }); removeEntryFor(e); }, style: { color: '#fff', background: '#C0453B', fontSize: '12.5px', fontWeight: '700', padding: '8px 12px', borderRadius: '9px' } }, 'Delete'),
@@ -5219,7 +5241,7 @@ async function removeParacentesis(paraId) {
   if (!p) return;
   try {
     await addEntryDB({ medId: PARA_MED_ID, paraId: paraId, liters: p.liters, dose: 'Paracentesis removed',
-                       mg: 0, ts: p.ts, cancelled: true, loggedAt: Date.now() });
+                       mg: 0, ts: p.ts, cancelled: true, loggedAt: Math.max(Date.now(), (p.loggedAt || p.ts || 0) + 1) });
     setState({ confirmRemovePara: null });
     setToast('Paracentesis removed');
   } catch (e) {
