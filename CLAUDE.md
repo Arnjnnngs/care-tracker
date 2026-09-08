@@ -87,6 +87,40 @@ these on a tablet.** The correct response is this: the rule stands on its own, e
 read, and the draft sits in `outputs/` for any future session that CAN install it without involving
 him. Never turn a blocked mechanical guard into a chore for Aaron.
 
+## Rule 0.6 — DO NOT REPORT UNTIL IT IS DONE. (2026-09-08, Aaron, EXPLICIT, effective immediately)
+
+> *"I'm so tired of you stopping when you should be working. You WILL NOT give me a recap of what's
+> going on UNLESS I need to approve something OR until you are COMPLETE. You are giving me an update
+> when you should still be fixing things and you are treating it as something that needs my prompt
+> to move forward."*
+
+**This supersedes the checkpoint guidance in Rule 6 and in "Progress updates" below, wherever the two
+disagree.** Those were written to cure long silences during agent runs, and they were then used to
+justify a message after every single step — which turned each one into a stopping point that waited
+for a prompt that was never needed.
+
+**There are exactly TWO reasons to send Aaron a message:**
+
+1. **He has to approve or decide something**, named in plain words.
+2. **The work is COMPLETE** — built, verified, pushed, live, `python3 pm.py` not exit 1, and the
+   done / outstanding list included.
+
+**That is the whole list.** Not "a background job is running" — start it and keep working. Not "the
+audit came back and I'm fixing it" — fix it. Not "here is what I found" — fix it and say so at the
+end. Not a screenshot mid-build. If a check comes back red, the next thing that happens is the fix,
+not a paragraph about the fix.
+
+**The tell.** If the message ends with anything resembling *"running in the background"*,
+*"now starting X"*, or *"next I will"*, it should not have been sent. Those sentences describe work
+that could have been done in the same turn instead of written about.
+
+**Long is fine.** A turn that runs for an hour, launches four agents and ships two releases is
+correct. A turn that runs for four minutes and ends with a status paragraph is the failure.
+
+**Files are the exception, and only when they are the deliverable.** A screenshot of a finished
+change is a thing he asked for; `SendUserFile` is delivery, not a recap. Never pair it with a
+progress note.
+
 ## Rule 1 — Deploying: SETTLED 2026-08-24. Read this before touching a browser.
 
 **There are two ways to get code onto GitHub from a Claude session, and the good one is already
@@ -491,6 +525,11 @@ scrollable rather than quietly skipped. An exemption nobody wrote down is indist
 an oversight.
 
 ## Rule 6 — Communication is part of the deliverable
+
+**READ RULE 0.6 FIRST — it supersedes this section wherever the two disagree.** A START message is
+not a licence to stop; the only two reasons to send anything are an approval Aaron must give, or
+completion. The rules below are about the CONTENT of a message once one is due, not about how often
+one is due.
 - START and FINISH messages for every work block, stating dispatch state (ACTIVE/IDLE).
 - Task sheet re-sent after every push, unprompted.
 - A defect is surfaced the moment it is found, never saved for the summary.
@@ -532,6 +571,11 @@ Firebase Firestore (fuelforge-7c132) for data, GitHub Pages for hosting.
 
 Aaron has had to ask for this repeatedly. It is now a rule, and it applies to every session, every
 agent, and every task in this project.
+
+**SUPERSEDED IN PART BY RULE 0.6 (2026-09-08).** The rule below cured multi-hour silences during
+agent runs; it was then used to justify a message after every step, which made every step a stopping
+point. Dispatch and the task list carry the progress now. Aaron gets a message when he must decide
+something, or when the work is complete. What follows still governs what a message CONTAINS.
 
 **Never go more than ~10 minutes of wall-clock work without telling Aaron something.** Long silences
 are the single most common complaint on this project. He is a non-technical founder who cannot see
