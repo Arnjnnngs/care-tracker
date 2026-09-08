@@ -26,7 +26,9 @@ Then run `python3 pm.py` before you touch anything.
    exactly two reasons to send me a message: I have to approve or decide something, or the work is
    complete. Not "a job is running" — start it and keep working. Not "the audit found something" —
    fix it and tell me after. A turn that runs an hour and ships two releases is right; a short one
-   ending in a status paragraph is the failure. See `CLAUDE.md` Rule 0.6.
+   ending in a status paragraph is the failure. **Work end to end**: from the ask to live, including
+   the checks, the fixes the checks find, the audit, the docs and the port to the other app. See
+   `CLAUDE.md` Rule 0.6.
 2. **Fix things, do not hand them to me.** If something is wrong, correct it and tell me afterwards.
    Cost is my decision — anything medium or large, give me the size and wait. Correctness is not my
    decision.

@@ -99,6 +99,13 @@ disagree.** Those were written to cure long silences during agent runs, and they
 justify a message after every single step — which turned each one into a stopping point that waited
 for a prompt that was never needed.
 
+**WORK END TO END.** Aaron, in the same breath: *"include that you are to work end to end! the only
+exceptions are the ones I mentioned."* A task is not a series of steps to be reported between — it is
+one piece of work that starts when he asks and finishes when it is live. Take it from the first line
+to the last: build it, check it, fix what the checks find, audit it, ship it, update the docs and the
+lists, and port it to the sibling app if it belongs there. The exceptions below are the ONLY places
+that sequence may be interrupted.
+
 **There are exactly TWO reasons to send Aaron a message:**
 
 1. **He has to approve or decide something**, named in plain words.
