@@ -1,6 +1,6 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-08 · **Live:** v73 (`705121a`) · **v74 in final checks** · **Dispatch:** ACTIVE
+**Updated:** 2026-09-08 · **Live:** v73 · **v74, app-v72 and beta-v61 built, verified and pushed to the working branch — going live on main is Aaron's call** · **Dispatch:** ACTIVE
 
 Split by WHO the next step belongs to. If MINE has an item, the turn does not end.
 
@@ -14,6 +14,9 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
 - [ ] **Enhancer proposals** (`outputs/ENHANCER-PASS-05.md`): archived medications cannot be seen or
       restored anywhere in either app (S–M, recommended first); add/correct controls on the Bowel
       Movement and Appetite reports (S each); History says "Superseded" where "Removed" reads better (S).
+- [ ] **The one thing that stops these going live: your go-ahead to merge to `main`.** All three are
+      built, verified and pushed to the working branch; `main` is the patient's live app and nothing
+      reaches it without you saying so.
 - [ ] **Phone checks, when convenient.** Open Meds and read the new lines. Correct a weight, remove
       it, confirm the old number does not come back. Update a bowel answer from the banner for a day
       three or more days old and confirm it sticks after a reload.
@@ -26,8 +29,9 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
 - [x] **v73** live — removing a corrected weight or paracentesis no longer restores the old number.
 - [x] **v74 built** — every medication says what it is for. Two audit blocks fixed.
 - [x] **ChemoWell app-v72 and beta-v61 built** — same feature, keyed by name.
-- [ ] Ship v74 to main once the sweep finishes.
-- [ ] Ship ChemoWell app-v72 once its delta audit clears the gate.
+- [x] **v74, app-v72 and beta-v61 verified and pushed.** Four adversarial audit passes; the last two
+      found a guard that could not fail and a copy of it in the beta that had never been able to fail.
+- [x] **Every check falsified** — 15 mutants across the three apps, each red on the intended check only.
 
 ## QUEUED — built in order without re-asking
 
@@ -36,6 +40,10 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
 3. Add / correct controls on the Bowel Movement and Appetite reports (S each).
 4. The four v43-era test suites — rebase or retire (S–M).
 5. Android emulator smoke job in GitHub Actions (M).
+6. ChemoWell's table has no Neulasta, Reglan or Phenergan and misses the brand halves of a dozen
+   drugs; a combination product gets its main ingredient's line (Enhancer G and H, S each). New
+   medical claims, so they get their own release and their own read — never bolted onto one that
+   has already been audited.
 
 ## DONE — live on Brandi's phone
 

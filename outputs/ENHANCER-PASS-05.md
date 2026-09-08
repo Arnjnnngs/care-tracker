@@ -52,3 +52,17 @@ rejects digits and scheduling words alike.
 | D | "Change answer" on the Bowel Movement and Appetite report rows | S each |
 | E | "Log for another day" on both reports | S each |
 | F | History labels a removed reading's rows "Superseded" where "Removed" would read better | S |
+
+---
+
+## Added during the release, from what the auditor found (2026-09-08)
+
+Both are about the medication table rather than the screen, and both were deliberately NOT built
+inside this release. **Adding table entries after the audit is exactly how the Tylenol Liquid block
+happened** — an entry committed after the fix, past the reviewer, naming a dosage form in the release
+that had just forbidden them. New medical claims get their own read.
+
+| # | Change | Why it earns a place | Size |
+|---|---|---|---|
+| **G** | **The ChemoWell table has no Neulasta, no Reglan / metoclopramide and no Phenergan / promethazine**, and it is missing the brand halves of about a dozen drugs it already covers by generic name. A caregiver who types the brand sees no line at all. | S | Recommended |
+| **H** | **A combination product gets its main ingredient's line.** `Tylenol PM` with the generic field filled in as `Acetaminophen` renders *"Eases pain."* — true, and incomplete: it also contains a sedating antihistamine. The generic fallback earns its place for the common case, so this is a table problem (name the combination products) rather than a lookup problem. | S | With G |
