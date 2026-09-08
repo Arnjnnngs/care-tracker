@@ -1780,14 +1780,20 @@ function fmtCountdown(ms) {
 // laxative": senna is a stimulant laxative, and "gentle" was an editorial claim rather than a fact.
 // Dexamethasone said "given around chemo", which is a schedule written in words and slipped past a
 // guard that only looks for digits.
+// LIDOCAINE said "a numbing CREAM ... on the skin". True here -- this app's lidocaine is defined as
+// the topical cream and the card's own subtitle says so -- but the form and the body site are
+// already on the card, and ChemoWell's audit blocked its own copy of this line because there the
+// same name may be the viscous rinse for mouth sores or a patch. One wording across all three apps,
+// and the guard stays absolute rather than carrying an exemption that would have to be re-argued
+// every time somebody edits the table.
 const MED_PURPOSE = {
   'dexamethasone': 'A steroid that calms nausea, swelling and allergic reactions.',
   'tylenol': 'Eases pain.',
-  'tylenol-liquid': 'Eases pain. This is Tylenol in liquid form.',
+  'tylenol-liquid': 'Eases pain.',
   'zofran': 'Prevents and settles nausea and vomiting.',
   'compazine': 'Settles nausea and vomiting.',
   'morphine': 'A strong pain reliever for moderate to severe pain.',
-  'lidocaine': 'A numbing cream for soreness in one spot on the skin.',
+  'lidocaine': 'Numbs the part of the body it is used on.',
   'protonix': 'Lowers stomach acid, which protects the stomach and eases reflux.',
   'buspirone': 'Eases anxiety.',
   'paroxetine': 'Treats depression, and is also used for anxiety.',
