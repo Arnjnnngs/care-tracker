@@ -185,6 +185,13 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   // plurals, the inflections and IV, all of which walked through the previous list.
   // "Numbs the skin" now PASSES, deliberately. It says what the drug does. Whether it is TRUE of a
   // particular medication is a question for a reader, and no list of words was ever going to answer it.
+  // TWO WORDS ARE LEFT OUT ON PURPOSE, SAID OUT LOUD because an exemption nobody wrote down is
+  // indistinguishable from an oversight. `oral` would reject "Treats oral thrush", a condition
+  // rather than a route, and nystatin is a supportive-care drug this table may well gain.
+  // `dissolve` would reject "Dissolves clots", which is what a drug does rather than how it is
+  // taken. Both mean this list lets "An oral steroid" and "Dissolves on the tongue" through --
+  // "under the tongue" is caught, "on the tongue" is not. That is the accepted cost of a list
+  // that must not reject true descriptions, and it is why the reader, not the list, is the gate.
   const FORMY = /\b(pills?|tablets?|capsules?|caplets?|troches?|lozenges?|liquids?|syrups?|elixirs?|powders?|sachets?|patches|patch|creams?|ointments?|gels?|lotions?|rinses?|mouthwash|gargle|suppositor(?:y|ies)|enemas?|sprays?|sprayed|inhalers?|inhaled|nebuli[sz]ed|injections?|injected|inject|shots?|infusions?|infused|drips?|intravenous(?:ly)?|iv|subcutaneous(?:ly)?|intramuscular(?:ly)?|sublingual(?:ly)?|transdermal|intranasal|swallow(?:ed)?|chew(?:able)?|topical(?:ly)?|orally|by mouth|rub|rubs|rubbed|applied|apply|smear|dab|rectally|on the skin|onto the skin|into the skin|under the skin|under the tongue|under your tongue|into a vein|through a vein|into a muscle|in a drip|through a drip)\b/i;
   const formy = ids.filter(k => FORMY.test(TABLE[k]));
   t('NO entry uses a word from the dosage-form / route list', formy.length === 0,
