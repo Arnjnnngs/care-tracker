@@ -65,21 +65,24 @@ const t = (name, cond, detail) => {
 // like entries, because the next thing this parser cannot read will not be a quote style.
 const tableMatch = html.match(/const MED_PURPOSE = \{([\s\S]*?)\n\};/);
 const TABLE = {};
-const ENTRY_LINE = /^\s*'[^'\n]+'\s*:\s*(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")\s*,?\s*$/;
 const unreadable = [];
+// ONE SOURCE STRING FOR BOTH HALVES. Pass 6 replaced a count with an accounting check, and pass 7
+// got past it with `'morphine' : '...'` -- ONE SPACE before the colon, which the accounting regex
+// accepted and the parser could not read: a full green board over "Brings down a fever. Take 15 mg
+// by mouth every 4 hours as needed." Two patterns written by hand to agree with each other will not
+// agree. The pair below is built from PAIR_SRC, so a line the accounting accepts is BY CONSTRUCTION
+// a line the parser reads, and no future edit can drift one out of step with the other.
+const PAIR_SRC = "'([^'\\n]+)':\\s*(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")";
+const PAIR_RE = new RegExp(PAIR_SRC, 'g');
+// a trailing // comment after a real entry, and a /* */ line, were two false REDs in the first
+// version -- and a check that goes red on something correct teaches people to stop reading it.
+const ENTRY_LINE = new RegExp('^\\s*' + PAIR_SRC + '\\s*,?\\s*(?:\\/\\/.*)?$');
 if (tableMatch) {
-  for (const m of tableMatch[1].matchAll(/'([^'\n]+)':\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g))
+  for (const m of tableMatch[1].matchAll(PAIR_RE))
     TABLE[m[1]] = m[2] !== undefined ? m[2] : m[3];
-  // PASS 6: COUNTING WAS THE WRONG SHAPE. The previous version compared what the parser read against
-  // the number of lines that LOOKED like entries -- and a value wrapped across two lines with `+` is
-  // read by neither, so the two agreed at 42 and 42 while the app rendered the whole sentence. Both
-  // halves were blind in the same direction, which is exactly what a cross-check must not be.
-  // So: every line inside the table must be something this suite can ACCOUNT FOR -- one complete
-  // entry, a comment, or blank. Anything else is red, whatever it turns out to be. That covers the
-  // continuation line, the template literal, two entries on one line, and the next trick as well.
   for (const line of tableMatch[1].split('\n')) {
     const l = line.trim();
-    if (!l || l.startsWith('//')) continue;
+    if (!l || l.startsWith('//') || l.startsWith('/*') || l.startsWith('*')) continue;
     if (!ENTRY_LINE.test(line)) unreadable.push(l.slice(0, 70));
   }
 }
@@ -493,6 +496,13 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
   // and the bottom tab bar stretched with it, so the Meds tab you would use to go back and fix the
   // name was no longer on the screen. The paste that causes the problem moves the only route to the
   // fix out of reach, which is what makes this one worth a release rather than a note.
+  // PASS 7: THE FIRST VERSION OF THIS CASE NEVER REACHED HOME. It clicked a tab called "Today"; the
+  // tab is labelled "Home", so the click returned false and every measurement below was taken on the
+  // Meds screen. On a build where Home measured 900px with the nav stretched to match -- the block
+  // above, unfixed -- it printed PASS. It was green because the fix happened to work, not because
+  // anything looked. So each step is asserted now: the navigation, the nav bar (the nav is what
+  // carried the Meds tab off the screen), and the restore, whose silent failure used to surface
+  // later as a misleading persistence failure on a different check.
   {
     const BIGNAME = 'ONDANSETRONHYDROCHLORIDEDIHYDRATEORALLYDISINTEGRATINGTABLETEIGHTMILLIGRAM';
     const openBy = (label) => page.evaluate((l) => {
@@ -505,25 +515,43 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
     const named = await setField('medication name', BIGNAME);
     await clickText(/^Save changes$/);
     await page.waitForTimeout(800);
-    await clickText(/^Today$/);
-    await page.waitForTimeout(800);
+    // BY aria-label FIRST, then by text. care-tracker's tab reads 'Home' as its label;
+    // ChemoWell's carries the word in an aria-label with an icon beside it. A selector that
+    // works in one app and silently returns false in the other is how the first version of
+    // this case measured the wrong screen and printed PASS.
+    const wentHome = await page.evaluate(() => {
+      const bs = [...document.querySelectorAll('button')];
+      const b = bs.find(x => (x.getAttribute('aria-label') || '') === 'Home')
+        || bs.find(x => (x.innerText || '').trim() === 'Home');
+      if (b) { b.click(); return true; } return false;
+    });
+    await page.waitForTimeout(900);
+    t('the Home case actually reaches Home', wentHome, '');
     await page.setViewportSize({ width: VW, height: 800 });
     await page.waitForTimeout(500);
     const home = await page.evaluate(() => ({
       doc: document.documentElement.scrollWidth,
-      nav: (document.querySelector('nav') || {}).scrollWidth || -1
+      nav: (document.querySelector('nav') || { scrollWidth: -1 }).scrollWidth,
+      onScreen: [...document.querySelectorAll('nav button')].filter(b => b.getBoundingClientRect().right <= window.innerWidth + 1).length,
+      tabs: document.querySelectorAll('nav button').length
     }));
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
     t('HOME does not scroll sideways at ' + VW + 'px with a pasted medication name',
-      named && home.doc <= VW + 1, 'name=' + (named ? 'set' : 'MISSING') + ' page=' + home.doc + 'px nav=' + home.nav + 'px');
+      wentHome && named && home.doc <= VW + 1, 'page=' + home.doc + 'px');
+    t('every bottom tab is still on the screen at ' + VW + 'px',
+      wentHome && home.tabs > 0 && home.onScreen === home.tabs,
+      home.onScreen + ' of ' + home.tabs + ' tabs reachable, nav=' + home.nav + 'px');
     // put the name back, or every later section is looking at a card it does not recognise
     await goMeds();
-    await openBy(BIGNAME);
+    const reopened = await openBy(BIGNAME);
     await page.waitForTimeout(400);
     await setField('medication name', 'Zofran');
     await clickText(/^Save changes$/);
     await page.waitForTimeout(700);
+    const restored = await page.evaluate(() =>
+      [...document.querySelectorAll('button')].some(b => (b.getAttribute('aria-label') || '') === 'Edit Zofran'));
+    t('the medication name is put back before anything else runs', reopened && restored, '');
   }
 
   await openZofran(); await page.waitForTimeout(400);

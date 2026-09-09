@@ -144,19 +144,51 @@ rep("""      h('label', null, fieldLabel('Generic name'), formInput({ value: for
     """      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
       h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: (purposeOf({ id: state.medEditor && state.medEditor.sourceId }) || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
 
-# ---- the wrapping rule, ONCE, FOR THE WHOLE APP ------------------------------------------------
-# Pass 4 put it on the purpose line. Pass 5 found the note and the dose summary render in a different
-# container and moved it to the medication card. Pass 6 found HOME: paste a long pharmacy name into a
-# medication's name and Home reaches 1019px on a 320px phone -- and the bottom tab bar stretches with
-# it, so the Meds tab you would use to go back and fix the name is no longer on the screen. The paste
-# that causes the problem moves the only route to the fix out of reach.
-# Three rounds of putting this property on whichever container the last audit named is three rounds
-# of fixing an instance. It goes on `*` now, in the app's own reset, where every screen inherits it --
-# Home, Meds, Reports, History, and any screen written later. `overflow-wrap` cannot change a layout
-# except to stop a long unbroken word from pushing the page sideways, and the 140-combination overflow
-# scan is the evidence that nothing else moved.
-rep("""*{box-sizing:border-box;margin:0;padding:0;}""",
-    """*{box-sizing:border-box;margin:0;padding:0;overflow-wrap:anywhere;}""")
+# ---- Home's quick-log card: a pasted name must not carry the tab bar off the screen ------------
+# PASS 6 measured it and PASS 7 proved the first two fixes did not reach it. Paste a long pharmacy
+# name into a medication's name and Home reached 1019px on a 320px phone -- and the BOTTOM TAB BAR
+# stretched with it, so the Meds tab a caregiver would use to go back and undo the paste was no
+# longer on the screen. The paste that causes the problem removes the only route to the fix.
+# It is pre-existing -- app-v71 measures the same -- and this release is deliberately widened to take
+# it, because "she cannot navigate back" is not a defect to queue behind a copy change.
+# TWO CAUSES, and overflow-wrap could reach NEITHER of them:
+#   * the name sits under `white-space: nowrap`, which disables wrapping outright, and it carried no
+#     overflow handling to truncate instead -- so it simply grew.
+#   * the dose buttons are `flex: 0 0 auto` with the medication name inside them, so they refuse to
+#     shrink and had no max width to stop at.
+# That is why the global rule of pass 6 "worked" on Home while breaking two other screens: it was
+# never the property that fixed this. Wrapping the name and bounding the buttons is.
+rep("""          h('div', { style: { fontSize: '15.5px', fontWeight: '800', letterSpacing: '-0.01em', color: '#342530', whiteSpace: 'nowrap' } }, med.name),""",
+    """          h('div', { style: { fontSize: '15.5px', fontWeight: '800', letterSpacing: '-0.01em', color: '#342530', overflowWrap: 'anywhere' } }, med.name),""")
+rep("""flex: '0 0 auto', minWidth: '0', minHeight: '32px'""",
+    """flex: '0 0 auto', minWidth: '0', maxWidth: '100%', minHeight: '32px'""", 3)
+# ---- the wrapping rule, ON EVERY PLACE THE CAREGIVER'S OWN TEXT IS RENDERED --------------------
+# Four rounds of audit went at this one property and the history is the argument for where it lands.
+#   pass 4 put it on the purpose line          -> the note and the dose labels still overflowed
+#   pass 5 put it on the medication card       -> Home still overflowed, and a long pasted name
+#                                                 stretched the bottom tab bar off the screen, so the
+#                                                 Meds tab needed to undo the paste was unreachable
+#   pass 6 put it on `*` in the CSS reset      -> BROKE TWO SCREENS. overflow-wrap:anywhere changes
+#                                                 MIN-CONTENT SIZING, so flex items shrank to about
+#                                                 one character: Home's hospital-stay banner went
+#                                                 from 4 lines to 32 with words split mid-syllable,
+#                                                 and the In-Patient heading rendered as
+#                                                 "IN-PATIEN / T / STATU / S". The overflow scan
+#                                                 called it CLEAN throughout, because the scan
+#                                                 measures WIDTH and that damage is vertical.
+# The property that fixes Home is the one that breaks those screens, because `*` also reaches the
+# app's OWN fixed labels. So it is scoped again -- but to the CLASS rather than to whichever
+# container the last audit named: the three places that render a string a caregiver typed or pasted.
+# The medication card on Meds (name, generic name, purpose, note, dose summary), the quick-log cards
+# on Home, and the grouped-medications card. Nothing else in the app renders caregiver-entered text.
+rep("""    return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },""",
+    """    return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', overflowWrap: 'anywhere', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },""")
+rep("""    quickLogOpen ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '8px', marginTop: '8px' } }, ...medCards) : null""",
+    """    quickLogOpen ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '8px', marginTop: '8px', overflowWrap: 'anywhere' } }, ...medCards) : null""")
+rep("""  return h('section', null,
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' } },""",
+    """  return h('section', { style: { overflowWrap: 'anywhere' } },
+    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' } },""")
 # ---- 3. the Meds screen shows it under the generic name ---------------------------------------
 rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
         ),""",

@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box;margin:0;padding:0;overflow-wrap:anywhere;}
+*{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{-webkit-font-smoothing:antialiased;background:#FFF0F3;font-family:'Hanken Grotesk',system-ui,sans-serif;color:#342530;}
 button{-webkit-tap-highlight-color:transparent;font-family:inherit;cursor:pointer;border:none;background:none;}
@@ -2911,7 +2911,7 @@ function renderBottomNav() {
 // (Buspirone/Paroxetine in the morning, Iron/Compazine in the evening).
 function renderGroupedMedsCard(title, meds, now) {
   const dueMeds = meds.filter(m => { const s = status(m); return !s.locked; });
-  return h('section', null,
+  return h('section', { style: { overflowWrap: 'anywhere' } },
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' } },
       h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, title),
       // 'Take all' was hidden during a stay for the same reason the cards were replaced, and it
@@ -4187,17 +4187,17 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       const amt = med.ceilingUnit ? (d.pills || 0) : (d.mg || 0);
       return amt > 0 && amt > (dc.max - dc.used);
     };
-    const blockedBtn = (d) => h('button', { onClick: () => setToast('Exceeds ' + (med.rollingCeilingH ? 'the ' : 'today’s ') + dc.label + ' limit — ' + (med.ceilingUnit ? (dc.max - dc.used) + ' ' + dc.unit : (dc.max - dc.used).toLocaleString() + ' mg') + ' left'), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 12px', borderRadius: '999px', background: 'rgba(255,255,255,0.35)', border: '1px dashed rgba(138,100,121,0.35)', color: '#765B69', fontSize: '12px', fontWeight: '600', cursor: 'not-allowed' } }, (d.single ? ('Log ' + med.name) : d.label) + ' · over limit');
+    const blockedBtn = (d) => h('button', { onClick: () => setToast('Exceeds ' + (med.rollingCeilingH ? 'the ' : 'today’s ') + dc.label + ' limit — ' + (med.ceilingUnit ? (dc.max - dc.used) + ' ' + dc.unit : (dc.max - dc.used).toLocaleString() + ' mg') + ' left'), style: { flex: '0 0 auto', minWidth: '0', maxWidth: '100%', minHeight: '32px', padding: '0 12px', borderRadius: '999px', background: 'rgba(255,255,255,0.35)', border: '1px dashed rgba(138,100,121,0.35)', color: '#765B69', fontSize: '12px', fontWeight: '600', cursor: 'not-allowed' } }, (d.single ? ('Log ' + med.name) : d.label) + ' · over limit');
 
     // Buttons
     let buttonArea;
     if (!locked) {
       buttonArea = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 13px', borderRadius: '999px', background: '#AA5375', color: '#fff', fontSize: '12.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, d.single ? ('Log ' + med.name) : d.label))
+        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => logMed(med.id, d.single ? null : d), style: { flex: '0 0 auto', minWidth: '0', maxWidth: '100%', minHeight: '32px', padding: '0 13px', borderRadius: '999px', background: '#AA5375', color: '#fff', fontSize: '12.5px', fontWeight: '700', boxShadow: 'inset 0 -2px 0 rgba(150,60,90,0.35)' } }, d.single ? ('Log ' + med.name) : d.label))
       );
     } else if (!isOverriding) {
       buttonArea = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => setState({ override: { medId: med.id } }), style: { flex: '0 0 auto', minWidth: '0', minHeight: '32px', padding: '0 13px', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '999px', background: 'rgba(255,255,255,0.42)', color: '#624A59', fontSize: '12.5px', fontWeight: '600' } }, d.single ? ('Log ' + med.name) : d.label))
+        ...doseList.map(d => doseBlocked(d) ? blockedBtn(d) : h('button', { onClick: () => setState({ override: { medId: med.id } }), style: { flex: '0 0 auto', minWidth: '0', maxWidth: '100%', minHeight: '32px', padding: '0 13px', border: '1px solid rgba(212,104,138,0.24)', borderRadius: '999px', background: 'rgba(255,255,255,0.42)', color: '#624A59', fontSize: '12.5px', fontWeight: '600' } }, d.single ? ('Log ' + med.name) : d.label))
       );
     } else {
       buttonArea = h('div', { style: { background: 'rgba(192,69,59,0.12)', border: '1px solid rgba(192,69,59,0.25)', borderRadius: '13px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '7px' } },
@@ -4216,7 +4216,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       // Header row
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' } },
         h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '4px', minWidth: '0', flex: '1', flexWrap: 'wrap' } },
-          h('div', { style: { fontSize: '15.5px', fontWeight: '800', letterSpacing: '-0.01em', color: '#342530', whiteSpace: 'nowrap' } }, med.name),
+          h('div', { style: { fontSize: '15.5px', fontWeight: '800', letterSpacing: '-0.01em', color: '#342530', overflowWrap: 'anywhere' } }, med.name),
           // v60: was whiteSpace 'nowrap'. The generic-name line is the longest text on a Quick Log
           // card -- "Acetaminophen \u00b7 Oral suspension" is 218px -- and nowrap held it on one line, so it
           // ran 57px past the card at 320px, 17px at 360px and 2px at 375px. Wrapped rather than
@@ -4261,7 +4261,7 @@ function renderToday(now, mg, pct, tyColor, ceiling) {
       h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479' } }, 'Quick log' + (quickLogOpen ? '' : ' (' + medCards.length + ')')),
       h('span', { style: { fontSize: '10px', color: '#8A6479' } }, quickLogOpen ? '▲' : '▼')
     ),
-    quickLogOpen ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '8px', marginTop: '8px' } }, ...medCards) : null
+    quickLogOpen ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '8px', marginTop: '8px', overflowWrap: 'anywhere' } }, ...medCards) : null
   ));
 
   // Morning meds — grouped card (Buspirone, Paroxetine — 2h after Protonix's morning dose)
@@ -4600,7 +4600,7 @@ function renderMedicationManager(now) {
   ) : null;
   const cards = sortedMeds.map(med => {
     const deleting = state.confirmDeleteMed === med.id;
-    return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
+    return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', overflowWrap: 'anywhere', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
         h('div', { style: { minWidth: '0', flex: '1' } },
           h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, med.name),
