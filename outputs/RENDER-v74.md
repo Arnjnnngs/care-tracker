@@ -10,8 +10,19 @@ the side with it — so the **Meds** tab a caregiver would use to go back and fi
 longer on the screen. The overflow scan could not see it, and neither could the five new paste checks
 that had just been added, because **the scan measures the app's OWN text and the new checks only ever
 visited the Meds screen.** The wrapping rule had been put on three different containers in three
-rounds, each time the one the last audit named; it is one line in the app's CSS reset now, and this
-scan is the evidence that giving every element `overflow-wrap: anywhere` moved nothing else.
+rounds, each time the one the last audit named. **Pass 7 then proved the fourth attempt wrong, and
+this record is where that lesson belongs.** Putting `overflow-wrap: anywhere` on `*` in the CSS
+reset broke two screens — it changes min-content sizing, so flex items shrank to about one
+character, Home's hospital-stay banner went from four lines to thirty-two with words split
+mid-syllable, and the In-Patient heading rendered as "IN-PATIEN / T / STATU / S".
+
+**This scan reported CLEAN through all of it.** It measures WIDTH, and that damage is vertical.
+A scan that says CLEAN is evidence that nothing overflows sideways and nothing else at all — it was
+cited in the previous version of this file as evidence that "nothing else moved", and that was a
+false claim about what this tool can see. The property is scoped to caregiver-entered text now, and
+the two real causes on Home were fixed directly: the medication name sat under `white-space: nowrap`
+with no truncation, and the dose buttons were `flex: 0 0 auto` with the name inside them.
+Home measures 320px at a 320px viewport now, where it measured 829px.
 
 Looked at with my own eyes (`outputs/v74-shots/`, taken by the suite that asserts on the same run):
 
