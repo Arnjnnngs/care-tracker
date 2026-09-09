@@ -509,6 +509,20 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
       const b = [...document.querySelectorAll('button')].find(x => (x.getAttribute('aria-label') || '') === 'Edit ' + l);
       if (b) { b.click(); return true; } return false;
     }, label);
+    // EVERY MEDICATION ONTO HOME FIRST. Pass 8: in one of these apps the seeded medications save
+    // with quickLog false, so the pasted name never rendered on Home and this case measured an EMPTY
+    // screen -- it printed PASS on a build whose Home measured 900px at a 320px viewport.
+    await page.evaluate((k) => {
+      try {
+        const raw = JSON.parse(localStorage.getItem(k) || '{}');
+        if (raw && Array.isArray(raw.meds)) {
+          raw.meds.forEach(m => { m.quickLog = true; });
+          localStorage.setItem(k, JSON.stringify(raw));
+        }
+      } catch (e) {}
+    }, 'caretracker-medication-config-v1');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
     await goMeds();
     await openBy('Zofran');
     await page.waitForTimeout(500);
@@ -529,18 +543,26 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
     t('the Home case actually reaches Home', wentHome, '');
     await page.setViewportSize({ width: VW, height: 800 });
     await page.waitForTimeout(500);
-    const home = await page.evaluate(() => ({
+    // THE RULER IS VW, THE WIDTH THIS TEST SET -- never window.innerWidth. Pass 8 found innerWidth
+    // reported 900 on a 320px viewport, so the tab check said 5 of 5 tabs were reachable when 1 was.
+    // That is the pass-4 stretching-ruler defect, reintroduced in the assertion written to close
+    // pass 7, with VW in scope three lines above it and unused.
+    // `onHome` is the other half: a check that cannot SEE the thing it measures is not measuring it.
+    // innerText, not textContent -- in a single-file app textContent contains the source.
+    const home = await page.evaluate(([vw, big]) => ({
       doc: document.documentElement.scrollWidth,
       nav: (document.querySelector('nav') || { scrollWidth: -1 }).scrollWidth,
-      onScreen: [...document.querySelectorAll('nav button')].filter(b => b.getBoundingClientRect().right <= window.innerWidth + 1).length,
-      tabs: document.querySelectorAll('nav button').length
-    }));
+      onScreen: [...document.querySelectorAll('nav button')].filter(b => b.getBoundingClientRect().right <= vw + 1).length,
+      tabs: document.querySelectorAll('nav button').length,
+      onHome: ((document.getElementById('root') || {}).innerText || '').includes(big)
+    }), [VW, BIGNAME]);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
+    t('the pasted name is actually ON the Home screen being measured', wentHome && home.onHome, '');
     t('HOME does not scroll sideways at ' + VW + 'px with a pasted medication name',
-      wentHome && named && home.doc <= VW + 1, 'page=' + home.doc + 'px');
+      wentHome && named && home.onHome && home.doc <= VW + 1, 'page=' + home.doc + 'px');
     t('every bottom tab is still on the screen at ' + VW + 'px',
-      wentHome && home.tabs > 0 && home.onScreen === home.tabs,
+      wentHome && home.onHome && home.tabs > 0 && home.onScreen === home.tabs,
       home.onScreen + ' of ' + home.tabs + ' tabs reachable, nav=' + home.nav + 'px');
     // put the name back, or every later section is looking at a card it does not recognise
     await goMeds();
