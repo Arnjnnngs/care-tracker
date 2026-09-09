@@ -52,10 +52,24 @@ const t = (name, cond, detail) => {
 
 // ---- the table is read OUT OF THE FILE UNDER TEST, never re-typed here ---------------------------
 // A copy of the sentences in this suite would drift from the app and prove nothing about it.
+// THE PARSER IS A GUARD TOO, AND PASS 5 FOUND IT WAS THE HOLE IN ALL THE OTHERS.
+// It matched only a SINGLE-quoted value with an all-lowercase key. One entry written with DOUBLE
+// quotes -- the natural thing to reach for the moment a sentence contains an apostrophe, in a table
+// made of prose about medicines -- was invisible to every check in this file at once:
+//     'promethazine': "Settles nausea, and brings down a fever. One tablet under the tongue every 4 hours."
+// The suite printed "42 entries" for a 43-entry table and a FULL GREEN BOARD -- fever guard, number
+// guard, form/route guard, schedule guard and all four liveness lines -- while the app rendered that
+// sentence under the medication on the patient's Meds screen. No typo was needed. The only assertion
+// on the parse was that it found more than zero entries.
+// It reads both quote styles now, AND the count is asserted against the number of lines that look
+// like entries, because the next thing this parser cannot read will not be a quote style.
 const tableMatch = html.match(/const MED_PURPOSE = \{([\s\S]*?)\n\};/);
 const TABLE = {};
+let entryLines = 0;
 if (tableMatch) {
-  for (const m of tableMatch[1].matchAll(/'([a-z0-9-]+)':\s*'((?:[^'\\]|\\.)*)'/g)) TABLE[m[1]] = m[2];
+  for (const m of tableMatch[1].matchAll(/'([^'\n]+)':\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g))
+    TABLE[m[1]] = m[2] !== undefined ? m[2] : m[3];
+  entryLines = tableMatch[1].split('\n').filter(l => /^\s*['"][^'"\n]+['"]\s*:/.test(l)).length;
 }
 
 const stubFs = `
@@ -113,6 +127,16 @@ console.log('\n1. The table itself — what the app is willing to say about a me
 {
   const ids = Object.keys(TABLE);
   t('the app carries a purpose table', ids.length > 0, ids.length + ' entries');
+  // THE CHECK THAT CLOSES THE HOLE. Every guard below reads TABLE; if the parser cannot see an
+  // entry, every one of them passes it in silence. This compares what was parsed against what looks
+  // like an entry in the source, so an unreadable line is a RED check rather than an absent one.
+  t('the suite can read EVERY entry in the table', ids.length === entryLines,
+    ids.length + ' parsed of ' + entryLines + ' entry lines');
+  // The app normalises its lookup key to lowercase, so an entry keyed with a capital could never be
+  // found at runtime. That used to be enforced by accident, by a parser that could not see such a
+  // key -- which is the worst way to enforce anything. It is a check now.
+  const shouty = ids.filter(k => k !== k.toLowerCase());
+  t('every key is lowercase, so the app can actually find it', shouty.length === 0, shouty.join(', '));
   const empty = ids.filter(k => !TABLE[k].trim());
   t('no entry is blank', empty.length === 0, empty.join(', '));
   // THE GUARD THAT MATTERS. A digit here is a dose, a frequency or a duration creeping into text
@@ -387,11 +411,13 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
   // used a 48-character pharmacy name and a 71-character link, and BOTH stayed green on a build
   // with the wrapping rule deleted -- they simply fit. Two of the four cases could not fail, in a
   // suite added because a check that could not fail sat green for weeks.
-  // TWO RULES PROTECT THIS CARD AND EACH CASE NAMES WHICH ONE, because the falsification showed
-  // they are not interchangeable: the card COLUMN's rule is what saves the generic name, and the
-  // PURPOSE LINE's own rule is what saves the pasted text. Deleting the column rule alone leaves
-  // the pasted cases green (the line still wraps); deleting both turns every case red. Both are
-  // live, neither is redundant, and the mutants prove it in both directions.
+  // ONE RULE, ON THE WHOLE CARD. The previous version put it on the card's text COLUMN and left a
+  // second copy on the purpose line, and claimed the two were proved non-redundant -- a claim the
+  // audit disproved in one run, because overflow-wrap is INHERITED and the line's copy did
+  // nothing. Worse, the note and the dose summary render in a different container from that
+  // column, so a pasted pharmacy name in the note measured 668px at a 320px viewport while these
+  // four cases stayed green. The rule is on the article now and every string the card renders is
+  // inside it, the note included -- which is why there is a note case below.
   const VW = 320;
   const LONG = 'Prescribed' + 'x'.repeat(300) + 'end';
   const setField = (labelRe, v) => page.evaluate(([lr, val]) => {
@@ -419,13 +445,14 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
     ['what it', 'a pasted pharmacy name with no spaces', 'ONDANSETRONHYDROCHLORIDEDIHYDRATEORALLYDISINTEGRATINGTABLETEIGHTMILLIGRAMFILMCOATED'],
     ['what it', 'a link pasted from the hospital portal', 'https://mychart.example-hospital.org/inside/visit/summary/medications/2026-09-08/detail?ref=printout'],
     ['generic name', 'a very long generic name', 'ONDANSETRONHYDROCHLORIDEDIHYDRATEORALLYDISINTEGRATINGTABLETEIGHTMILLIGRAMFILMCOATED'],
+    ['note', 'a pasted pharmacy name in the note field', 'ONDANSETRONHYDROCHLORIDEDIHYDRATEORALLYDISINTEGRATINGTABLETEIGHTMILLIGRAMFILMCOATED'],
     ['what it', 'three hundred characters with no break in them', LONG],
   ];
   // EACH CASE PUTS THE FIELD BACK BEFORE THE NEXT ONE RUNS. The first draft did not, so the long
   // GENERIC NAME from one case was still on the card during the next, and that case went red for a
   // reason that had nothing to do with what it was testing. A check that fails for the wrong reason
   // is no better evidence than one that passes for the wrong reason.
-  const SAFE = { 'generic name': 'Ondansetron', 'what it': '' };
+  const SAFE = { 'generic name': 'Ondansetron', 'what it': '', 'note': '' };
   for (const [field, what, value] of CASES) {
     await openZofran();
     await page.waitForTimeout(500);
