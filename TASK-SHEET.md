@@ -1,6 +1,6 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-08 · **Live:** v73 · **v74, app-v72 and beta-v61 built, verified and pushed to the working branch — going live on main is Aaron's call** · **Dispatch:** ACTIVE
+**Updated:** 2026-09-09 · **Live:** v73 · **v74, app-v72 and beta-v61 finished, verified and pushed to the working branch after NINE audit passes — going live on `main` is Aaron's call** · **Dispatch:** ACTIVE
 
 Split by WHO the next step belongs to. If MINE has an item, the turn does not end.
 
@@ -29,9 +29,14 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
 - [x] **v73** live — removing a corrected weight or paracentesis no longer restores the old number.
 - [x] **v74 built** — every medication says what it is for. Two audit blocks fixed.
 - [x] **ChemoWell app-v72 and beta-v61 built** — same feature, keyed by name.
-- [x] **v74, app-v72 and beta-v61 verified and pushed.** Four adversarial audit passes; the last two
-      found a guard that could not fail and a copy of it in the beta that had never been able to fail.
-- [x] **Every check falsified** — 15 mutants across the three apps, each red on the intended check only.
+- [x] **v74, app-v72 and beta-v61 verified and pushed.** **Nine adversarial audit passes.** The feature
+      was right after the first; every block since was a check printing green while the thing it
+      guarded was broken. The ninth returned SHIP.
+- [x] **Every check falsified** — 45 mutants across the three apps in the final round, every one red on
+      the intended check and only that check.
+- [x] **A pre-existing Home bug fixed on the way**, deliberately: a long pasted medication name pushed
+      Home to 829px on a 320px phone and carried the bottom tab bar off the screen, so the Meds tab
+      needed to undo the paste was unreachable. It measures 320px now.
 
 ## QUEUED — built in order without re-asking
 
@@ -44,6 +49,10 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
    drugs; a combination product gets its main ingredient's line (Enhancer G and H, S each). New
    medical claims, so they get their own release and their own read — never bolted onto one that
    has already been audited.
+7. A fixture that renders a GROUPED medications card (S). The ninth audit found the third wrapping
+   declaration guarded by nothing, because no test ever renders that card — deleting it leaves the
+   whole board green while about eighty per cent of a long medication name becomes invisible inside
+   a clipped box. A source-level check stands in the meantime and its weakness is written down.
 
 ## DONE — live on Brandi's phone
 
