@@ -4602,7 +4602,11 @@ function renderMedicationManager(now) {
     const deleting = state.confirmDeleteMed === med.id;
     return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' } },
-        h('div', { style: { minWidth: '0', flex: '1' } },
+        // overflowWrap belongs on the CARD's whole text column, not on the purpose line alone.
+        // The name, the generic name and the note are free text too, and pass 4 measured a
+        // 300-character name at 3267px on a 320px viewport while the purpose line beside it
+        // wrapped correctly -- the fix had been put on the one string this release added.
+        h('div', { style: { minWidth: '0', flex: '1', overflowWrap: 'anywhere' } },
           h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, med.name),
           h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name'),
           purposeOf(med) ? h('div', { 'data-med-purpose': med.id, style: { fontSize: '12.5px', color: '#5F4A56', fontWeight: '500', marginTop: '4px', lineHeight: '1.35', overflowWrap: 'anywhere' } }, purposeOf(med)) : null
@@ -4646,7 +4650,7 @@ function renderMedicationManager(now) {
     // on the screen. Not reachable here today with thirteen defaults, but a caregiver can delete
     // medications, and the sibling app proved the shape of the bug.
     sortedMeds.some(m => purposeOf(m)) ? h('div', { 'data-med-disclaimer': 'true', style: { fontSize: '11.5px', color: '#7D6974', lineHeight: '1.4', margin: '2px 0 10px' } },
-      'The line under each medication is general information, not medical advice. Her care team is the answer for anything specific.') : null,
+      'Where a medication has a line under it, that is general information, not medical advice. Her care team is the answer for anything specific.') : null,
     h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)
   ];
 }

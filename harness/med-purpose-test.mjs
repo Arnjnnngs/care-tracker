@@ -117,7 +117,8 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   t('no entry is blank', empty.length === 0, empty.join(', '));
   // THE GUARD THAT MATTERS. A digit here is a dose, a frequency or a duration creeping into text
   // that is only ever meant to say what a medication is generally for.
-  const withDigits = ids.filter(k => /\d/.test(TABLE[k]));
+  const NUMBERY = /\d/;
+  const withDigits = ids.filter(k => NUMBERY.test(TABLE[k]));
   t('NO entry contains a number — no dose, no schedule, no duration', withDigits.length === 0,
     withDigits.map(k => k + ': ' + TABLE[k]).join(' | '));
   // A SCHEDULE IN WORDS passed the digit guard: "given around chemo" carries a when, not a what, and
@@ -134,7 +135,8 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   // is a thing to REPORT, not to suppress -- and nothing was holding it. The patch header says a
   // later refresh to federal label wording is planned, and federal wording says "reduces fever", so
   // this guard is what stops that refresh quietly undoing the decision. Raised by ChemoWell's audit.
-  const fevery = ids.filter(k => /fever|antipyretic|temperature/i.test(TABLE[k]));
+  const FEVERY = /fever|antipyretic|temperature/i;
+  const fevery = ids.filter(k => FEVERY.test(TABLE[k]));
   t('NO entry tells anyone a medication brings down a fever', fevery.length === 0,
     fevery.map(k => k + ': ' + TABLE[k]).join(' | '));
   // A LINE DESCRIBES THE DRUG. IT NEVER SAYS WHAT THE THING LOOKS LIKE OR WHERE TO PUT IT.
@@ -149,10 +151,17 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   // never enforce "names no dosage form", so this check no longer CLAIMS to. It is named for exactly
   // what it does: it rejects a word from the list. A check that prints a false sentence in green is
   // worse than no check -- the app-v70 ruling, on this same class.
-  // THE LIST BANS FORM AND ROUTE, NOT ANATOMY. "Lowers stomach acid" and "slows the gut down" name
-  // the organ a drug ACTS ON, which is the description; "on the skin", "under the tongue" and "as a
-  // shot" name where a caregiver PUTS it, which is a dosage instruction this app must never give.
-  const FORMY = /\b(pill|pills|tablet|tablets|capsule|capsules|caplet|caplets|liquid|syrup|elixir|lozenge|troche|powder|sachet|patch|patches|cream|ointment|gel|lotion|rinse|mouthwash|gargle|suppository|enema|spray|drops|inhaler|inhaled|injection|injected|inject|shot|shots|infusion|infused|drip|intravenous|subcutaneous|intramuscular|swallow|swallowed|chew|chewable|dissolve|dissolved|topical|topically|oral|orally|rub|rubbed|rubs|applied|apply|smear|dab|by mouth|under the tongue|under your tongue|on the skin|onto the skin|into the skin|under the skin|through a vein|into a vein|into a muscle|skin|tongue|vein|rectally|rectal)\b/i;
+  // THE LIST BANS FORM AND ROUTE, NOT ANATOMY -- and pass 4 caught this sentence being FALSE of the
+  // code beside it, for the third time on this one check. The list held bare `skin`, `tongue`, `vein`
+  // and `rectal`, so "Eases itching and swelling of the skin" was rejected while "Settles the
+  // stomach" was not. Skin drugs are a large part of supportive care: that would have bitten a real
+  // entry, and the next person to edit this table was being told the opposite in the comment AND in
+  // the shipped release note. The bare anatomy words are gone. The ROUTE PHRASES that contain them
+  // stay -- "on the skin" is where you put it, "of the skin" is what it acts on -- and so do the
+  // plurals, the inflections and IV, all of which walked through the previous list.
+  // "Numbs the skin" now PASSES, deliberately. It says what the drug does. Whether it is TRUE of a
+  // particular medication is a question for a reader, and no list of words was ever going to answer it.
+  const FORMY = /\b(pills?|tablets?|capsules?|caplets?|troches?|lozenges?|liquids?|syrups?|elixirs?|powders?|sachets?|patches|patch|creams?|ointments?|gels?|lotions?|rinses?|mouthwash|gargle|suppositor(?:y|ies)|enemas?|sprays?|sprayed|inhalers?|inhaled|nebuli[sz]ed|injections?|injected|inject|shots?|infusions?|infused|drips?|intravenous(?:ly)?|iv|subcutaneous(?:ly)?|intramuscular(?:ly)?|sublingual(?:ly)?|transdermal|intranasal|swallow(?:ed)?|chew(?:able)?|topical(?:ly)?|orally|by mouth|rub|rubs|rubbed|applied|apply|smear|dab|rectally|on the skin|onto the skin|into the skin|under the skin|under the tongue|under your tongue|into a vein|through a vein|into a muscle|in a drip|through a drip)\b/i;
   const formy = ids.filter(k => FORMY.test(TABLE[k]));
   t('NO entry uses a word from the dosage-form / route list', formy.length === 0,
     formy.map(k => k + ': ' + TABLE[k]).join(' | '));
@@ -163,10 +172,15 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   // sentence the first audit had blocked, in a suite that ran on every release.
   // A guard nobody can prove fires is not a guard. Each one is now handed a sentence it MUST reject,
   // so a typo that kills the pattern turns this red instead of turning the whole table green.
+  // AND EACH CHECK MUST TOUCH THE GUARD IT VOUCHES FOR. The first version of this block re-typed two
+  // of the four patterns instead of naming them, so the fever guard could be killed with the very
+  // typo this block exists to catch and the suite stayed 34/34 GREEN -- with an entry reading "Eases
+  // pain and brings down a fever" and the line "the fever guard can actually fire" printed in green
+  // above it. A copy of a pattern proves nothing about the original. All four are constants now.
   t('the form/route guard can actually fire', FORMY.test('A numbing cream you rub on the skin.'), '');
   t('the schedule guard can actually fire', SCHEDULEY.test('Take one at bedtime as needed.'), '');
-  t('the fever guard can actually fire', /fever|antipyretic|temperature/i.test('Brings down a fever.'), '');
-  t('the number guard can actually fire', /\d/.test('Eases pain for 4 hours.'), '');
+  t('the fever guard can actually fire', FEVERY.test('Brings down a fever.'), '');
+  t('the number guard can actually fire', NUMBERY.test('Eases pain for 4 hours.'), '');
   const tooLong = ids.filter(k => TABLE[k].length > 110);
   t('every entry is short enough to read on a phone', tooLong.length === 0, tooLong.join(', '));
 }
@@ -359,38 +373,79 @@ console.log('\n7. A medication named after a JavaScript built-in must not destro
   t('after a reload the Meds screen still lists medications', afterReload > 0, afterReload + ' editable rows');
 }
 
-console.log('\nTyped text — it survives a reload, and a long one does not blow the card open');
+console.log('\nTyped text — it survives a reload, and nothing a caregiver pastes scrolls the page sideways');
 {
+  // PASS 4 BROKE THE FIRST VERSION OF THIS CHECK, AND THE WAY IT BROKE IT IS THE LESSON.
+  // It compared document.scrollWidth to window.innerWidth -- and under this suite's mobile emulation
+  // innerWidth GROWS to swallow the overflow, so the ruler stretched with the thing being measured.
+  // A pasted no-space pharmacy name (447px), a pasted portal link (413px) and a long generic name
+  // (413px) every one scrolled sideways at a 320px viewport, and the check said PASS on all three.
+  // It caught the 300-character mutant only because that finally exceeded the emulator's clamp.
+  // THE RULER IS NOW THE WIDTH THIS TEST ITSELF SET, passed in from Node and never read back out of
+  // the page, and the cases are what a caregiver actually pastes rather than one absurd one.
+  // EVERY ONE OF THESE FOUR STRINGS WAS LENGTHENED UNTIL IT COULD ACTUALLY FAIL. The first draft
+  // used a 48-character pharmacy name and a 71-character link, and BOTH stayed green on a build
+  // with the wrapping rule deleted -- they simply fit. Two of the four cases could not fail, in a
+  // suite added because a check that could not fail sat green for weeks.
+  // TWO RULES PROTECT THIS CARD AND EACH CASE NAMES WHICH ONE, because the falsification showed
+  // they are not interchangeable: the card COLUMN's rule is what saves the generic name, and the
+  // PURPOSE LINE's own rule is what saves the pasted text. Deleting the column rule alone leaves
+  // the pasted cases green (the line still wraps); deleting both turns every case red. Both are
+  // live, neither is redundant, and the mutants prove it in both directions.
+  const VW = 320;
   const LONG = 'Prescribed' + 'x'.repeat(300) + 'end';
-  await goMeds();
-  await page.evaluate(() => {
-    const b = [...document.querySelectorAll('button')].find(x => /^Edit Zofran$/i.test(x.getAttribute('aria-label') || ''));
-    if (b) b.click();
-  });
-  await page.waitForTimeout(500);
-  const typed = await page.evaluate((v) => {
-    const lab = [...document.querySelectorAll('label')].find(l => /what it/i.test(l.innerText || ''));
+  const setField = (labelRe, v) => page.evaluate(([lr, val]) => {
+    const rx = new RegExp(lr, 'i');
+    const lab = [...document.querySelectorAll('label')].find(l => rx.test(l.innerText || ''));
     const inp = lab && lab.querySelector('input, textarea');
     if (!inp) return false;
-    inp.value = v; inp.dispatchEvent(new Event('input', { bubbles: true })); return true;
-  }, LONG);
-  t('the editor took a long typed line', typed, '');
+    inp.value = val; inp.dispatchEvent(new Event('input', { bubbles: true })); return true;
+  }, [labelRe, v]);
+  const openZofran = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(x => /^Edit Zofran$/i.test(x.getAttribute('aria-label') || ''));
+    if (b) { b.click(); return true; } return false;
+  });
+  const pageWidthAt = async (w) => {
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.waitForTimeout(400);
+    const doc = await page.evaluate(() => document.documentElement.scrollWidth);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(250);
+    return doc;
+  };
+
+  await goMeds();
+  const CASES = [
+    ['what it', 'a pasted pharmacy name with no spaces', 'ONDANSETRONHYDROCHLORIDEDIHYDRATEORALLYDISINTEGRATINGTABLETEIGHTMILLIGRAMFILMCOATED'],
+    ['what it', 'a link pasted from the hospital portal', 'https://mychart.example-hospital.org/inside/visit/summary/medications/2026-09-08/detail?ref=printout'],
+    ['generic name', 'a very long generic name', 'ONDANSETRONHYDROCHLORIDEDIHYDRATEORALLYDISINTEGRATINGTABLETEIGHTMILLIGRAMFILMCOATED'],
+    ['what it', 'three hundred characters with no break in them', LONG],
+  ];
+  // EACH CASE PUTS THE FIELD BACK BEFORE THE NEXT ONE RUNS. The first draft did not, so the long
+  // GENERIC NAME from one case was still on the card during the next, and that case went red for a
+  // reason that had nothing to do with what it was testing. A check that fails for the wrong reason
+  // is no better evidence than one that passes for the wrong reason.
+  const SAFE = { 'generic name': 'Ondansetron', 'what it': '' };
+  for (const [field, what, value] of CASES) {
+    await openZofran();
+    await page.waitForTimeout(500);
+    const ok = await setField(field, value);
+    await clickText(/^Save changes$/);
+    await page.waitForTimeout(700);
+    const doc = await pageWidthAt(VW);
+    t('the page does not scroll sideways at ' + VW + 'px: ' + what,
+      ok && doc <= VW + 1, 'field=' + (ok ? 'set' : 'MISSING') + ' page=' + doc + 'px');
+    await openZofran();
+    await page.waitForTimeout(400);
+    await setField(field, SAFE[field]);
+    await clickText(/^Save changes$/);
+    await page.waitForTimeout(600);
+  }
+  await openZofran(); await page.waitForTimeout(400);
+  await setField('what it', LONG);
   await clickText(/^Save changes$/);
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(700);
 
-  // 320px is the narrowest phone this app is expected to survive. A page that scrolls sideways there
-  // is the failure -- not a wide element inside its own scroller, which is why this asserts on the
-  // DOCUMENT rather than on the line.
-  await page.setViewportSize({ width: 320, height: 800 });
-  await page.waitForTimeout(500);
-  const w = await page.evaluate(() => ({
-    doc: document.documentElement.scrollWidth,
-    view: window.innerWidth,
-    line: (document.querySelector('[data-med-purpose="zofran"]') || {}).scrollWidth || -1
-  }));
-  t('a very long typed line does not push the page sideways at 320px', w.doc <= w.view + 1, JSON.stringify(w));
-
-  await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2500);
   await goMeds();

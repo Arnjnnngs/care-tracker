@@ -144,6 +144,14 @@ rep("""      h('label', null, fieldLabel('Generic name'), formInput({ value: for
     """      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
       h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: (purposeOf({ id: state.medEditor && state.medEditor.sourceId }) || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
 
+rep("""        h('div', { style: { minWidth: '0', flex: '1' } },
+          h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, med.name),""",
+    """        // overflowWrap belongs on the CARD's whole text column, not on the purpose line alone.
+        // The name, the generic name and the note are free text too, and pass 4 measured a
+        // 300-character name at 3267px on a 320px viewport while the purpose line beside it
+        // wrapped correctly -- the fix had been put on the one string this release added.
+        h('div', { style: { minWidth: '0', flex: '1', overflowWrap: 'anywhere' } },
+          h('div', { style: { fontSize: '16px', fontWeight: '800', color: '#342530', letterSpacing: '-0.015em' } }, med.name),""")
 # ---- 3. the Meds screen shows it under the generic name ---------------------------------------
 rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
         ),""",
@@ -160,7 +168,7 @@ rep("""    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDi
     // on the screen. Not reachable here today with thirteen defaults, but a caregiver can delete
     // medications, and the sibling app proved the shape of the bug.
     sortedMeds.some(m => purposeOf(m)) ? h('div', { 'data-med-disclaimer': 'true', style: { fontSize: '11.5px', color: '#7D6974', lineHeight: '1.4', margin: '2px 0 10px' } },
-      'The line under each medication is general information, not medical advice. Her care team is the answer for anything specific.') : null,
+      'Where a medication has a line under it, that is general information, not medical advice. Her care team is the answer for anything specific.') : null,
     h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...cards)""")
 
 if "const APP_VERSION = '%s';" % FROM_V not in s: sys.exit('REFUSING: version stamp missing')
