@@ -144,14 +144,19 @@ rep("""      h('label', null, fieldLabel('Generic name'), formInput({ value: for
     """      h('label', null, fieldLabel('Generic name'), formInput({ value: form.sub, placeholder: 'Generic name', onInput: event => updateMedicationForm('sub', event.target.value) })),
       h('label', { style: { gridColumn: '1 / -1' } }, fieldLabel('What it\\u2019s for'), formInput({ value: form.purpose, placeholder: (purposeOf({ id: state.medEditor && state.medEditor.sourceId }) || 'For example: settles nausea'), onInput: event => updateMedicationForm('purpose', event.target.value) })),""")
 
-# ---- the wrapping rule, on the WHOLE medication card -------------------------------------------
-# Pass 4 put it on the purpose line; pass 5 found the note and the dose summary render in a
-# different container, so a pasted pharmacy name in the note measured 668px at a 320px viewport
-# while the new checks stayed green. One property on the article covers every string the card
-# renders. The two narrower copies are gone: overflow-wrap is inherited, so they did nothing,
-# and keeping them let a comment claim a non-redundancy the audit disproved in one run.
-rep("""    return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },""",
-    """    return h('article', { style: { background: 'rgba(255,255,255,0.60)', border: '1px solid rgba(212,104,138,0.16)', borderRadius: '17px', padding: '13px', overflowWrap: 'anywhere', boxShadow: '0 3px 16px rgba(180,130,150,0.09), inset 0 1px 0 rgba(255,255,255,0.75)' } },""")
+# ---- the wrapping rule, ONCE, FOR THE WHOLE APP ------------------------------------------------
+# Pass 4 put it on the purpose line. Pass 5 found the note and the dose summary render in a different
+# container and moved it to the medication card. Pass 6 found HOME: paste a long pharmacy name into a
+# medication's name and Home reaches 1019px on a 320px phone -- and the bottom tab bar stretches with
+# it, so the Meds tab you would use to go back and fix the name is no longer on the screen. The paste
+# that causes the problem moves the only route to the fix out of reach.
+# Three rounds of putting this property on whichever container the last audit named is three rounds
+# of fixing an instance. It goes on `*` now, in the app's own reset, where every screen inherits it --
+# Home, Meds, Reports, History, and any screen written later. `overflow-wrap` cannot change a layout
+# except to stop a long unbroken word from pushing the page sideways, and the 140-combination overflow
+# scan is the evidence that nothing else moved.
+rep("""*{box-sizing:border-box;margin:0;padding:0;}""",
+    """*{box-sizing:border-box;margin:0;padding:0;overflow-wrap:anywhere;}""")
 # ---- 3. the Meds screen shows it under the generic name ---------------------------------------
 rep("""          h('div', { style: { fontSize: '12px', color: '#6E5261', fontWeight: '600', marginTop: '1px' } }, med.sub || 'No generic name')
         ),""",

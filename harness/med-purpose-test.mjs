@@ -65,11 +65,23 @@ const t = (name, cond, detail) => {
 // like entries, because the next thing this parser cannot read will not be a quote style.
 const tableMatch = html.match(/const MED_PURPOSE = \{([\s\S]*?)\n\};/);
 const TABLE = {};
-let entryLines = 0;
+const ENTRY_LINE = /^\s*'[^'\n]+'\s*:\s*(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")\s*,?\s*$/;
+const unreadable = [];
 if (tableMatch) {
   for (const m of tableMatch[1].matchAll(/'([^'\n]+)':\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g))
     TABLE[m[1]] = m[2] !== undefined ? m[2] : m[3];
-  entryLines = tableMatch[1].split('\n').filter(l => /^\s*['"][^'"\n]+['"]\s*:/.test(l)).length;
+  // PASS 6: COUNTING WAS THE WRONG SHAPE. The previous version compared what the parser read against
+  // the number of lines that LOOKED like entries -- and a value wrapped across two lines with `+` is
+  // read by neither, so the two agreed at 42 and 42 while the app rendered the whole sentence. Both
+  // halves were blind in the same direction, which is exactly what a cross-check must not be.
+  // So: every line inside the table must be something this suite can ACCOUNT FOR -- one complete
+  // entry, a comment, or blank. Anything else is red, whatever it turns out to be. That covers the
+  // continuation line, the template literal, two entries on one line, and the next trick as well.
+  for (const line of tableMatch[1].split('\n')) {
+    const l = line.trim();
+    if (!l || l.startsWith('//')) continue;
+    if (!ENTRY_LINE.test(line)) unreadable.push(l.slice(0, 70));
+  }
 }
 
 const stubFs = `
@@ -130,8 +142,8 @@ console.log('\n1. The table itself — what the app is willing to say about a me
   // THE CHECK THAT CLOSES THE HOLE. Every guard below reads TABLE; if the parser cannot see an
   // entry, every one of them passes it in silence. This compares what was parsed against what looks
   // like an entry in the source, so an unreadable line is a RED check rather than an absent one.
-  t('the suite can read EVERY entry in the table', ids.length === entryLines,
-    ids.length + ' parsed of ' + entryLines + ' entry lines');
+  t('EVERY line in the table is one this suite can read', unreadable.length === 0,
+    unreadable.join(' | '));
   // The app normalises its lookup key to lowercase, so an entry keyed with a capital could never be
   // found at runtime. That used to be enforced by accident, by a parser that could not see such a
   // key -- which is the worst way to enforce anything. It is a check now.
@@ -475,6 +487,45 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
     await clickText(/^Save changes$/);
     await page.waitForTimeout(600);
   }
+  // PASS 6 FOUND THE SCREEN NONE OF THE ABOVE EVER VISITS. Every case so far measures the Meds
+  // screen, under a heading that promises "nothing a caregiver pastes scrolls the page sideways".
+  // Paste a long pharmacy name into a medication's NAME and HOME reached 1019px on a 320px phone --
+  // and the bottom tab bar stretched with it, so the Meds tab you would use to go back and fix the
+  // name was no longer on the screen. The paste that causes the problem moves the only route to the
+  // fix out of reach, which is what makes this one worth a release rather than a note.
+  {
+    const BIGNAME = 'ONDANSETRONHYDROCHLORIDEDIHYDRATEORALLYDISINTEGRATINGTABLETEIGHTMILLIGRAM';
+    const openBy = (label) => page.evaluate((l) => {
+      const b = [...document.querySelectorAll('button')].find(x => (x.getAttribute('aria-label') || '') === 'Edit ' + l);
+      if (b) { b.click(); return true; } return false;
+    }, label);
+    await goMeds();
+    await openBy('Zofran');
+    await page.waitForTimeout(500);
+    const named = await setField('medication name', BIGNAME);
+    await clickText(/^Save changes$/);
+    await page.waitForTimeout(800);
+    await clickText(/^Today$/);
+    await page.waitForTimeout(800);
+    await page.setViewportSize({ width: VW, height: 800 });
+    await page.waitForTimeout(500);
+    const home = await page.evaluate(() => ({
+      doc: document.documentElement.scrollWidth,
+      nav: (document.querySelector('nav') || {}).scrollWidth || -1
+    }));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(300);
+    t('HOME does not scroll sideways at ' + VW + 'px with a pasted medication name',
+      named && home.doc <= VW + 1, 'name=' + (named ? 'set' : 'MISSING') + ' page=' + home.doc + 'px nav=' + home.nav + 'px');
+    // put the name back, or every later section is looking at a card it does not recognise
+    await goMeds();
+    await openBy(BIGNAME);
+    await page.waitForTimeout(400);
+    await setField('medication name', 'Zofran');
+    await clickText(/^Save changes$/);
+    await page.waitForTimeout(700);
+  }
+
   await openZofran(); await page.waitForTimeout(400);
   await setField('what it', LONG);
   await clickText(/^Save changes$/);
