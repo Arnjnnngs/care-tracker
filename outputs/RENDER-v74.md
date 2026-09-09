@@ -24,6 +24,14 @@ the two real causes on Home were fixed directly: the medication name sat under `
 with no truncation, and the dose buttons were `flex: 0 0 auto` with the name inside them.
 Home measures 320px at a 320px viewport now, where it measured 829px.
 
+**Pass 8 then found the check that proves this could not fail.** In the sibling app the seeded
+medications are not on the Home screen at all, so the pasted name never rendered there and the case
+was measuring an EMPTY Home: delete the one declaration holding that app's Home together and it
+still printed PASS. And the *stretching ruler* came back inside the assertion written to fix the
+previous round — the new "every bottom tab is still on the screen" check compared each tab to
+`window.innerWidth`, which grows with the overflow, so it reported five of five tabs reachable when
+one was. Both fixed, and both watched going red on the mutant before being believed.
+
 Looked at with my own eyes (`outputs/v74-shots/`, taken by the suite that asserts on the same run):
 
 - `1-meds-screen.png` — the medication cards with their new line: *Buspirone / BuSpar / "Eases
