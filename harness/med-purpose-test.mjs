@@ -554,7 +554,15 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
       nav: (document.querySelector('nav') || { scrollWidth: -1 }).scrollWidth,
       onScreen: [...document.querySelectorAll('nav button')].filter(b => b.getBoundingClientRect().right <= vw + 1).length,
       tabs: document.querySelectorAll('nav button').length,
+      // BOTH HALVES. The name being on screen proves the app rendered it; the Home TAB carrying
+      // aria-current=page proves the screen being measured is Home. (An earlier draft used a
+      // data-tour marker that exists in one app and not the other -- the same portability trap
+      // that made the first version of this case click a tab called 'Today'.) The audit built the mutant that beats the first alone -- make
+      // the Home tab a no-op on top of a broken Home and both lines print PASS at 320px, because
+      // the measurement is then taken on Meds, where the name also appears.
       onHome: ((document.getElementById('root') || {}).innerText || '').includes(big)
+        && [...document.querySelectorAll('nav button')].some(b =>
+             (b.getAttribute('aria-label') || '').trim() === 'Home' && b.getAttribute('aria-current') === 'page')
     }), [VW, BIGNAME]);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForTimeout(300);
@@ -587,6 +595,28 @@ console.log('\nTyped text — it survives a reload, and nothing a caregiver past
   const back = (await purposeMap())['zofran'] || '';
   t('the typed line is still there after closing and reopening the app', back === LONG,
     back.slice(0, 24) + ' (' + back.length + ' chars)');
+}
+
+// ---- THE THREE WRAPPING DECLARATIONS, CHECKED IN THE SOURCE --------------------------------------
+// Two of the three are proved by behaviour above: remove the medication card's and the pasted-text
+// cases go red; remove the Home quick-log grid's and both Home lines go red with the true number.
+// THE THIRD IS NOT, and the audit measured why: the fixture never renders a GROUPED medications card,
+// so deleting that declaration leaves the whole board green. It is not decorative -- with a
+// 73-character name that element measures 872px inside a 175px box with `overflow: hidden` above it,
+// so about eighty per cent of the medication name becomes invisible and unreachable. The page width
+// never moves, which is exactly why every width check on this board stays green.
+// A presence check is weak evidence and this file says so elsewhere. It is here because the
+// alternative is NO evidence, the behaviour is proven on the two sibling elements, and the real fix
+// -- a fixture that renders a grouped card -- is queued as its own change rather than bolted onto a
+// release that has already been audited.
+{
+  const decls = [
+    ['the medication card on Meds', /return h\('article', \{ style: \{[^\n]*overflowWrap: 'anywhere'/],
+    ['the quick-log cards on Home', /minmax\(260px,1fr\)\)'[^\n]*overflowWrap: 'anywhere'/],
+    ['the grouped-medications card', /h\('section', \{ style: \{ overflowWrap: 'anywhere' \} \}/]
+  ];
+  for (const [what, re] of decls)
+    t('the wrapping rule is still on ' + what, re.test(html), '');
 }
 
 console.log('\n-- nothing broke on the way');

@@ -1,4 +1,4 @@
-# Suite record — v74 — 2026-09-09 03:40 UTC
+# Suite record — v74 — 2026-09-09 05:02 UTC
 
 Every browser suite in `harness/`, run by `harness/run-all.sh`. A row reading FAIL or ERROR blocks
 the release in `pm.py` unless it is changed to EXEMPT with a reason of at least twenty characters.
@@ -18,7 +18,7 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | iosshare-test.mjs | PASS | 7/7 checks passed |
 | ledger-test.mjs | PASS |        and every ledger write is an append. |
 | logger-test.mjs | PASS | 19/19 checks passed |
-| med-purpose-test.mjs | PASS | 48/48 checks passed |
+| med-purpose-test.mjs | PASS | 51/51 checks passed |
 | medflag-backfill-test.mjs | PASS | 9/9 checks passed |
 | medskip-test.mjs | PASS | 10/10 checks passed |
 | medsync-test.mjs | EXEMPT | v44 medsync-patch verifier; hangs past the 600s limit on v71 and v72 alike; rebase or retire queued |
