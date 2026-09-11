@@ -28,6 +28,11 @@ CASES = [
      lambda h: h.replace("    if ((med.awayPeriods || []).some(p => p && d0 >= dayStart(p.start) && d0 <= dayStart(p.end))) return;\n", ""),
      'SUPPRESSION HAPPENS: the days it was off the list are not counted as missed'),
 
+    ("THE AUDIT'S SECOND BLOCKER: a normaliser strips awayPeriods on load, so the feature dies at the first reload",
+     lambda h: h.replace("function normalizeMedication(raw, index) {\n  const original = raw || {};",
+                         "function normalizeMedication(raw, index) {\n  const original = raw || {};\n  delete original.awayPeriods;"),
+     'and the span survives closing and reopening the app, which storage cannot prove'),
+
     ('the restore stops recording the span it was away',
      lambda h: h.replace("  med.awayPeriods = (Array.isArray(med.awayPeriods) ? med.awayPeriods : [])", "  med.awayPeriods = ([])"
                          ).replace("    .filter(p => p && Number(p.start) && Number(p.end))\n    .concat([{ start: awayFrom, end: awayTo }]);", "    .slice();"),

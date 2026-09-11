@@ -379,6 +379,17 @@ console.log('\n4B. THE OTHER HALF OF THE SAFETY CHECK: a span it really was away
       missedWide > missedAway,
       missedAway + ' with it removed -> ' + missedWide + ' after bringing it back');
   }
+  // AND IT HAS TO SURVIVE CLOSING THE APP. A normaliser that strips `awayPeriods` on the way back in
+  // leaves both suites fully green while the feature is dead from the first reload onward -- the
+  // audit proved it with one `delete`. Storage cannot answer this: the strip happens in memory on
+  // load and is only written back on the next save, so the file still holds what the app has already
+  // forgotten. The banner is what the caregiver sees, so the banner is what is asked.
+  await load();
+  const afterReload = await missedTotal();
+  if (afterReload === null || missedWide === null)
+    exempt('the span survives closing and reopening the app', 'banner not readable in this build');
+  else t('and the span survives closing and reopening the app, which storage cannot prove',
+    afterReload === missedWide, missedWide + ' before the reload -> ' + afterReload + ' after');
   await goMeds();
 }
 

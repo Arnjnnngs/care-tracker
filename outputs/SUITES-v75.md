@@ -1,11 +1,11 @@
-# Suite record — v75 — 2026-09-11 04:03 UTC
+# Suite record — v75 — 2026-09-11 04:49 UTC
 
 Every browser suite in `harness/`, run by `harness/run-all.sh`. A row reading FAIL or ERROR blocks
 the release in `pm.py` unless it is changed to EXEMPT with a reason of at least twenty characters.
 
 | Suite | Result | Last line |
 |---|---|---|
-| archived-meds-test.mjs | PASS | 37/37 checks passed |
+| archived-meds-test.mjs | PASS | 42/42 checks passed |
 | cal-test.mjs | PASS |     [iPhone-390x844] sheet field font sizes: title=16px, when=16px, note=16px (floor 16) |
 | chemo-offset-test.mjs | PASS | 17/17 checks passed |
 | daily-supersede-test.mjs | PASS | 40/40 checks passed |
@@ -21,7 +21,7 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | logger-test.mjs | PASS | 19/19 checks passed |
 | med-purpose-test.mjs | PASS | 51/51 checks passed |
 | medflag-backfill-test.mjs | PASS | 9/9 checks passed |
-| medskip-test.mjs | PASS | 10/10 checks passed |
+| medskip-test.mjs | FAIL |   PASS  SKIP-3-current-list-untouched-by-default — nothing changed on this phone unless asked |
 | medsync-test.mjs | EXEMPT | v44 medsync-patch verifier; hangs past the 600s limit on v71 and v72 alike; rebase or retire queued |
 | missed-banner-test.mjs | PASS | 16/16 checks passed |
 | missedcard-test.mjs | PASS | 7/7 checks passed |
@@ -41,6 +41,3 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | cycle-merge-probe.mjs | PASS | 24/24 checks passed |
 | audit-v69-weightreport.mjs | PASS |   11 passed, 0 failed |
 | audit-v72-probe.mjs | PASS | 28/28 checks passed |
-| overflow-scan.mjs | PASS | CLEAN — Android rows are high fidelity (Chromium is Android's engine); iOS rows are Chromium at Apple viewport sizes, not Safari. |
-
-Failing or erroring suites: 0
