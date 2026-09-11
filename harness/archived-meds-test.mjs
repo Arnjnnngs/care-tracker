@@ -172,7 +172,7 @@ console.log('\n2. Removing a medication archives the WHOLE thing, not just its n
   await page.waitForTimeout(700);
   t('it left the active list', !(await activeIds()).includes(TRACKED.id), '');
   t('it is in the archive', (await archivedIds()).includes(TRACKED.id), '');
-  const entry = (await saved()).archivedMeds[TRACKED.id];
+  const entry = ((await saved()).archivedMeds || {})[TRACKED.id];
   t('the archive still carries the name and generic name it always did',
     !!entry && entry.name === TRACKED.name && typeof entry.sub === 'string', JSON.stringify(entry && entry.name));
   t('the archive now carries the whole medication', !!(entry && entry.config), '');
@@ -182,6 +182,29 @@ console.log('\n2. Removing a medication archives the WHOLE thing, not just its n
     !!entry && !!entry.config && !!live && JSON.stringify(entry.config) === JSON.stringify(live), '');
   t('it is listed on the Meds screen', (await archivedRows()).includes(TRACKED.id), (await archivedRows()).join(', '));
   await shot('1-removed-list');
+
+  // AND IT SURVIVES A RELOAD. Falsifying this file caught the gap: every assertion above reads the
+  // archive in the same breath as the removal, so a build whose loader STRIPPED the stored settings
+  // on the way back in scored a full green board. That is the identical trap the sibling app hit
+  // when it first archived pause periods -- the write was right and the read threw it away -- and
+  // the only thing that catches it is closing the app and opening it again.
+  // AND THE APP STILL HAS THEM AFTER A RELOAD. Falsifying this file caught two things here.
+  // First, every assertion above reads the archive in the same breath as the removal, so a build
+  // whose LOADER stripped the stored settings on the way back in scored a full green board -- the
+  // identical trap the sibling app hit when it first archived pause periods, where the write was
+  // right and the read threw it away.
+  // Second, and the reason this reads the SCREEN rather than storage: the strip happens in memory
+  // on load and is only written back on the next save, so localStorage still holds the settings on
+  // a build that has already forgotten them. Reading the file would have passed on the broken
+  // build. The row's own note is what the app actually believes.
+  await load();
+  await goMeds();
+  const note = await page.evaluate((id) => {
+    const el = document.querySelector('[data-archived-med="' + id + '"]');
+    return el ? (el.innerText || '') : '(no row)';
+  }, TRACKED.id);
+  t('after closing and reopening the app, it still knows the settings were kept',
+    note !== '(no row)' && !/not kept/i.test(note), note.replace(/\n/g, ' | ').slice(0, 80));
 }
 
 console.log('\n3. THE SAFETY CHECK: it comes back with reminders OFF');
@@ -254,13 +277,13 @@ console.log('\n6. An archive written by an OLDER build still restores something 
   await page.evaluate(([k, id]) => {
     const cfg = JSON.parse(localStorage.getItem(k) || '{}');
     cfg.meds = (cfg.meds || []).filter(m => m.id !== id);
-    const e = cfg.archivedMeds[id];
-    cfg.archivedMeds[id] = { name: e.name, sub: e.sub || '' };
+    const e = (cfg.archivedMeds || {})[id];
+    if (e) cfg.archivedMeds[id] = { name: e.name, sub: e.sub || '' };
     localStorage.setItem(k, JSON.stringify(cfg));
   }, [MED_KEY, TRACKED.id]);
   await load();
   await goMeds();
-  const entry = (await saved()).archivedMeds[TRACKED.id];
+  const entry = ((await saved()).archivedMeds || {})[TRACKED.id];
   t('the archive entry has no stored settings, like an older build would leave it', !entry.config, '');
   const noted = await page.evaluate((id) => {
     const el = document.querySelector('[data-archived-med="' + id + '"]');
