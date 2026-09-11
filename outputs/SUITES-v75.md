@@ -41,3 +41,6 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | cycle-merge-probe.mjs | PASS | 24/24 checks passed |
 | audit-v69-weightreport.mjs | PASS |   11 passed, 0 failed |
 | audit-v72-probe.mjs | PASS | 28/28 checks passed |
+| overflow-scan.mjs | PASS | CLEAN — Android rows are high fidelity (Chromium is Android's engine); iOS rows are Chromium at Apple viewport sizes, not Safari. |
+
+Failing or erroring suites: 0
