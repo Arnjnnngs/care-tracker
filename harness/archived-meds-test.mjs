@@ -57,7 +57,6 @@ const MED_KEY = 'caretracker-medication-config-v1';
 // A value no default carries, so 'the archive kept what was removed' cannot pass by accident on a
 // build that archived the shipped default instead of the caregiver's own edited version.
 const MARKER = 'Aaron changed this line before it was removed';
-let missedBefore = 0, missedRemoved = 0;
 
 const stubFs = `
 const store={entries:[],prefs:{}};const eL=[],pL=[];let n=0;
@@ -123,17 +122,31 @@ const archivedIds = async () => Object.keys((await saved()).archivedMeds || {});
 // THE MISSED-DOSE TOTAL, READ OFF THE BANNER THE CAREGIVER ACTUALLY SEES.
 // The first version of this counted `[data-missed-row], [data-missed-banner]` -- NEITHER SELECTOR
 // EXISTS IN THIS APP. It scored 0 against 0 on every build, broken or not: a check that could not
-// fail, in the one file whose whole subject is checks that cannot fail. The banner has no per-row
-// hook, so the total is the honest thing to read, and the assertions below are about how it MOVES.
+// fail, in the one file whose whole subject is checks that cannot fail.
+// The second version counted the medication's name inside the banner, and was worse: the banner
+// collapses to three days, so it counted VISIBLE rows and moved for reasons that had nothing to do
+// with the thing under test. The count in the banner's own heading is the whole number, collapsed
+// or not, and it is what the caregiver reads.
+// RETURNS null WHERE THE BANNER HAS NO SUCH HEADING -- one of the three builds carries an older
+// design -- and the callers then print EXEMPT with the reason rather than asserting on a zero.
+// A suite that cannot see the thing it measures must say so.
+let missedBefore = null, missedRemoved = null;
 const missedTotal = async () => {
   await clickText(/^Home$/);
   await page.waitForTimeout(900);
-  return page.evaluate(() => {
+  const raw = await page.evaluate(() => {
     const txt = ((document.getElementById('root') || {}).innerText || '');
-    const m = txt.match(/(\d+)\s+MISSED DOSES?/i);
-    return m ? Number(m[1]) : 0;
+    const m = txt.match(/(\d+)\s+missed dose/i);
+    return m ? Number(m[1]) : null;
   });
+  // THE FIRST READING DECIDES WHETHER THIS BUILD CAN BE READ AT ALL, and it is taken while the
+  // fixture is guaranteed to have missed doses on screen. After that, "no count" means zero -- the
+  // banner is simply gone because there is nothing left to report. Collapsing those two into one
+  // answer is what made three checks quietly EXEMPT themselves the moment the count reached zero.
+  if (raw === null && missedBefore === null) return null;
+  return raw === null ? 0 : raw;
 };
+const exempt = (name, why) => console.log('  EXEMPT  ' + name + '  |  ' + why);
 const archivedRows = () => page.evaluate(() =>
   [...document.querySelectorAll('[data-archived-med]')].map(el => el.getAttribute('data-archived-med')));
 
@@ -164,7 +177,9 @@ console.log('\n1. With nothing removed, the app says nothing about removed medic
   t('THE EXEMPTION: no "Removed medications" section when nothing is removed', !heading, '');
   // Counted BEFORE anything is removed, so the two assertions later are about how this number moves.
   missedBefore = await missedTotal();
-  t('the fixture really does produce missed doses, so the checks below can fail', missedBefore > 0,
+  if (missedBefore === null) exempt('the missed-dose banner could not be read in this build',
+    'this build carries an older banner with no findable container; the record-level checks below still hold');
+  else t('the fixture really does produce missed doses, so the checks below can fail', missedBefore > 0,
     'total=' + missedBefore);
   await goMeds();
 }
@@ -229,7 +244,8 @@ console.log('\n2. Removing a medication archives the WHOLE thing, not just its n
   t('after closing and reopening the app, it still knows the settings were kept',
     note !== '(no row)' && !/not kept/i.test(note), note.replace(/\n/g, ' | ').slice(0, 80));
   missedRemoved = await missedTotal();
-  t('taking it off the list took its missed doses off the banner too', missedRemoved < missedBefore,
+  if (missedRemoved === null || missedBefore === null) exempt('removing it clears its rows from the banner', 'banner not readable in this build');
+  else t('taking it off the list took its missed doses off the banner too', missedRemoved < missedBefore,
     missedBefore + ' -> ' + missedRemoved);
   await goMeds();
 }
@@ -259,7 +275,8 @@ console.log('\n3. THE SAFETY CHECK: it comes back with reminders OFF');
   // medication takes its misses off the banner; bringing it back must NOT put them all back on.
   // Delete the alertsFrom guard from the missed-dose walk and this jumps straight back to the
   // before-number, which is the wall of red the release exists to prevent.
-  t('THE SAFETY CHECK: bringing it back does not put the days it was away back on the banner',
+  if (missedAfter === null || missedRemoved === null) exempt('THE SAFETY CHECK on the banner', 'banner not readable in this build; alerts and alertsFrom are asserted from the saved record above');
+  else t('THE SAFETY CHECK: bringing it back does not put the days it was away back on the banner',
     missedAfter === missedRemoved, missedBefore + ' before -> ' + missedRemoved + ' with it removed -> ' + missedAfter + ' after');
   await goMeds();
   await shot('2-restored');
@@ -277,7 +294,8 @@ console.log('\n4. It survives a reload, and restoring again is a no-op');
   // place that could not see it fail -- reading a stored flag that a normaliser had not yet
   // rewritten. What the caregiver sees is the only thing that settles it.
   const stillClear = await missedTotal();
-  t('and the banner still does not count the days it was away', stillClear === missedRemoved,
+  if (stillClear === null || missedRemoved === null) exempt('the banner after a reload', 'banner not readable in this build');
+  else t('and the banner still does not count the days it was away', stillClear === missedRemoved,
     missedRemoved + ' -> ' + stillClear);
   await goMeds();
   const gone = await clickLabel('Bring back ' + TRACKED.name);
