@@ -32,6 +32,16 @@ CASES = [
      lambda h: h.replace("      && span.end <= Date.now());", "      );"),
      'THE RECORD SURVIVES IT: the span is dropped on load, so nothing is suppressed'),
 
+    ('THE FIFTH AUDIT: a future removal day still promises the days go uncounted',
+     lambda h: h.replace("""  const knewWhenItLeft = isFinite(leftOn) && leftOn > 0
+    && dayStart(leftOn) <= dayStart(state.now || Date.now());""", "  const knewWhenItLeft = !!leftOn;"),
+     'and no backwards span is recorded from it'),
+
+    ('the row stops using the same test the restore uses, so it can promise what restore will not do',
+     lambda h: h.replace("      const usable = isFinite(left) && left > 0 && dayStart(left) <= today;",
+                         "      const usable = isFinite(left) && left > 0;"),
+     'the row does NOT promise those days will go uncounted'),
+
     ("THE AUDIT'S SECOND BLOCKER: a normaliser strips awayPeriods on load, so the feature dies at the first reload",
      lambda h: h.replace("function normalizeMedication(raw, index) {\n  const original = raw || {};",
                          "function normalizeMedication(raw, index) {\n  const original = raw || {};\n  delete original.awayPeriods;"),
