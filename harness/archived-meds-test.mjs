@@ -243,6 +243,23 @@ console.log('\n2. Removing a medication archives the WHOLE thing, not just its n
   }, TRACKED.id);
   t('after closing and reopening the app, it still knows the settings were kept',
     note !== '(no row)' && !/not kept/i.test(note), note.replace(/\n/g, ' | ').slice(0, 80));
+  // THE DAY IT LEFT, WRITTEN DOWN AT THE MOMENT OF REMOVAL -- and asserted HERE, before section 4B
+  // backdates it. 4B has to put a past date in storage to measure a real away span, and that made
+  // the build's own recording of the field invisible: with it deleted from the archive write, both
+  // suites stayed fully green. A restore would then fall back to a single-day span and count a
+  // two-month absence as missed doses. This end cannot be recovered later; it is only ever true if
+  // the app wrote it down now.
+  const leftOn = await page.evaluate(([k, id]) => {
+    try {
+      const arc = (JSON.parse(localStorage.getItem(k) || '{}').archivedMeds) || {};
+      if (!Object.prototype.hasOwnProperty.call(arc, id)) return null;
+      const v = Number(arc[id].removedAt);
+      return isFinite(v) && v > 0 ? v : null;
+    } catch (e) { return null; }
+  }, [MED_KEY, TRACKED.id]);
+  t('the archive wrote down the day it left, which nothing can recover later',
+    leftOn !== null && Math.abs(Date.now() - leftOn) < 36 * 3600 * 1000,
+    leftOn === null ? '(not recorded)' : new Date(leftOn).toISOString().slice(0, 10));
   missedRemoved = await missedTotal();
   if (missedRemoved === null || missedBefore === null) exempt('removing it clears its rows from the banner', 'banner not readable in this build');
   else t('taking it off the list took its missed doses off the banner too', missedRemoved < missedBefore,

@@ -69,7 +69,7 @@ CASES = [
 
     ('the archive stops recording the day the medication left the list',
      lambda h: h.replace(", removedAt: dayStart(state.now || Date.now()) } };", " } };"),
-     'the span starts on the day it actually left, not on the day it came back'),
+     'the archive wrote down the day it left, which nothing can recover later'),
 
     ('the day it left is stripped on every load -- the v20 trap, on the new field',
      lambda h: h.replace("    if (Number(value.removedAt)) entry.removedAt = Number(value.removedAt);\n", ""),
