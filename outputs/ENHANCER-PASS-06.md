@@ -45,8 +45,16 @@ The role most likely to walk past what should not be there found nothing to remo
 
 ## Proposed, for Aaron to pick from
 
-1. **"Removed 14 days ago" on each removed row (S).** The data is already recorded and stored. Pure
-   formatting. **Recommended** — it is the only dead end on the screen.
+1. **"Removed 14 days ago" on each removed row (S). BUILT IN THIS RELEASE, not deferred** — because
+   the independent audit turned out to need the same line for a different reason, and the two
+   findings collapsed into one change. The audit's blocker was that three strings promised,
+   unconditionally, that only the days a medication was off the list go uncounted — untrue for every
+   archive entry written before this release, which is every entry that existed on upgrade day. The
+   row that can say *"Removed 14 days ago · the days it was away will not count as missed doses"* is
+   the row that can say *"Removed before this update — the app cannot tell when, so the days it was
+   away will still count as missed doses"* instead. **The Enhancer asked for information; the audit
+   asked for honesty; the same line answers both.** Worth noticing: this pass proposed it as a
+   nice-to-have and ranked it third in importance behind nothing. It was load-bearing.
 2. **A note on the missed-dose banner when a medication is currently removed (S).** Today the banner
    simply stops mentioning it, which is right, but a caregiver who removed it by accident gets no
    hint that a tracked medication has gone quiet. Weaker than item 1: it puts words on the screen
