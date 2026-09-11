@@ -89,6 +89,7 @@ rep("""    archived[id] = { name: String(value.name || id), sub: String(value.su
     // fixed with the identical line. A corrupted or hand-edited archive cannot inject a malformed
     // medication: whatever it holds goes through normalizeMedication() like any other.
     const entry = { name: String(value.name || id), sub: String(value.sub || '') };
+    if (Number(value.removedAt)) entry.removedAt = Number(value.removedAt);
     if (value.config && typeof value.config === 'object') {
       try { entry.config = normalizeMedication(JSON.parse(JSON.stringify(value.config))); } catch (e) {}
     }
@@ -99,7 +100,7 @@ rep("""  const archivedMeds = { ...(state.archivedMeds || {}), [id]: { name: med
   // away its doses, windows, limits and notes, so even if there had been a way to bring it back
   // there was nothing to bring back but a name. {name, sub} stay exactly where they were, so an
   // older build reading this record still finds what it expects.
-  const archivedMeds = { ...(state.archivedMeds || {}), [id]: { name: med.name, sub: med.sub || '', config: JSON.parse(JSON.stringify(med)) } };""")
+  const archivedMeds = { ...(state.archivedMeds || {}), [id]: { name: med.name, sub: med.sub || '', config: JSON.parse(JSON.stringify(med)), removedAt: dayStart(state.now || Date.now()) } };""")
 
 # ---- 2. restoring ------------------------------------------------------------------------------
 rep("""function deleteMedicationConfig(id) {""",
@@ -132,10 +133,18 @@ function restoreMedicationConfig(id) {
   else if (shipped) { med = normalizeMedication(deepCopyMeds([shipped])[0]); source = 'shipped'; }
   else { med = normalizeMedication({ id: id, name: entry.name || id, sub: entry.sub || '' }); }
   med.id = id;
-  // REMINDERS COME BACK AS THEY WERE, and the GAP is what is suppressed. The first version of this
-  // release switched them off instead; the audit showed that was wrong in both apps and in opposite
-  // directions -- erased by a normaliser in one, permanent with no way back in the other.
-  med.alertsFrom = dayStart(state.now || Date.now());
+  // REMINDERS COME BACK AS THEY WERE. What is suppressed is the SPAN IT WAS AWAY -- from the day it
+  // left the list to today -- and nothing outside it. The first version switched reminders off
+  // instead, which removed safety cover invisibly; the second suppressed everything BEFORE the
+  // restore, which erased the medication's entire missed-dose history from the banner, the day
+  // summaries and the clinician export. Both ends, or it is not a gap.
+  // An archive written before this release carries no removedAt: that restore gets a single-day
+  // span, which suppresses nothing that matters and never reaches backwards.
+  const awayFrom = dayStart(Number(entry.removedAt) || (state.now || Date.now()));
+  const awayTo = dayStart(state.now || Date.now());
+  med.awayPeriods = (Array.isArray(med.awayPeriods) ? med.awayPeriods : [])
+    .filter(p => p && Number(p.start) && Number(p.end))
+    .concat([{ start: awayFrom, end: awayTo }]);
   const meds = state.meds.concat([med]);
   const archivedMeds = { ...(state.archivedMeds || {}) };
   delete archivedMeds[id];
@@ -144,7 +153,7 @@ function restoreMedicationConfig(id) {
   setToast(med.name + (source === 'archive' ? ' is back, with its doses and rules.'
     : source === 'shipped' ? ' is back, set up the way it came with the app.'
     : ' is back. Its doses and rules were not kept \\u2014 set them in Edit.')
-    + ' Its reminders come back on from today \\u2014 the days it was away are not counted as missed.');
+    + ' Its reminders come back on, and the days it was off the list are not counted as missed.');
 }
 function deleteMedicationConfig(id) {""")
 
@@ -157,7 +166,7 @@ rep("""    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDi
     archivedList.length ? h('div', { 'data-archived-meds': 'true', style: { marginTop: '18px' } },
       h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '4px' } }, 'Removed medications'),
       h('div', { style: { fontSize: '12px', color: '#6E5261', lineHeight: '1.4', marginBottom: '9px' } },
-        'Their dose history is still in the app. Bring one back and its old doses read properly again \\u2014 it comes back with its reminders on again from today, so the days it was away are not counted as missed.'),
+        'Their dose history is still in the app. Bring one back and its old doses read properly again \\u2014 it comes back with its reminders on again, and only the days it was off the list are left uncounted.'),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...archivedList.map(item => {
         const restoring = state.confirmRestoreMed === item.id;
         return h('article', { 'data-archived-med': item.id, style: { background: 'rgba(255,255,255,0.45)', border: '1px dashed rgba(138,100,121,0.32)', borderRadius: '15px', padding: '12px', display: 'flex', alignItems: 'center', gap: '10px', overflowWrap: 'anywhere' } },
@@ -202,8 +211,12 @@ rep("""function deleteMedicationConfig(id) {
 # them, and the engine is otherwise untouched.
 rep("""  state.meds.filter(m => m.alerts && m.windows).forEach(med => {""",
     """  state.meds.filter(m => m.alerts && m.windows).forEach(med => {
-    // Brought back from the archive: nothing before the day it returned is a missed dose.
-    if (med.alertsFrom && d0 < dayStart(med.alertsFrom)) return;""")
+    // BROUGHT BACK FROM THE ARCHIVE: the days it was AWAY are not missed doses. Both ends matter.
+    // The version before this one suppressed everything before the restore day, so bringing a
+    // medication back erased its whole missed-dose history -- 122 misses over two months, gone from
+    // the banner, the day summaries and the report that goes to the doctor, for a medication that
+    // had been off the list for two seconds.
+    if ((med.awayPeriods || []).some(p => p && d0 >= dayStart(p.start) && d0 <= dayStart(p.end))) return;""")
 
 # ---- TWO THINGS THE AUDIT FOUND AROUND THE NEW CONTROL ----------------------------------------
 # 1. A half-armed "Bring back" survived navigation. The confirm beside it -- Remove -- has been
@@ -223,7 +236,7 @@ rep("""  { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what
     points: [
       'The Meds screen now lists medications you have removed, under "Removed medications", and each one has a "Bring back" button.',
       'Bringing one back restores it under its original name, so its old doses read properly again instead of showing as a removed medication.',
-      'Its reminders come back on from the day you bring it back, so the days it was away are not counted as missed doses.'
+      'Its reminders come back on, and only the days it was off the list are left uncounted.'
     ] },
   { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what it is for',""")
 

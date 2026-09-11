@@ -268,16 +268,24 @@ console.log('\n3. THE SAFETY CHECK: it comes back with reminders OFF');
   t('its dose windows came back too', !!back && (back.windows || []).length > 0, 'windows=' + (back ? (back.windows || []).length : 0));
   t('its reminders came back exactly as they were, rather than being switched off', !!back && back.alerts === true,
     'alerts=' + (back && back.alerts));
-  t('and the day it came back is stamped, so the gap is what gets suppressed',
-    !!back && typeof back.alertsFrom === 'number' && back.alertsFrom > 0, 'alertsFrom=' + (back && back.alertsFrom));
+  t('the span it was away is recorded with BOTH ends',
+    !!back && Array.isArray(back.awayPeriods) && back.awayPeriods.length > 0
+      && Number(back.awayPeriods[back.awayPeriods.length - 1].start) > 0
+      && Number(back.awayPeriods[back.awayPeriods.length - 1].end) > 0,
+    JSON.stringify(back && back.awayPeriods));
   const missedAfter = await missedTotal();
   // THE SAFETY CHECK, and it is about how the number MOVES rather than what it is. Removing the
   // medication takes its misses off the banner; bringing it back must NOT put them all back on.
   // Delete the alertsFrom guard from the missed-dose walk and this jumps straight back to the
   // before-number, which is the wall of red the release exists to prevent.
   if (missedAfter === null || missedRemoved === null) exempt('THE SAFETY CHECK on the banner', 'banner not readable in this build; alerts and alertsFrom are asserted from the saved record above');
-  else t('THE SAFETY CHECK: bringing it back does not put the days it was away back on the banner',
-    missedAfter === missedRemoved, missedBefore + ' before -> ' + missedRemoved + ' with it removed -> ' + missedAfter + ' after');
+  // BOTH ENDS. This medication was off the list for about two seconds, so the span it was away
+  // holds no missed doses -- the total must come back to EXACTLY where it started. Asserting it
+  // equalled the REMOVED number was green on a build that erased the medication's whole
+  // missed-dose history: 122 misses over two months, gone from the banner, the day summaries
+  // and the report that goes to the doctor.
+  else t('THE SAFETY CHECK: only the days it was away are suppressed, and it was away for none',
+    missedAfter === missedBefore, missedBefore + ' before -> ' + missedRemoved + ' with it removed -> ' + missedAfter + ' after');
   await goMeds();
   await shot('2-restored');
 }
@@ -288,15 +296,15 @@ console.log('\n4. It survives a reload, and restoring again is a no-op');
   await goMeds();
   t('still on the active list after closing and reopening the app', (await activeIds()).includes(TRACKED.id), '');
   const back = ((await saved()).meds || []).find(m => m.id === TRACKED.id);
-  t('and the day it came back survived the reload', !!back && typeof back.alertsFrom === 'number',
-    'alertsFrom=' + (back && back.alertsFrom));
+  t('the span it was away survived the reload', !!back && Array.isArray(back.awayPeriods) && back.awayPeriods.length > 0,
+    JSON.stringify(back && back.awayPeriods));
   // BEHAVIOURALLY, AFTER A RELOAD. The audit's third block was that this claim was asserted from a
   // place that could not see it fail -- reading a stored flag that a normaliser had not yet
   // rewritten. What the caregiver sees is the only thing that settles it.
   const stillClear = await missedTotal();
-  if (stillClear === null || missedRemoved === null) exempt('the banner after a reload', 'banner not readable in this build');
-  else t('and the banner still does not count the days it was away', stillClear === missedRemoved,
-    missedRemoved + ' -> ' + stillClear);
+  if (stillClear === null || missedBefore === null) exempt('the banner after a reload', 'banner not readable in this build');
+  else t('and after a reload the history is still all there', stillClear === missedBefore,
+    missedBefore + ' -> ' + stillClear);
   await goMeds();
   const gone = await clickLabel('Bring back ' + TRACKED.name);
   t('there is no "Bring back" control for it any more', !gone, '');
@@ -359,8 +367,8 @@ console.log('\n6. An archive written by an OLDER build still restores something 
   await page.waitForTimeout(800);
   const back = ((await saved()).meds || []).find(m => m.id === TRACKED.id);
   t('it still comes back', !!back, '');
-  t('the day it came back is stamped on this path too', !!back && typeof back.alertsFrom === 'number',
-    'alertsFrom=' + (back && back.alertsFrom));
+  t('the span it was away is recorded on this path too', !!back && Array.isArray(back.awayPeriods) && back.awayPeriods.length > 0,
+    JSON.stringify(back && back.awayPeriods));
   t('and set up the way it ships rather than as an empty shell',
     !!back && ((back.doses || []).length > 0 || (back.windows || []).length > 0),
     'doses=' + (back ? (back.doses || []).length : 0) + ' windows=' + (back ? (back.windows || []).length : 0));
