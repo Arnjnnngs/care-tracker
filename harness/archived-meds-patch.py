@@ -23,13 +23,19 @@ THE WRITE MODEL, stated before a line was written.
   * RESTORE PUTS IT BACK UNDER ITS ORIGINAL ID. That is the entire point: the dose history
     references that id, so the old doses read properly again. A new id would leave them orphaned,
     which is what re-creating by hand does today.
-  * RESTORE ALWAYS COMES BACK WITH REMINDERS OFF, whatever the archive says, and the app says so on
-    screen. THIS IS THE TRAP THIS RELEASE EXISTS TO AVOID. missedDosesFor() walks every day since
-    MISSED_TRACK_SINCE and asks `state.meds.filter(m => m.alerts && m.windows)`. Restore a tracked
-    medication with alerts on and every dose window during the weeks it was archived is instantly
-    flagged as missed -- the exact flood that ending a hospital stay produced once already, and the
-    reason per-window suppression was built. Reminders off means the gap is silent, and the
-    caregiver turns them back on in Edit when she is ready.
+  * REMINDERS COME BACK EXACTLY AS THEY WERE, AND THE GAP IS WHAT IS SUPPRESSED. Restore stamps
+    `alertsFrom` with today and missedDosesFor() skips days before it for that medication.
+    THE FIRST VERSION OF THIS RELEASE GOT THIS WRONG and the audit refused it -- twice over, in
+    opposite directions. It restored the medication with reminders switched OFF, which in ChemoWell
+    was erased at the next app open (its normaliser RECOMPUTES `alerts` from the schedule type and
+    never reads what was saved), and in care-tracker stayed off FOREVER under a toast promising
+    "turn them back on in Edit" when the editor has no such control at all. Either way it removed
+    missed-dose cover invisibly, under a button labelled "Bring back".
+    The design was wrong, not just the code: "reminders off" trades a VISIBLE, recoverable problem
+    -- a wall of missed doses for days she was not taking it -- for an INVISIBLE, unrecoverable one.
+    A clinician takes the first every time.
+    SAID OUT LOUD: a phone still on the OLD build ignores `alertsFrom` and shows the gap as missed
+    until it updates. That is visible and self-correcting; silent loss of alerting is neither.
   * TIE-BREAK: if an ACTIVE medication already holds that id, restore is REFUSED and says why.
     Restoring over it, or under a new id, would silently sever the dose history.
   * TWICE: the second restore is a no-op. The id is gone from the archive after the first.
@@ -40,9 +46,9 @@ THE WRITE MODEL, stated before a line was written.
     name alone, and the toast says which of the three it used rather than pretending.
 
 WHAT IT DELIBERATELY DOES NOT DO
-  * It does not restore reminders. See above -- that is the whole safety argument.
-  * It does not touch the Home quick-log cards, the entries, or the missed-dose engine. Not one
-    line of missedDosesFor() changes.
+  * It does not touch the Home quick-log cards or the entries.
+  * It adds exactly ONE line to the missed-dose engine -- a guard keyed on `alertsFrom`, a field no
+    medication that was never archived carries, so for every one of them it does nothing at all.
   * The Archived section renders ONLY when something is archived. An empty notice about a list with
     nothing in it is the bug the sibling app's audit found in v74.
 
@@ -98,15 +104,19 @@ rep("""  const archivedMeds = { ...(state.archivedMeds || {}), [id]: { name: med
 # ---- 2. restoring ------------------------------------------------------------------------------
 rep("""function deleteMedicationConfig(id) {""",
     """// ---- BRINGING A MEDICATION BACK (v75) ----
-// REMINDERS COME BACK OFF, ALWAYS, WHATEVER THE ARCHIVE SAYS. missedDosesFor() walks every day
-// since MISSED_TRACK_SINCE and reads `state.meds.filter(m => m.alerts && m.windows)`. Restore a
-// tracked medication with alerts on and EVERY dose window during the weeks it was archived is
-// flagged as missed the moment the screen redraws -- a wall of red for days nobody was ever meant
-// to take it. That is the same flood ending a hospital stay produced once already. The medication
-// comes back silent and the caregiver turns reminders on again in Edit when she wants them.
+// REMINDERS COME BACK EXACTLY AS THEY WERE. What is suppressed is the GAP: `alertsFrom` tells
+// missedDosesFor() that nothing before today counts as a missed dose for this medication.
+// The first version of this release switched reminders OFF instead, and the audit refused it in
+// both apps and in opposite directions -- erased at the next load by a normaliser in one, permanent
+// with no control to undo it in the other. Both removed missed-dose cover invisibly, under a button
+// labelled "Bring back".
 function restoreMedicationConfig(id) {
-  const entry = (state.archivedMeds || {})[id];
-  if (!entry) return;
+  // hasOwnProperty, NOT a bare index -- the guard every neighbouring lookup in this file got after
+  // v74, when a medication named `Constructor` read back Object.prototype's own property and
+  // destroyed the Meds screen permanently.
+  const archive = state.archivedMeds || {};
+  const entry = Object.prototype.hasOwnProperty.call(archive, id) ? archive[id] : null;
+  if (!entry || typeof entry !== 'object') return;
   // TIE-BREAK, and the reason restore exists at all. The id is what every stored dose points at.
   // If an active medication already holds it, putting this one back would collide; giving it a new
   // id instead would leave its whole dose history orphaned, which is exactly what re-creating a
@@ -122,7 +132,10 @@ function restoreMedicationConfig(id) {
   else if (shipped) { med = normalizeMedication(deepCopyMeds([shipped])[0]); source = 'shipped'; }
   else { med = normalizeMedication({ id: id, name: entry.name || id, sub: entry.sub || '' }); }
   med.id = id;
-  med.alerts = false;
+  // REMINDERS COME BACK AS THEY WERE, and the GAP is what is suppressed. The first version of this
+  // release switched them off instead; the audit showed that was wrong in both apps and in opposite
+  // directions -- erased by a normaliser in one, permanent with no way back in the other.
+  med.alertsFrom = dayStart(state.now || Date.now());
   const meds = state.meds.concat([med]);
   const archivedMeds = { ...(state.archivedMeds || {}) };
   delete archivedMeds[id];
@@ -131,7 +144,7 @@ function restoreMedicationConfig(id) {
   setToast(med.name + (source === 'archive' ? ' is back, with its doses and rules.'
     : source === 'shipped' ? ' is back, set up the way it came with the app.'
     : ' is back. Its doses and rules were not kept \\u2014 set them in Edit.')
-    + ' Reminders are off so the days it was away are not counted as missed.');
+    + ' Its reminders come back on from today \\u2014 the days it was away are not counted as missed.');
 }
 function deleteMedicationConfig(id) {""")
 
@@ -144,7 +157,7 @@ rep("""    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDi
     archivedList.length ? h('div', { 'data-archived-meds': 'true', style: { marginTop: '18px' } },
       h('div', { style: { fontSize: '13px', fontWeight: '800', letterSpacing: '0.04em', textTransform: 'uppercase', color: '#8A6479', marginBottom: '4px' } }, 'Removed medications'),
       h('div', { style: { fontSize: '12px', color: '#6E5261', lineHeight: '1.4', marginBottom: '9px' } },
-        'Their dose history is still in the app. Bring one back and its old doses read properly again \\u2014 it returns with reminders off, so the days it was away are not counted as missed.'),
+        'Their dose history is still in the app. Bring one back and its old doses read properly again \\u2014 it comes back with its reminders on again from today, so the days it was away are not counted as missed.'),
       h('div', { style: { display: 'flex', flexDirection: 'column', gap: '9px' } }, ...archivedList.map(item => {
         const restoring = state.confirmRestoreMed === item.id;
         return h('article', { 'data-archived-med': item.id, style: { background: 'rgba(255,255,255,0.45)', border: '1px dashed rgba(138,100,121,0.32)', borderRadius: '15px', padding: '12px', display: 'flex', alignItems: 'center', gap: '10px', overflowWrap: 'anywhere' } },
@@ -178,6 +191,31 @@ rep("""function deleteMedicationConfig(id) {
   if (state.confirmRestoreMed) setState({ confirmRestoreMed: null });
   if (state.confirmDeleteMed !== id) { setState({ confirmDeleteMed: id }); return; }""")
 
+# ---- NOTHING BEFORE THE DAY IT CAME BACK IS A MISSED DOSE -------------------------------------
+# The audit refused the first version of this release, and the design was wrong rather than only the
+# code. It restored the medication with its reminders switched OFF -- which in one app was erased at
+# the next load by a normaliser that recomputes `alerts`, and in the other stayed off forever under a
+# toast promising a control that does not exist. Either way it removed safety cover invisibly.
+# Reminders come back exactly as they were now. What is suppressed is the GAP: `alertsFrom` tells the
+# missed-dose walk that nothing before the day of the restore counts for this medication. No
+# medication that was never archived carries the field, so this line does nothing at all for any of
+# them, and the engine is otherwise untouched.
+rep("""  state.meds.filter(m => m.alerts && m.windows).forEach(med => {""",
+    """  state.meds.filter(m => m.alerts && m.windows).forEach(med => {
+    // Brought back from the archive: nothing before the day it returned is a missed dose.
+    if (med.alertsFrom && d0 < dayStart(med.alertsFrom)) return;""")
+
+# ---- TWO THINGS THE AUDIT FOUND AROUND THE NEW CONTROL ----------------------------------------
+# 1. A half-armed "Bring back" survived navigation. The confirm beside it -- Remove -- has been
+#    cleared on every view change since long before this release; this one was not, so leaving the
+#    Meds screen and coming back left a button one tap from acting.
+rep("""  const next = { view, reportsView: view === 'reports' ? null : state.reportsView, medEditor: view === 'meds' ? state.medEditor : null, confirmDeleteMed: null };""",
+    """  // v75/app-v73: a half-armed "Bring back" is cleared on navigation exactly like a half-armed
+  // Remove. Leaving it armed means coming back to the Meds screen later and finding a button
+  // already one tap from acting -- the audit found it, and the neighbouring confirm has been
+  // cleared here since long before this release.
+  const next = { view, reportsView: view === 'reports' ? null : state.reportsView, medEditor: view === 'meds' ? state.medEditor : null, confirmDeleteMed: null, confirmRestoreMed: null };""")
+
 if "const APP_VERSION = '%s';" % FROM_V not in s: sys.exit('REFUSING: version stamp missing')
 rep("const APP_VERSION = '%s';" % FROM_V, "const APP_VERSION = '%s';" % TO_V)
 rep("""  { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what it is for',""",
@@ -185,7 +223,7 @@ rep("""  { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what
     points: [
       'The Meds screen now lists medications you have removed, under "Removed medications", and each one has a "Bring back" button.',
       'Bringing one back restores it under its original name, so its old doses read properly again instead of showing as a removed medication.',
-      'It comes back with reminders OFF, so the days it was away are not counted as missed doses. Turn them back on in Edit when you are ready.'
+      'Its reminders come back on from the day you bring it back, so the days it was away are not counted as missed doses.'
     ] },
   { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what it is for',""")
 
