@@ -4597,9 +4597,17 @@ function restoreMedicationConfig(id) {
     && dayStart(leftOn) <= dayStart(state.now || Date.now());
   const awayFrom = dayStart(knewWhenItLeft ? leftOn : (state.now || Date.now()));
   const awayTo = dayStart(state.now || Date.now());
-  med.awayPeriods = (Array.isArray(med.awayPeriods) ? med.awayPeriods : [])
-    .filter(p => p && Number(p.start) && Number(p.end))
-    .concat([{ start: awayFrom, end: awayTo }]);
+  // IF IT DOES NOT KNOW WHEN THE MEDICATION LEFT, IT SUPPRESSES NOTHING. The version before this one
+  // appended a {today, today} span on that path, which is not nothing: it took both of a tracked
+  // medication's windows off the restore day and two rows off the clinician export, while the toast,
+  // the row and the records all said the days would still show as missed. Three false statements in
+  // the under-reporting direction, and the honest fix was the code rather than the wording -- now all
+  // three are true as written. The cost, said out loud: a window missed earlier today while the
+  // medication was off the list counts as missed on this path. That is the over-reporting direction,
+  // it is visible, and it is what the caregiver is told.
+  const kept = (Array.isArray(med.awayPeriods) ? med.awayPeriods : [])
+    .filter(p => p && Number(p.start) && Number(p.end));
+  med.awayPeriods = knewWhenItLeft ? kept.concat([{ start: awayFrom, end: awayTo }]) : kept;
   const meds = state.meds.concat([med]);
   const archivedMeds = { ...(state.archivedMeds || {}) };
   delete archivedMeds[id];
