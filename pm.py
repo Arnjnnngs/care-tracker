@@ -266,8 +266,38 @@ if _ver:
                 blockers.append("A SUITE IS RED in outputs/SUITES-%s.md — fix it, or mark the row EXEMPT with a reason\n"
                                 "    of at least twenty characters (an exemption nobody wrote down is an oversight):\n      %s"
                                 % (_ver, "\n      ".join(_bad)))
-            else:
-                notes.append("every suite recorded for %s (outputs/SUITES-%s.md)" % (_ver, _ver))
+            # AN ABORTED SWEEP MUST NOT SCORE BETTER THAN A COMPLETED ONE (added 2026-09-11,
+            # found by the v75 audit). Everything above only reads the rows that are THERE. A run
+            # killed halfway -- a rollback, a timeout, a Ctrl-C -- leaves a record holding the few
+            # suites that had finished, all green, and this block used to call that "every suite
+            # recorded". Two things settle it: run-all.sh writes a closing line only when it reaches
+            # the end, and every suite it would have run must have a row of its own.
+            _txt = open(_rec, encoding="utf-8").read()
+            if "Failing or erroring suites:" not in _txt:
+                blockers.append("THE SUITE RUN DID NOT FINISH — outputs/SUITES-%s.md has no closing\n"
+                                "    line, so it records a sweep that was killed partway. The rows it does\n"
+                                "    carry prove nothing about the ones it does not. Run harness/run-all.sh again." % _ver)
+            _want = set()
+            _hdir = os.path.join(REPO, "harness")
+            if os.path.isdir(_hdir):
+                for _n in os.listdir(_hdir):
+                    if _n.endswith("-test.mjs") or _n in ("cycle-merge-probe.mjs", "audit-v69-weightreport.mjs",
+                                                          "audit-v72-probe.mjs", "overflow-scan.mjs"):
+                        _want.add(_n)
+            _have = set()
+            for _ln in _txt.splitlines():
+                _c = [x.strip() for x in _ln.strip().strip("|").split("|")]
+                if len(_c) >= 3 and _c[0].endswith(".mjs"):
+                    _have.add(_c[0])
+            _missing = sorted(_want - _have)
+            if _missing:
+                blockers.append("%d SUITE(S) HAVE NO ROW in outputs/SUITES-%s.md — a suite that did not\n"
+                                "    report is indistinguishable from one nobody ran, and this check used to\n"
+                                "    pass on a half-finished sweep:\n      %s"
+                                % (len(_missing), _ver, "\n      ".join(_missing)))
+            if not _missing and "Failing or erroring suites:" in _txt:
+                notes.append("all %d suites recorded for %s, and the run finished (outputs/SUITES-%s.md)"
+                             % (len(_want), _ver, _ver))
 
 # --- 8. THE NOTES MUST MOVE WITH THE CODE ------------------------------------------------------
 # Aaron, 2026-08-24: "we need to make sure that notes are being updated each final push and commit."
