@@ -42,6 +42,11 @@ CASES = [
                          "      const usable = isFinite(left) && left > 0;"),
      'the row does NOT promise those days will go uncounted'),
 
+    ('THE SIXTH AUDIT: the upgrade-day path appends a {today, today} span again',
+     lambda h: h.replace("  med.awayPeriods = knewWhenItLeft ? kept.concat([{ start: awayFrom, end: awayTo }]) : kept;",
+                         "  med.awayPeriods = kept.concat([{ start: awayFrom, end: awayTo }]);"),
+     'NO span is recorded at all when the app does not know when it left'),
+
     ("THE AUDIT'S SECOND BLOCKER: a normaliser strips awayPeriods on load, so the feature dies at the first reload",
      lambda h: h.replace("function normalizeMedication(raw, index) {\n  const original = raw || {};",
                          "function normalizeMedication(raw, index) {\n  const original = raw || {};\n  delete original.awayPeriods;"),
