@@ -147,9 +147,9 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **Version** | v75 |
 | **Commit** | `on the working branch` — v75. v74 is live on main. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `9f09b74a4f611ac8a6b13388825ce74f` |
+| **index.html md5** | `499c51ddf963189d557fe652a8ad078e` |
 | **sw.js md5** | `266e970881ba004092fb39da29e13c3c` |
-| **State** | **v75 — removed medications can be brought back.** Aaron picked this off the Enhancer's list. The app has kept removed medications' names for many releases so old doses still read properly, but nothing listed them and nothing brought one back: a medication paused between cycles had to be typed in again, came back under a new id, and every dose that referenced the old one then read as a removed medication. **The write model, stated first:** appends nothing, touches no entry, changes the medication config only. The archive now keeps the whole medication rather than just its name, plus the day it left. Restore puts it back under its ORIGINAL id, which is the point. An active medication already holding the id refuses the restore. **THE INDEPENDENT AUDIT REFUSED THIS RELEASE TWICE AND WAS RIGHT BOTH TIMES — this cell described the first refused design for several hours after it was replaced.** (1) It brought the medication back with **reminders OFF**: in ChemoWell the flag was erased at the next app open by a normaliser that recomputes it, so the flood was live; in care-tracker it stayed off FOREVER, under a toast promising a reminders control the editor does not have. Silent, permanent loss of missed-dose alerting under a button labelled *Bring back*. (2) The replacement stamped `alertsFrom` and skipped every day BEFORE it — but the span a medication is archived for is only ever part of *everything before now*, so bringing one back **erased its entire missed-dose history**: on the fixture, 122 misses over two months gone from the banner, the day summaries and the report that goes to the doctor, for a medication off the list for two seconds. **What ships records BOTH ENDS:** removal writes the day it left, restore turns that into an `awayPeriods` span ending today, and the missed-dose walk skips a day only when it falls INSIDE one. Reminders come back exactly as they were. `archived-meds-test` **41/41**. **And the suite's own safety check could only fail in one direction** — deleting the guard outright left all 37 checks green, because the medication in the fixture is away for no days. It now also backdates the archive to read as removed a fortnight ago and brackets the result: **305 → 277**, below the untouched number and above the 183 it reads with the medication removed. Twelve mutants, each red on the intended check. `outputs/SUITES-v75.md`: 0 failing. `overflow-scan` CLEAN. **Exempt:** Home is untouched; iPhone rendering — Chromium only here. **NOT exempt any more:** the missed-dose engine, which gains exactly one line (the `awayPeriods` guard) and is otherwise identical — the earlier claim that it was untouched was written for the first design and left standing after the second moved the safety argument into the engine. **Needs Aaron's phone:** remove a medication, bring it back, and check its doses are still there, its reminders are on, and the days it was gone are not showing as missed. |
+| **State** | **v75 — removed medications can be brought back.** Aaron picked this off the Enhancer's list. The app has kept removed medications' names for many releases so old doses still read properly, but nothing listed them and nothing brought one back: a medication paused between cycles had to be typed in again, came back under a new id, and every dose that referenced the old one then read as a removed medication. **The write model, stated first:** appends nothing, touches no entry, changes the medication config only. The archive now keeps the whole medication rather than just its name, plus the day it left. Restore puts it back under its ORIGINAL id, which is the point. An active medication already holding the id refuses the restore. **THE INDEPENDENT AUDIT REFUSED THIS RELEASE TWICE AND WAS RIGHT BOTH TIMES — this cell described the first refused design for several hours after it was replaced.** (1) It brought the medication back with **reminders OFF**: in ChemoWell the flag was erased at the next app open by a normaliser that recomputes it, so the flood was live; in care-tracker it stayed off FOREVER, under a toast promising a reminders control the editor does not have. Silent, permanent loss of missed-dose alerting under a button labelled *Bring back*. (2) The replacement stamped `alertsFrom` and skipped every day BEFORE it — but the span a medication is archived for is only ever part of *everything before now*, so bringing one back **erased its entire missed-dose history**: on the fixture, 122 misses over two months gone from the banner, the day summaries and the report that goes to the doctor, for a medication off the list for two seconds. **What ships records BOTH ENDS:** removal writes the day it left, restore turns that into an `awayPeriods` span ending today, and the missed-dose walk skips a day only when it falls INSIDE one. Reminders come back exactly as they were. `archived-meds-test` **43/43**. **And the suite's own safety check could only fail in one direction** — deleting the guard outright left all 37 checks green, because the medication in the fixture is away for no days. It now also backdates the archive to read as removed a fortnight ago and brackets the result: **305 → 277**, below the untouched number and above the 183 it reads with the medication removed. Fourteen mutants, each red on the intended check. `outputs/SUITES-v75.md`: 0 failing. `overflow-scan` CLEAN. **Exempt:** Home is untouched; iPhone rendering — Chromium only here. **NOT exempt any more:** the missed-dose engine, which gains exactly one line (the `awayPeriods` guard) and is otherwise identical — the earlier claim that it was untouched was written for the first design and left standing after the second moved the safety argument into the engine. **Needs Aaron's phone:** remove a medication, bring it back, and check its doses are still there, its reminders are on, and the days it was gone are not showing as missed. |
 
 ## v75 — KNOWN AND NOT FIXED, from the Zero Day Audit (2026-09-11)
 
@@ -158,16 +158,32 @@ rediscovers them.
 
 **1. The span is built from the device clock.** Restore records *the day it left* to *today*, and
 both ends come from the phone. A phone whose date is wrong at the moment of restore records a wrong
-span, and days inside it stop being counted as missed. It is bounded (it can never reach past the
-day the medication actually left), it is visible in the banner, and removing and restoring again
-fixes it. No fix attempted: reading a trusted clock means a network call on a path that must work
-offline.
+span, and days inside it stop being counted as missed. It is bounded — it can never reach past the day the
+medication actually left — and it is visible in the banner. **It cannot be undone.** Restore
+APPENDS a span; nothing removes one, no screen shows one, and bringing the medication back again
+adds a SECOND span rather than replacing the first. The earlier wording here said removing and
+restoring again fixes it, which is false and was caught by the third audit pass. A wrong span stays
+until the medication is deleted outright. No fix attempted on either half: reading a trusted clock
+means a network call on a path that must work offline, and a control that edits suppression is a
+control that can hide real missed doses.
 
 **2. An old phone republishing over medsync can strip the stamp.** `removedAt` lives in the archive
 entry and `awayPeriods` on the medication. A device still on an older build does not know either
 field, so if it republishes the medication config the fields are dropped and the days the medication
 was away go back to reading as missed. **That is the safe direction** — it shows more, never less,
 and it self-corrects when the old phone updates. The opposite would be a finding.
+
+**4. Two ways a release could have shipped a lie, both CLOSED by the third audit pass.** The copy
+promised, in three separate strings, that only the days a medication was off the list go uncounted —
+untrue for every entry written before this release, which is every entry that existed on upgrade day.
+Each row now says which case it is in. And a normaliser that stripped `awayPeriods` on load scored a
+**full green board** in both suites while the feature was dead from the first reload: the check that
+was supposed to cover it read `localStorage`, which still holds what the app has already forgotten.
+The suites now close and reopen the app and read the banner.
+
+**5. Spans accumulate rather than merging**, and the restore day is itself inside the span. Neither
+is a defect; both are written down because an exemption nobody wrote down is indistinguishable from
+an oversight.
 
 **3. `pm.py`'s suite-record check only read the rows that were there — CLOSED 2026-09-11.** A sweep
 killed halfway left a record holding the few suites that had finished, all green, and `pm.py`
