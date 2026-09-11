@@ -304,10 +304,18 @@ function normalizeMedication(raw, index) {
       // control that edits suppression is a control that can hide real missed doses. An earlier
       // version of this comment said deleting the medication undid it. It does not, and the audit
       // was right to refuse that twice.
-      // WHAT ACTUALLY MAKES THIS SAFE is narrower and does not depend on a recovery path: a span
-      // changes only what the missed-dose banner COUNTS. No entry is written, edited or deleted by
-      // any of this, the export reads the entries themselves, and the doses stay exactly where they
-      // are. The worst case is under-reporting on one screen, which is visible.
+      // WHAT ACTUALLY MAKES THIS SAFE, stated from a measurement rather than from what would be
+      // reassuring: NO ENTRY IS WRITTEN, EDITED OR DELETED by any of this, every logged dose stays
+      // exactly where it is, and the suppression is DERIVED AT RENDER TIME -- drop the span and every
+      // count returns exactly.
+      // WHAT A SPAN DOES CHANGE is every surface fed by missedDosesFor(): the banner, the card's
+      // MISSED label, Today's journal, the History rows and day summaries, and the derived
+      // missed-dose rows in the clinician export. An earlier version of THIS comment said a span
+      // changes "only what the banner counts" and that "the export reads the entries themselves".
+      // Measured on a 14-day span: the export drops 305 rows to 277 and 14 History days change their
+      // MISSED count. It was false, it contradicted this file's own guard comment, and it was the
+      // FIFTH safety claim in this release the audit refused for describing a property the code does
+      // not have. Do not write a reassurance here that has not been measured.
       && span.end <= Date.now());
   if (awaySpans.length) medication.awayPeriods = awaySpans; else delete medication.awayPeriods;
   if (doses && doses.length) medication.doses = doses; else delete medication.doses;
@@ -4580,8 +4588,14 @@ function restoreMedicationConfig(id) {
   // span collapses to a single day and suppresses nothing. That is the right fallback -- it can
   // never reach backwards over days the medication was on the list -- but it is NOT what the copy
   // used to promise, and the first medication anybody brings back is necessarily such an entry.
-  const knewWhenItLeft = !!Number(entry.removedAt);
-  const awayFrom = dayStart(Number(entry.removedAt) || (state.now || Date.now()));
+  // A DAY IN THE FUTURE IS NOT A RECORD OF WHEN IT LEFT. The previous version of this line asked only
+  // whether `removedAt` was present, and the row then printed the date and promised the days would not
+  // count -- which cannot happen: a future removal day makes start > end, the guard never matches, and
+  // the validator drops the span. One flag decides the span AND the words, so they cannot disagree.
+  const leftOn = Number(entry.removedAt);
+  const knewWhenItLeft = isFinite(leftOn) && leftOn > 0
+    && dayStart(leftOn) <= dayStart(state.now || Date.now());
+  const awayFrom = dayStart(knewWhenItLeft ? leftOn : (state.now || Date.now()));
   const awayTo = dayStart(state.now || Date.now());
   med.awayPeriods = (Array.isArray(med.awayPeriods) ? med.awayPeriods : [])
     .filter(p => p && Number(p.start) && Number(p.end))
@@ -4596,7 +4610,7 @@ function restoreMedicationConfig(id) {
     : ' is back. Its doses and rules were not kept \u2014 set them in Edit.')
     + (knewWhenItLeft
         ? ' Its reminders come back on, and the days it was off the list are not counted as missed.'
-        : ' Its reminders come back on. The app has no record of when you removed it, so the days it was away will still show as missed.'));
+        : ' Its reminders come back on. The app has no usable record of when you removed it, so the days it was away will still show as missed.'));
 }
 function deleteMedicationConfig(id) {
   const med = state.meds.find(item => item.id === id);
@@ -4697,9 +4711,12 @@ function renderMedicationManager(now) {
   // v75: what is archived, in the same order the active list uses.
   const archivedList = Object.entries(state.archivedMeds || {})
     .map(([id, item]) => {
-      const left = Number(item.removedAt) || 0;
+      // The SAME test the restore uses, so the row cannot promise what the restore will not do.
+      const left = Number(item.removedAt);
+      const today = dayStart(state.now || Date.now());
+      const usable = isFinite(left) && left > 0 && dayStart(left) <= today;
       return { id: id, name: String(item.name || id), sub: String(item.sub || ''), config: !!item.config,
-        removedAt: left, daysAway: left ? Math.round((dayStart(state.now || Date.now()) - dayStart(left)) / 86400000) : 0 };
+        knewWhenItLeft: usable, daysAway: usable ? Math.round((today - dayStart(left)) / 86400000) : 0 };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
   const reorderable = reorderableHomeMeds();
@@ -4791,13 +4808,12 @@ function renderMedicationManager(now) {
             h('div', { style: { fontSize: '12px', color: '#7A6672', fontWeight: '600', marginTop: '1px' } },
               (item.sub || 'No generic name') + (item.config ? '' : ' \u00b7 doses and rules were not kept')),
             h('div', { style: { fontSize: '11px', color: '#8A7280', fontWeight: '600', marginTop: '2px' } },
-              item.removedAt
-                ? (item.daysAway < 0 ? 'Removed on ' + new Date(item.removedAt).toLocaleDateString()
-                    : item.daysAway === 0 ? 'Removed today'
+              item.knewWhenItLeft
+                ? (item.daysAway === 0 ? 'Removed today'
                     : item.daysAway === 1 ? 'Removed yesterday'
                     : 'Removed ' + item.daysAway + ' days ago')
                   + ' \u00b7 the days it was away will not count as missed doses'
-                : 'Removed before this update \u2014 the app cannot tell when, so the days it was away will still count as missed doses')
+                : 'The app has no usable record of when this was removed, so the days it was away will still count as missed doses')
           ),
           h('button', { onClick: () => restoreMedicationConfig(item.id), 'aria-label': restoring ? 'Confirm bringing back ' + item.name : 'Bring back ' + item.name, style: { flexShrink: '0', minHeight: '44px', padding: '0 13px', borderRadius: '999px', background: restoring ? '#0C7F57' : 'rgba(15,157,87,0.12)', color: restoring ? '#fff' : '#0C7F57', border: '1px solid ' + (restoring ? '#0C7F57' : 'rgba(15,157,87,0.30)'), fontSize: '13px', fontWeight: '700' } }, restoring ? 'Yes, bring it back' : 'Bring back')
         );

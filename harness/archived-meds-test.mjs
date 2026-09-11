@@ -421,6 +421,50 @@ console.log('\n4C. A SPAN FROM ANOTHER DEVICE CANNOT SWALLOW THE RECORD');
   await goMeds();
 }
 
+console.log('\n4D. A REMOVAL DAY IN THE FUTURE IS NOT A RECORD OF WHEN IT LEFT');
+{
+  // A phone whose date is wrong at the moment of removal writes a removal day ahead of today. The
+  // span would then run start > end, the guard `d0 >= start && d0 <= end` could never match, and the
+  // validator drops it -- so NOTHING is suppressed. A version of this release printed the date and
+  // then promised "the days it was away will not count as missed doses" anyway, which is the same
+  // untrue-promise defect the audit refused three times in this release.
+  await goMeds();
+  await clickLabel('Remove ' + TRACKED.name);
+  await page.waitForTimeout(400);
+  await clickLabel('Confirm removal of ' + TRACKED.name);
+  await page.waitForTimeout(800);
+  const plantedFuture = await page.evaluate(([k, id]) => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem(k) || '{}');
+      const arc = cfg.archivedMeds || {};
+      if (!Object.prototype.hasOwnProperty.call(arc, id)) return false;
+      const d = new Date(); d.setHours(0, 0, 0, 0);
+      arc[id].removedAt = d.getTime() + 5 * 86400000;
+      localStorage.setItem(k, JSON.stringify(cfg));
+      return true;
+    } catch (e) { return false; }
+  }, [MED_KEY, TRACKED.id]);
+  t('a removal day five days in the future can be planted, the way a wrong clock would', plantedFuture);
+  await load();
+  await goMeds();
+  const futureRow = await page.evaluate((id) => {
+    const el = document.querySelector('[data-archived-med="' + id + '"]');
+    return el ? (el.innerText || '') : '(no row)';
+  }, TRACKED.id);
+  t('the row does NOT promise those days will go uncounted',
+    futureRow !== '(no row)' && !/will not count as missed/i.test(futureRow),
+    futureRow.replace(/\n/g, ' | ').slice(0, 110));
+  await clickLabel('Bring back ' + TRACKED.name);
+  await page.waitForTimeout(400);
+  await clickLabel('Confirm bringing back ' + TRACKED.name);
+  await page.waitForTimeout(1000);
+  const backFromFuture = ((await saved()).meds || []).find(m => m.id === TRACKED.id);
+  const futureSpans = (backFromFuture && Array.isArray(backFromFuture.awayPeriods)) ? backFromFuture.awayPeriods : [];
+  t('and no backwards span is recorded from it',
+    !futureSpans.some(sp => Number(sp.start) > Number(sp.end)), JSON.stringify(futureSpans));
+  await goMeds();
+}
+
 console.log('\n5. Restore is REFUSED when an active medication already holds that id');
 {
   // Archive it, then put a medication back on the active list under the SAME id behind the app's

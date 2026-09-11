@@ -151,6 +151,39 @@ started or ended from anywhere other than a direct message, that is a miss.
 | **sw.js md5** | `266e970881ba004092fb39da29e13c3c` |
 | **State** | **v75 — removed medications can be brought back.** Aaron picked this off the Enhancer's list. The app has kept removed medications' names for many releases so old doses still read properly, but nothing listed them and nothing brought one back: a medication paused between cycles had to be typed in again, came back under a new id, and every dose that referenced the old one then read as a removed medication. **The write model, stated first:** appends nothing, touches no entry, changes the medication config only. The archive now keeps the whole medication rather than just its name, plus the day it left. Restore puts it back under its ORIGINAL id, which is the point. An active medication already holding the id refuses the restore. **THE INDEPENDENT AUDIT REFUSED THIS RELEASE TWICE AND WAS RIGHT BOTH TIMES — this cell described the first refused design for several hours after it was replaced.** (1) It brought the medication back with **reminders OFF**: in ChemoWell the flag was erased at the next app open by a normaliser that recomputes it, so the flood was live; in care-tracker it stayed off FOREVER, under a toast promising a reminders control the editor does not have. Silent, permanent loss of missed-dose alerting under a button labelled *Bring back*. (2) The replacement stamped `alertsFrom` and skipped every day BEFORE it — but the span a medication is archived for is only ever part of *everything before now*, so bringing one back **erased its entire missed-dose history**: on the fixture, 122 misses over two months gone from the banner, the day summaries and the report that goes to the doctor, for a medication off the list for two seconds. **What ships records BOTH ENDS:** removal writes the day it left, restore turns that into an `awayPeriods` span ending today, and the missed-dose walk skips a day only when it falls INSIDE one. Reminders come back exactly as they were. `archived-meds-test` **45/45**. **And the suite's own safety check could only fail in one direction** — deleting the guard outright left all 37 checks green, because the medication in the fixture is away for no days. It now also backdates the archive to read as removed a fortnight ago and brackets the result: **305 → 277**, below the untouched number and above the 183 it reads with the medication removed. Fourteen mutants, each red on the intended check. `outputs/SUITES-v75.md`: 0 failing. `overflow-scan` CLEAN. **Exempt:** Home is untouched; iPhone rendering — Chromium only here. **NOT exempt any more:** the missed-dose engine, which gains exactly one line (the `awayPeriods` guard) and is otherwise identical — the earlier claim that it was untouched was written for the first design and left standing after the second moved the safety argument into the engine. **Needs Aaron's phone:** remove a medication, bring it back, and check its doses are still there, its reminders are on, and the days it was gone are not showing as missed. |
 
+## THE RULE THIS RELEASE PAID FOR — do not write a reassurance you have not measured (2026-09-11)
+
+**Five consecutive audit passes refused this release, and all five refusals were the same defect in
+different words: a sentence claiming a safety property the code does not have.** Not one of them was
+a bug in the feature. The mechanism was right from the third pass onward.
+
+| Pass | The sentence | Why it was false |
+|---|---|---|
+| 3 | *"correctable by removing and restoring again"* | Restore APPENDS a span. Nothing removes one. |
+| 4 | *"stays until the medication is deleted outright"* | Removing ARCHIVES the medication, spans and all; bringing it back re-adds them. There is no purge control. |
+| 5 | *"a span changes only what the banner COUNTS … the export reads the entries themselves"* | It changes five surfaces, the clinician export among them: 305 export rows → 277, and 14 History days. |
+| 5 | the row printing a date, then *"the days it was away will not count as missed doses"* | A future removal day makes `start > end`; nothing is ever suppressed. |
+| 5 | *(and the copy blocker from pass 3, same class)* | Promised unconditionally what was untrue of every archive entry on upgrade day. |
+
+**Each was written to REPLACE the one before, and each reached further than the last** — the third
+only into the records, the fourth into the shipped source comment, the fifth into six files. They
+got worse, not better, because a replacement written in a hurry to close a finding is exactly the
+sentence nobody re-measures.
+
+**THE RULE. A sentence that says what cannot go wrong is a claim, not prose. Measure it or do not
+write it.** Specifically:
+
+- If a sentence names a surface that does NOT change — *"the export is untouched"*, *"only the
+  banner"*, *"the engine is untouched"* — go and measure that surface both ways before it is
+  written. Three of the five above would have died in under a minute.
+- If a sentence names a recovery path — *"correctable by"*, *"undone by"*, *"until you delete it"* —
+  go and find the control. Twice there was no such control anywhere in the file.
+- **Grep the file for what it already says about the same thing.** The pass-5 claim contradicted a
+  comment eleven hundred lines away in the same file, which listed the affected surfaces by name.
+- **A safety argument does not have to be reassuring.** The true one here is narrower than any of the
+  four false ones and it holds: no entry is written, edited or deleted; every dose stays where it is;
+  the suppression is derived at render time and reverses exactly. That is enough.
+
 ## v75 — KNOWN AND NOT FIXED, from the Zero Day Audit (2026-09-11)
 
 None of these blocks the release. They are written down so the next person finds them rather than
@@ -172,9 +205,13 @@ restoring again fixes it"*, then *"stays until the medication is deleted outrigh
 refused both; the second had reached the shipped source comment, where it was the stated reason it
 is safe to reject a bad span rather than clamp it.
 
-**What actually makes this safe needs no recovery path:** a span changes only what the missed-dose
-banner COUNTS. No entry is written, edited or deleted, the export reads the entries themselves, and
-every dose stays where it is. The worst case is under-reporting on one screen, which is visible.
+**What actually makes this safe, measured rather than asserted:** no entry is written, edited or
+deleted, every logged dose stays where it is, and the suppression is derived at render time — drop
+the span and every count returns exactly. **A span DOES change every surface fed by
+`missedDosesFor()`**: the banner, the card's MISSED label, Today's journal, the History rows and day
+summaries, and the derived missed-dose rows in the clinician export. The sentence that stood here
+before said "only what the banner counts"; on a 14-day span the export drops 305 rows to 277 and 14
+History days change their MISSED count.
 No fix attempted on either half: reading a trusted clock means a network call on a path that must
 work offline, and a control that edits suppression is a control that can hide real missed doses.
 Clamping spans to `MISSED_TRACK_SINCE` was considered and NOT taken — the floor is a constant
