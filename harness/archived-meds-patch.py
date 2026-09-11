@@ -272,6 +272,35 @@ rep("""  const next = { view, reportsView: view === 'reports' ? null : state.rep
   // cleared here since long before this release.
   const next = { view, reportsView: view === 'reports' ? null : state.reportsView, medEditor: view === 'meds' ? state.medEditor : null, confirmDeleteMed: null, confirmRestoreMed: null };""")
 
+# ---- THE SPANS ARE VALIDATED, LIKE EVERY OTHER STORED LIST ------------------------------------
+# The third audit pass found `awayPeriods` going into the missed-dose walk unchecked, while the
+# field it behaves like -- pausePeriods -- is validated. A malformed span fails safe; a WIDE one
+# does not, and medsync accepts a medication config from another device.
+rep("""  if (doses && doses.length) medication.doses = doses; else delete medication.doses;""",
+    """  // v75: THE SPANS THE MEDICATION WAS OFF THE LIST, VALIDATED. This function runs on every load and
+  // over anything medsync publishes from another device, and it hands the result straight to the
+  // missed-dose walk. A malformed span fails safe -- every comparison against NaN is false, so
+  // nothing is suppressed -- but a WIDE one does not: {start: 0, end: <huge>} would swallow the
+  // whole record. Nothing in this release can write that; medsync means the walk should not be the
+  // thing that trusts it. Same shape of guard the sibling app's pausePeriods already gets.
+  const awaySpans = (Array.isArray(original.awayPeriods) ? original.awayPeriods : [])
+    .map(span => ({ start: Number(span && span.start), end: Number(span && span.end) }))
+    .filter(span => isFinite(span.start) && isFinite(span.end)
+      && span.start > 0 && span.end > 0 && span.start <= span.end
+      // AND IT CANNOT END IN THE FUTURE. This app only ever writes a span ending on the day of the
+      // restore, so an end beyond now did not come from it -- and that is the shape that does real
+      // damage: {start: 1, end: <far future>} suppresses every missed dose the record holds.
+      // Rejecting malformed spans was not enough; the first version of this filter passed that one.
+      // SAID OUT LOUD, because it is a real limit rather than an oversight: a span ending in the
+      // PAST cannot be checked this way, because it is indistinguishable from a medication that was
+      // genuinely off the list for a long time. Nothing here can write one, and a span only ever
+      // changes what the missed-dose banner counts -- no entry is written, edited or deleted by any
+      // of this -- so the worst case is under-reporting, which is visible and undone by deleting the
+      // medication.
+      && span.end <= Date.now());
+  if (awaySpans.length) medication.awayPeriods = awaySpans; else delete medication.awayPeriods;
+  if (doses && doses.length) medication.doses = doses; else delete medication.doses;""")
+
 if "const APP_VERSION = '%s';" % FROM_V not in s: sys.exit('REFUSING: version stamp missing')
 rep("const APP_VERSION = '%s';" % FROM_V, "const APP_VERSION = '%s';" % TO_V)
 rep("""  { v: 'v74', date: 'Sep 8, 2026', title: 'Every medication now says what it is for',""",

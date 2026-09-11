@@ -393,6 +393,34 @@ console.log('\n4B. THE OTHER HALF OF THE SAFETY CHECK: a span it really was away
   await goMeds();
 }
 
+console.log('\n4C. A SPAN FROM ANOTHER DEVICE CANNOT SWALLOW THE RECORD');
+{
+  // medsync accepts a medication config published by another phone, and the missed-dose walk reads
+  // whatever `awayPeriods` holds. A malformed span fails safe on its own -- every comparison against
+  // NaN is false -- but a WIDE one does not: {start: 1, end: <far future>} would suppress every
+  // missed dose the app has ever recorded, silently, with no screen showing why. Nothing in this
+  // release can write one; the point is that the walk should not be the thing that trusts it.
+  const planted = await page.evaluate(([k, id]) => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem(k) || '{}');
+      const med = (cfg.meds || []).find(m => m.id === id);
+      if (!med) return false;
+      med.awayPeriods = [{ start: 1, end: 8640000000000 }];
+      localStorage.setItem(k, JSON.stringify(cfg));
+      return true;
+    } catch (e) { return false; }
+  }, [MED_KEY, TRACKED.id]);
+  t('a span covering all of recorded time can be planted, the way another device could publish one',
+    planted);
+  await load();
+  const swallowed = await missedTotal();
+  if (swallowed === null || missedBefore === null)
+    exempt('a wide span from another device is dropped', 'banner not readable in this build');
+  else t('THE RECORD SURVIVES IT: the span is dropped on load, so nothing is suppressed',
+    swallowed === missedBefore, missedBefore + ' expected -> ' + swallowed + ' with the wide span planted');
+  await goMeds();
+}
+
 console.log('\n5. Restore is REFUSED when an active medication already holds that id');
 {
   // Archive it, then put a medication back on the active list under the SAME id behind the app's
