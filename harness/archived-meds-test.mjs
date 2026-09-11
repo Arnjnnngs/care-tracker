@@ -283,8 +283,11 @@ console.log('\n6. An archive written by an OLDER build still restores something 
   }, [MED_KEY, TRACKED.id]);
   await load();
   await goMeds();
-  const entry = ((await saved()).archivedMeds || {})[TRACKED.id];
-  t('the archive entry has no stored settings, like an older build would leave it', !entry.config, '');
+  // `|| {}` on purpose. On a broken build there may be no archive entry here at all, and a suite
+  // that CRASHES scores nothing -- and nothing is not evidence. It must go red and keep going.
+  const entry = ((await saved()).archivedMeds || {})[TRACKED.id] || {};
+  t('the archive entry is still there, with no stored settings, like an older build would leave it',
+    !!((await saved()).archivedMeds || {})[TRACKED.id] && !entry.config, '');
   const noted = await page.evaluate((id) => {
     const el = document.querySelector('[data-archived-med="' + id + '"]');
     return el ? (el.innerText || '') : '';
