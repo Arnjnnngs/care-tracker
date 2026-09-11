@@ -56,7 +56,9 @@ THE WRITE MODEL, stated before a line was written.
       - A SPAN CANNOT BE CLEARED. Restore appends; nothing removes. Bringing a medication back a
         second time adds a second span rather than replacing the first, and no screen shows either.
         Deliberate -- a control that edits suppression is a control that can hide real missed doses
-        -- but it means a wrong span stays until the medication is deleted outright.
+        -- AND IT CANNOT BE UNDONE: removing the medication archives it, spans and all, and
+        bringing it back re-adds them. There is no purge control anywhere in this app. An earlier
+        draft said deleting the medication cleared it; it does not.
   * TIE-BREAK: if an ACTIVE medication already holds that id, restore is REFUSED and says why.
     Restoring over it, or under a new id, would silently sever the dose history.
   * TWICE: the second restore is a no-op. The id is gone from the archive after the first.
@@ -207,8 +209,12 @@ rep("""    h('div', { 'data-tour-meds': 'true', style: { display: 'flex', flexDi
               (item.sub || 'No generic name') + (item.config ? '' : ' \\u00b7 doses and rules were not kept')),
             h('div', { style: { fontSize: '11px', color: '#8A7280', fontWeight: '600', marginTop: '2px' } },
               item.removedAt
-                ? (item.daysAway <= 0 ? 'Removed today' : item.daysAway === 1 ? 'Removed yesterday' : 'Removed ' + item.daysAway + ' days ago') + ' \\u00b7 those days will not count as missed'
-                : 'Removed before this update \\u2014 the app cannot tell when, so those days will still count as missed')
+                ? (item.daysAway < 0 ? 'Removed on ' + new Date(item.removedAt).toLocaleDateString()
+                    : item.daysAway === 0 ? 'Removed today'
+                    : item.daysAway === 1 ? 'Removed yesterday'
+                    : 'Removed ' + item.daysAway + ' days ago')
+                  + ' \\u00b7 the days it was away will not count as missed doses'
+                : 'Removed before this update \\u2014 the app cannot tell when, so the days it was away will still count as missed doses')
           ),
           h('button', { onClick: () => restoreMedicationConfig(item.id), 'aria-label': restoring ? 'Confirm bringing back ' + item.name : 'Bring back ' + item.name, style: { flexShrink: '0', minHeight: '44px', padding: '0 13px', borderRadius: '999px', background: restoring ? '#0C7F57' : 'rgba(15,157,87,0.12)', color: restoring ? '#fff' : '#0C7F57', border: '1px solid ' + (restoring ? '#0C7F57' : 'rgba(15,157,87,0.30)'), fontSize: '13px', fontWeight: '700' } }, restoring ? 'Yes, bring it back' : 'Bring back')
         );
@@ -292,11 +298,18 @@ rep("""  if (doses && doses.length) medication.doses = doses; else delete medica
       // damage: {start: 1, end: <far future>} suppresses every missed dose the record holds.
       // Rejecting malformed spans was not enough; the first version of this filter passed that one.
       // SAID OUT LOUD, because it is a real limit rather than an oversight: a span ending in the
-      // PAST cannot be checked this way, because it is indistinguishable from a medication that was
-      // genuinely off the list for a long time. Nothing here can write one, and a span only ever
-      // changes what the missed-dose banner counts -- no entry is written, edited or deleted by any
-      // of this -- so the worst case is under-reporting, which is visible and undone by deleting the
-      // medication.
+      // PAST cannot be checked this way -- it is indistinguishable from a medication that was
+      // genuinely off the list for a long time. The narrow way one could arise here is a phone whose
+      // DATE WAS WRONG AT THE MOMENT OF REMOVAL and was corrected afterwards.
+      // AND IT CANNOT BE UNDONE. Removing the medication ARCHIVES it, spans and all, and bringing it
+      // back re-adds them; there is no purge control anywhere in this app, by design, because a
+      // control that edits suppression is a control that can hide real missed doses. An earlier
+      // version of this comment said deleting the medication undid it. It does not, and the audit
+      // was right to refuse that twice.
+      // WHAT ACTUALLY MAKES THIS SAFE is narrower and does not depend on a recovery path: a span
+      // changes only what the missed-dose banner COUNTS. No entry is written, edited or deleted by
+      // any of this, the export reads the entries themselves, and the doses stay exactly where they
+      // are. The worst case is under-reporting on one screen, which is visible.
       && span.end <= Date.now());
   if (awaySpans.length) medication.awayPeriods = awaySpans; else delete medication.awayPeriods;
   if (doses && doses.length) medication.doses = doses; else delete medication.doses;""")

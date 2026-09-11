@@ -158,14 +158,29 @@ rediscovers them.
 
 **1. The span is built from the device clock.** Restore records *the day it left* to *today*, and
 both ends come from the phone. A phone whose date is wrong at the moment of restore records a wrong
-span, and days inside it stop being counted as missed. It is bounded — it can never reach past the day the
-medication actually left — and it is visible in the banner. **It cannot be undone.** Restore
-APPENDS a span; nothing removes one, no screen shows one, and bringing the medication back again
-adds a SECOND span rather than replacing the first. The earlier wording here said removing and
-restoring again fixes it, which is false and was caught by the third audit pass. A wrong span stays
-until the medication is deleted outright. No fix attempted on either half: reading a trusted clock
-means a network call on a path that must work offline, and a control that edits suppression is a
-control that can hide real missed doses.
+span, and days inside it stop being counted as missed. **Both ends come from the clock, at different moments** — the day
+it left is recorded when the medication is REMOVED, the other when it is brought back. So the
+narrow bad case is a phone whose date was wrong at the moment of removal and was corrected
+afterwards: that restore records a span reaching further back than the medication was ever away.
+The fourth audit was right that an earlier note here, which named only the moment of restore and
+said the span *"can never reach past the day the medication actually left"*, understated it.
+
+**It cannot be undone, by any route.** Restore APPENDS a span; nothing removes one and no screen
+shows one. **Deleting the medication does not clear it** — removing one ARCHIVES it, spans and all,
+and bringing it back re-adds them. Two earlier drafts of this note claimed otherwise (*"removing and
+restoring again fixes it"*, then *"stays until the medication is deleted outright"*) and the audit
+refused both; the second had reached the shipped source comment, where it was the stated reason it
+is safe to reject a bad span rather than clamp it.
+
+**What actually makes this safe needs no recovery path:** a span changes only what the missed-dose
+banner COUNTS. No entry is written, edited or deleted, the export reads the entries themselves, and
+every dose stays where it is. The worst case is under-reporting on one screen, which is visible.
+No fix attempted on either half: reading a trusted clock means a network call on a path that must
+work offline, and a control that edits suppression is a control that can hide real missed doses.
+Clamping spans to `MISSED_TRACK_SINCE` was considered and NOT taken — the floor is a constant
+declared far below `normalizeMedication()` in one app and, in the sibling, a `let` reassigned from
+stored preferences AFTER load, so clamping against it at normalisation time would drop legitimate
+spans.
 
 **2. An old phone republishing over medsync can strip the stamp.** `removedAt` lives in the archive
 entry and `awayPeriods` on the medication. A device still on an older build does not know either

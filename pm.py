@@ -273,6 +273,16 @@ if _ver:
             # recorded". Two things settle it: run-all.sh writes a closing line only when it reaches
             # the end, and every suite it would have run must have a row of its own.
             _txt = open(_rec, encoding="utf-8").read()
+            # EXACTLY ONE RUN IN THE FILE. The v75 audit found this record holding TWO sweeps --
+            # 63 rows, duplicate suites, two closing lines -- because a killed run and its
+            # replacement both had it open, and the check above passed anyway: it asks whether every
+            # suite has A row, and a duplicate does not break that. A record of two runs cannot say
+            # which result belongs to the build that ships.
+            if _txt.count("Failing or erroring suites:") > 1:
+                blockers.append("TWO SWEEPS IN ONE RECORD — outputs/SUITES-%s.md carries %d closing\n"
+                                "    lines, so it is more than one run merged into one file and no row in it\n"
+                                "    can be attributed to a build. Run harness/run-all.sh once, alone." 
+                                % (_ver, _txt.count("Failing or erroring suites:")))
             if "Failing or erroring suites:" not in _txt:
                 blockers.append("THE SUITE RUN DID NOT FINISH — outputs/SUITES-%s.md has no closing\n"
                                 "    line, so it records a sweep that was killed partway. The rows it does\n"
