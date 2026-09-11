@@ -55,3 +55,24 @@ Shown in full — done and outstanding — in every reply after a build or a req
   interruptions.
 - **The Enhancer's proposal list goes at the TOP of the release message**, before any technical
   detail. It was there before and buried, which for him is the same as absent.
+
+## 2026-09-11 — Aaron: the medication description should come from a website, with a clickable source link
+
+> *"Is something broken? The med desc should also fill automatically with what it's for based on the
+> website it was pulled from. There should be a clickable source link to get to the website with
+> that exact wording that pulls in the app"*
+
+**Logged, and it rests on a wrong premise that needs correcting rather than building around.** The
+description DOES already fill in automatically — `purposeOf()` falls back to a built-in table when
+the caregiver has typed nothing (13 entries in care-tracker, 66 in ChemoWell after app-v73's B and
+C). Nothing is broken there.
+
+**But it was never pulled from a website, and there is no source link because there is no source.**
+That was v74's deliberate decision, recorded in its release row: every sentence is ORIGINAL, written
+here, *"nothing copied from WebMD, from a drug label or from any site, so there is nothing for anyone
+to object to, and the app cites nothing because a citation to a document nobody here read would be a
+lie."* The app makes ZERO outbound calls — measured: no `fetch`, no `XMLHttpRequest`, no `axios`
+anywhere in `index.html`.
+
+**Status: PUT TO AARON as a decision (M).** Options and trade-offs in the reply of the same date.
+Not started; it is a real feature with a real network path in an app that has never had one.
