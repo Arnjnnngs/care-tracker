@@ -544,25 +544,61 @@ one is due.
 - Write for a non-technical reader. Plain words, short sentences, no file-path walls.
 
 ## Rule 7 — Standing exceptions (root causes still open, each with an owner)
-Keep these in STATUS.md until closed:
-- `deliverFile()` fails silently on iOS with no detection — needs Aaron's phone test to
-  confirm any fix. Until confirmed, the backup is NOT called a backup.
+
+**EVERY ENTRY CARRIES THE DATE IT WAS LAST CHECKED AGAINST THE CURRENT FILE. An entry with no date
+is UNKNOWN, not true, and the first thing to do with it is check it — not act on it.**
+
+That sentence is here because on 2026-09-13 this list was checked end to end for the first time and
+**all three entries were wrong.** Two described defects that had been fixed for weeks; one of them
+was simultaneously sitting in `TASK-SHEET.md` as queued work, one go-ahead away from being built a
+second time. The `confirmTimeAndLog()` entry below already records this exact failure happening
+once, in 2026-08-31, and the rule that came out of it — *verify a standing exception before acting
+on it* — did not prevent the next two, because **nobody re-reads a list of known problems looking
+for problems that are no longer there.** A date is a mechanism; a reminder is not.
+
+- **`deliverFile()` fails silently on iOS with no detection.** **STALE AS WRITTEN — checked
+  2026-09-13.** "No detection" has not been true since v57: `deliverFile()` returns
+  `{ method, cancelled }`, tries the Web Share API first (the only route on iOS that reaches Files),
+  distinguishes a cancelled share from a failed one, and falls back to the download rather than
+  losing the export. `deliveredWord()` turns that into what the caregiver is told, so the app no
+  longer claims a success it cannot verify. **What is genuinely open is narrower and is Aaron's:**
+  nobody has confirmed the share route works on HER phone. Until he does, do not call the backup a
+  backup — but do not describe this as silent failure either.
+
 - ~~`confirmTimeAndLog()` has no error handling — a refused dose write closes the modal as
-  if it worked.~~ **CLOSED, and it was closed in v48** (`git log -S writeError`), not by any
-  work since. `addEntryDB()` catches the rejection, sets `state.writeError`, and the app
-  renders a red banner ABOVE everything including the missed-dose alert, which stays until
-  the caregiver taps OK; the rethrow means the success toast never fires. This note survived
-  ten releases after the thing it describes was fixed, which is its own hazard — it sent
-  work at an already-solved problem. Verify a standing exception before acting on it.
-  **What IS still open, found while checking the above:** the `multi` branch ("Take all")
-  loops `await addEntryDB()` per medication with the loop OUTSIDE any catch, so the first
-  refusal aborts the rest. Medications 1..k are saved, k+1..n are not, and the banner says
-  *"Nothing was lost — check your connection and log it again"* — which is true of the ones
-  that failed and wrong about the ones that saved. Re-logging then DOUBLE-logs the saved
-  ones. Needs its own small release, and unlike the note above this one has been verified
-  against the current file.
-- Reminder ledger built and tested (`harness/`) but not wired into the live workflow;
-  v43.4+ silently drops ~1 in 6 anchored reminders on late cron runs.
+  if it worked.~~ **CLOSED in v48** (`git log -S writeError`) — checked again 2026-09-13.
+  `addEntryDB()` catches the rejection, sets `state.writeError`, and the app renders a red banner
+  ABOVE everything including the missed-dose alert, which stays until the caregiver taps OK; the
+  rethrow means the success toast never fires. **This note survived ten releases after its subject
+  was fixed and sent real work at a solved problem.**
+
+- ~~The `multi` branch ("Take all") loops `await addEntryDB()` outside any catch, so the first
+  refusal aborts the rest while the banner says *"Nothing was lost."*~~ **CLOSED in v63**
+  (commit `c0aabc9`, 2026-09-01) — checked 2026-09-13. The branch tracks `savedNames` and
+  `failedNames` separately and, when both are non-empty, says so: *"X was logged. Y was NOT. Log
+  only the missing one again — the rest are already saved."* It also clears a stale `writeError` on
+  a fully successful run. The `symptom` half — delete then re-log — **closed in v72**: it passes
+  `symptomId` and `prevStamp` into `logSymptom`, which appends a superseding entry stamped strictly
+  newer, so the original is never gone. **This entry was written twelve days ago claiming it had
+  "been verified against the current file", and it had — the file just moved.** Verified once is
+  not verified.
+
+- ~~Reminder ledger built and tested (`harness/`) but not wired into the live workflow.~~
+  **CLOSED — it has been live since v59** (`git log -S LEDGER_COLLECTION -- send-reminders.js`,
+  commit `4d6df42`), checked 2026-09-13. `.github/workflows/reminders.yml` runs
+  `node send-reminders.js`, and that file claims each reminder by `create()` at a deterministic
+  document id in `reminder_ledger`. The "~1 in 6 anchored reminders dropped on late cron runs" this
+  entry warns about is what the ledger fixes, and the fix shipped.
+
+- **OPEN, verified against the current file 2026-09-13: a red overdose warning is replaced by an
+  amber timing notice.** `state.warn` is a single slot, and `afterLog`'s iron/protonix branch sets
+  it and `return`s before any ceiling check runs. So the red *"Acetaminophen ceiling exceeded — do
+  not give more without contacting the care team"* banner is silently replaced the next time "Take
+  all" logs Iron within two hours of Protonix, with nothing on screen to say it was ever there. And
+  `if (savedIds.includes('iron')) afterLog(...)` means **"Take all" only ever asks about iron**, so
+  a batch that pushes any other medication past its own daily limit warns about nothing at all.
+  Fix written (`chemowell-beta/harness-warning-priority-patch.py`), shipped nowhere, QA harness not
+  yet passing. Needs Aaron's go-ahead for this repo.
 
 ---
 ## What this project is
