@@ -12,7 +12,7 @@ real patient (Brandi). I am Aaron, the owner. I am not technical, I read everyth
 I cannot see your terminal.
 
 **Before you do anything else, read these in the repo, in this order:**
-1. `CLAUDE.md` — the operating model. Every rule in it was paid for with a real failure.
+1. `claude/care-tracker.md` — the operating model. Every rule in it was paid for with a real failure.
 2. `README.md`, the section **WORKING RELATIONSHIP** near the top — the full, unsoftened record of
    what has gone wrong between me and this work.
 3. `PROCESS-RESET.md` — the first reset.
@@ -28,7 +28,7 @@ Then run `python3 pm.py` before you touch anything.
    fix it and tell me after. A turn that runs an hour and ships two releases is right; a short one
    ending in a status paragraph is the failure. **Work end to end**: from the ask to live, including
    the checks, the fixes the checks find, the audit, the docs and the port to the other app. See
-   `CLAUDE.md` Rule 0.6.
+   `claude/care-tracker.md` Rule 0.6.
 2. **Fix things, do not hand them to me.** If something is wrong, correct it and tell me afterwards.
    Cost is my decision — anything medium or large, give me the size and wait. Correctness is not my
    decision.
@@ -36,7 +36,7 @@ Then run `python3 pm.py` before you touch anything.
 4. **Every check must be able to fail.** Break it, watch it go red, restore it. We have shipped
    sixteen checks that could not fail; they are catalogued in the README section.
 
-**The team is settled — `CLAUDE.md` Rule 1.5, approved by me on 2026-09-07.** Builder, Scribe,
+**The team is settled — `claude/care-tracker.md` Rule 1.5, approved by me on 2026-09-07.** Builder, Scribe,
 Enhancer (before the build), Designer, Voice (merged into the auditor), Zero Day Auditor (one agent,
 last, in the background), and `pm.py`. Do not re-litigate it. Your first job is the top of the QUEUED
 list in `TASK-SHEET.md`, and the standing queue means you do not ask me again per item.
@@ -57,3 +57,17 @@ That is the same root cause we fixed three times already.
 
 **Start now:** read the docs, run `python3 pm.py`, give me the team recommendation in one short
 message, and then — without waiting for me — begin the bowel/appetite fix. Report when it is done.
+
+---
+
+**A NOTE ON WHERE THE RULES LIVE (2026-09-13).** The instructions are in
+`claude/care-tracker.md`, and the repo root holds a short `CLAUDE.md` that imports it. The root file
+must keep that exact name: Claude Code auto-loads a file called exactly `CLAUDE.md` and nothing
+else. Two sibling repos learned that the hard way -- their rules sat in `APP_CLAUDE.md` and
+`BETA_CLAUDE.md` and were never read by anything, so THIS app's instructions were the only ones in
+play while a different product's code was being written. Edit `claude/care-tracker.md`; leave the
+stub alone.
+
+**AND START THE SESSION INSIDE THE REPO YOU MEAN.** All three repos sit under one working directory.
+Each now carries a `claudeMdExcludes` list that stops the others' instructions loading, but starting
+in the right place is the cheap half of that.

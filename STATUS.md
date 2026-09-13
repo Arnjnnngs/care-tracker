@@ -9,7 +9,7 @@ Dispatch check-ins and any new chat session should read this file first.
 
 ## THE TEAM IS SETTLED — 2026-09-07, Aaron: "do all"
 
-The full roster and sequence are `CLAUDE.md` **Rule 1.5**; the review behind it is
+The full roster and sequence are `claude/care-tracker.md` **Rule 1.5**; the review behind it is
 `outputs/TEAM-REVIEW-2026-09-07.md`. Hired: the **Scribe** (`REQUESTS.md`, `TASK-SHEET.md`) and the
 **Designer**. Merged: the **Voice** into the auditor's brief. Added to `pm.py`: the **delete ratchet**.
 The **nightly backup** is a Cowork desktop task (Aaron confirmed) and does not appear in the cloud
@@ -31,7 +31,7 @@ deleted a figure he asked for, the roles that missed the thing they were created
 structural blind spots he found by using the app, what is genuinely hard from this side, what
 actually works, and how to start a new chat.
 
-`CLAUDE.md`'s READ FIRST list points at it as item 3. A new session should not have to rediscover
+`claude/care-tracker.md`'s READ FIRST list points at it as item 3. A new session should not have to rediscover
 any of it.
 
 ## RULE 0.5 — a recap is not a stopping point (added 2026-09-04, Aaron's most urgent complaint)
@@ -42,7 +42,7 @@ touch anything else. can't have any more delays over this"*
 If the next step is something you can do yourself, **do it in the same turn and report once**. The
 only legitimate reasons to end a turn: the work is finished and pushed; Aaron has to decide or do
 something only he can; a background job is running and the harness will wake you. An estimate, a
-plan, or a promise to verify is not a stopping point. Full text in `CLAUDE.md` Rule 0.5.
+plan, or a promise to verify is not a stopping point. Full text in `claude/care-tracker.md` Rule 0.5.
 
 A mechanical guard — a Stop hook, the `pm.py` principle applied to turn-ending — is drafted in
 `outputs/STOP-HOOK-PROPOSAL.md`. It could not be installed from a cloud session (the permission
@@ -59,7 +59,7 @@ should have suggested this fix from the team."*
 
 Both confirmed. Every existing role checks whether a change is CORRECT; none asks whether a screen
 is COMPLETE, so "you can delete a paracentesis here but not add one" passed every gate for
-releases. Role and checklist are now `CLAUDE.md` **Rule 2.6**; the first pass is
+releases. Role and checklist are now `claude/care-tracker.md` **Rule 2.6**; the first pass is
 `outputs/ENHANCER-PASS-01.md`.
 
 **Open, awaiting Aaron's pick (nothing built yet):** add-paracentesis and add-weight controls on
@@ -443,7 +443,7 @@ silently overflows it. Calendar has lived in the drawer for the same reason.
 **Four suites needed fixing, and one of them found a rule this project already had.**
 `encbackup`, `share`, `medskip` and `export` all navigated to Reports for controls that had moved —
 test-side, not product. But `logger-test` failed because it pinned the literal `'v57'`, which is the
-exact anti-pattern in CLAUDE.md Rule 5 (*"never pin version literals — three patches and several
+exact anti-pattern in claude/care-tracker.md Rule 5 (*"never pin version literals — three patches and several
 suites broke on every legitimate release because of this"*). It was written yesterday and broke on
 the very next release. It now reads `APP_VERSION` out of the file under test.
 Also fixed a latent bug in `medskip-test`: it fetched the restore button and never clicked it, so
