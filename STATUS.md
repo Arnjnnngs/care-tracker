@@ -144,12 +144,107 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v74 |
-| **Commit** | `on the working branch, in audit` — v74. v73 remains live on main until it passes. |
+| **Version** | v75 |
+| **Commit** | `on the working branch` — v75. v74 is live on main. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
-| **index.html md5** | `1fda6b35ede736df0c5c864772ae0241` |
-| **sw.js md5** | `f9c3e01d46fd1ab79eeabdea42b3a42a` |
-| **State** | **v74 — every medication says what it is for.** Aaron asked for this long ago and it never shipped; the ask was not written down in any of the three repos, which is why it was dropped rather than deprioritised. Short ORIGINAL sentences, nothing copied from any site or label, and the app cites nothing — a citation to a document nobody here read would be a lie. Federal sources (openFDA, DailyMed, MedlinePlus) are public domain and safe to quote, but every one is blocked by this sandbox's network, so a refresh to exact federal wording later is a data change into the same table. `MED_PURPOSE` is keyed by medication id, so every phone gets the text on the next load with no migration. **A defect caught before it existed in a build:** the editor's form seeder did not carry the new field, so opening any medication's editor and saving would have wiped it — the v43.3 failure exactly. **The audit BLOCKED the first build:** clearing the box did nothing while the app said "updated", and every saved edit froze that day's wording into the record. The built-in line is a placeholder now. Two sentences changed on clinical grounds (Tylenol's fever clause, Senokot's "gentle"). **A second pass blocked it again on a worse one:** a medication named "Constructor" crashed the Meds list permanently — zero cards after a reload, no way back from inside the app — because the lookup was a bare object index; guarded now with the idiom the file already used. `med-purpose-test` **51/51**, with a conditional disclaimer and a fever guard carried back from ChemoWell's audit of the sibling release, red on three broken builds (v73 16/25; the audit's block 23/25; the save-path failure 22/25); its central check is that **no line contains a number**, because the app is now stating medical information and must never drift into a dose. **A fourth block came from ChemoWell's delta audit, against this release's own newest gate:** an entry reading *"This is Tylenol in liquid form"* named a dosage form — the class the release had just forbidden — and the check written to catch exactly that reported PASS, because it was a list of eleven words and `liquid` was not one of them. The clause is gone from all three apps. **A fifth block then broke the widened guard eight more ways** — *"a pill you swallow"*, *"as a shot under the skin"*, *"through a drip"* — so the check is renamed to what it actually does (it rejects a word from a list; a list can never enforce "names no dosage form") and the list is widened to sixty-odd words. **The port to the beta then found the worst one:** that repo's copy of the guard was written with a doubled backslash and could never match anything, so it had sat green for weeks over the exact sentence the first audit blocked. **Four liveness checks** now hand each guard a sentence it must reject — and a **fourth audit pass caught two of those four proving nothing**, because they re-typed their pattern instead of naming it: the fever guard could be killed with the exact typo they exist to catch, with a fever sentence in the table, and the board stayed green. All four are constants now. The same pass found the new 320px check measuring the page with a ruler that stretched, and a rule written in the comment and the release note that the code did the opposite of. **A fifth pass found the hole under all of them: the suite's own parser.** It read only single-quoted values, so one entry written with double quotes was invisible to every guard at once — 42 entries reported for a 43-entry table, a full green board, and the app printing *"brings down a fever… one tablet under the tongue every 4 hours"* on the Meds screen. The parsed count is checked against the entry-line count now. **A sixth pass found the screen none of the checks had ever visited:** a long pasted medication name pushed **Home** to 1019px on a 320px phone and stretched the bottom tab bar off the side, so the Meds tab needed to fix the name was no longer reachable. **A seventh pass proved that fix wrong twice over:** putting the property on `*` broke Home's hospital-stay banner and the In-Patient heading (it changes min-content sizing, and the overflow scan could not see it because the scan measures width and the damage was vertical), and the property was never what fixed Home anyway — the name sits under `white-space: nowrap` and the dose buttons refuse to shrink. Both fixed directly; Home measures 320px instead of 829px. The same pass found the Home check never reached Home (it clicked a tab called *Today*). **An eighth found it still could not fail:** in the sibling app the seeded medications are not on Home at all, so the case was measuring an empty screen and printed PASS on a 900px page. It asserts the pasted name is on the screen now — and the *stretching ruler* defect came back inside the assertion written to fix the previous one. **Nine passes, and the feature has not been rebuilt since the first — every block since has been a check that printed green while the thing it guarded was broken.** Lidocaine reads *"Numbs the area where it is used"* in all three apps. `outputs/SUITES-v74.md`: every suite green or EXEMPT with a written reason, 0 failing. `overflow-scan` 140/140 CLEAN. **Exempt:** the Home quick-log cards carry none of this and the suite asserts it; iPhone rendering — Chromium only here. **Needs Aaron's phone:** open Meds and read the lines under each medication. |
+| **index.html md5** | `0ee82a6a30b43da9f666bcdc80c2e2a4` |
+| **sw.js md5** | `266e970881ba004092fb39da29e13c3c` |
+| **State** | **v75 — removed medications can be brought back.** Aaron picked this off the Enhancer's list. The app has kept removed medications' names for many releases so old doses still read properly, but nothing listed them and nothing brought one back: a medication paused between cycles had to be typed in again, came back under a new id, and every dose that referenced the old one then read as a removed medication. **The write model, stated first:** appends nothing, touches no entry, changes the medication config only. The archive now keeps the whole medication rather than just its name, plus the day it left. Restore puts it back under its ORIGINAL id, which is the point. An active medication already holding the id refuses the restore. **THE INDEPENDENT AUDIT REFUSED THIS RELEASE TWICE AND WAS RIGHT BOTH TIMES — this cell described the first refused design for several hours after it was replaced.** (1) It brought the medication back with **reminders OFF**: in ChemoWell the flag was erased at the next app open by a normaliser that recomputes it, so the flood was live; in care-tracker it stayed off FOREVER, under a toast promising a reminders control the editor does not have. Silent, permanent loss of missed-dose alerting under a button labelled *Bring back*. (2) The replacement stamped `alertsFrom` and skipped every day BEFORE it — but the span a medication is archived for is only ever part of *everything before now*, so bringing one back **erased its entire missed-dose history**: on the fixture, 122 misses over two months gone from the banner, the day summaries and the report that goes to the doctor, for a medication off the list for two seconds. **What ships records BOTH ENDS:** removal writes the day it left, restore turns that into an `awayPeriods` span ending today, and the missed-dose walk skips a day only when it falls INSIDE one. Reminders come back exactly as they were. `archived-meds-test` **51/51**. **And the suite's own safety check could only fail in one direction** — deleting the guard outright left all 37 checks green, because the medication in the fixture is away for no days. It now also backdates the archive to read as removed a fortnight ago and brackets the result: **305 → 277**, below the untouched number and above the 183 it reads with the medication removed. Sixteen mutants, each red on the intended check. `outputs/SUITES-v75.md`: 0 failing. `overflow-scan` CLEAN. **Exempt:** Home is untouched; iPhone rendering — Chromium only here. **NOT exempt any more:** the missed-dose engine, which gains exactly one line (the `awayPeriods` guard) and is otherwise identical — the earlier claim that it was untouched was written for the first design and left standing after the second moved the safety argument into the engine. **Needs Aaron's phone:** remove a medication, bring it back, and check its doses are still there, its reminders are on, and the days it was gone are not showing as missed. |
+
+## THE RULE THIS RELEASE PAID FOR — do not write a reassurance you have not measured (2026-09-11)
+
+**Six consecutive audit passes refused this release, and every refusal from the third onward was the
+same defect in different words: a sentence claiming a safety property the code does not have.** Not one of them was
+a bug in the feature. The mechanism was right from the third pass onward.
+
+| Pass | The sentence | Why it was false |
+|---|---|---|
+| 3 | *"correctable by removing and restoring again"* | Restore APPENDS a span. Nothing removes one. |
+| 4 | *"stays until the medication is deleted outright"* | Removing ARCHIVES the medication, spans and all; bringing it back re-adds them. There is no purge control. |
+| 5 | *"a span changes only what the banner COUNTS … the export reads the entries themselves"* | It changes five surfaces, the clinician export among them: 305 export rows → 277, and 14 History days. |
+| 5 | the row printing a date, then *"the days it was away will not count as missed doses"* | A future removal day makes `start > end`; nothing is ever suppressed. |
+| 5 | *(and the copy blocker from pass 3, same class)* | Promised unconditionally what was untrue of every archive entry on upgrade day. |
+| 6 | *"…and the derived missed-dose rows in the clinician export"*, in **ChemoWell** | That app's `buildExportRows()` never calls `missedDosesFor()`. care-tracker's sentence and its fixture numbers were pasted across. Over-claiming is the same defect pointing the other way. |
+| 6 | *"suppresses nothing"* on the upgrade-day path | The fallback appended a `{today, today}` span, which took a tracked medication's windows off the restore day and two rows off the export. **Fixed in code, not words** — if the app does not know when the medication left, it now records no span at all, and all three statements become true as written. |
+
+**Each was written to REPLACE the one before, and each reached further than the last** — the third
+only into the records, the fourth into the shipped source comment, the fifth into six files. They
+got worse, not better, because a replacement written in a hurry to close a finding is exactly the
+sentence nobody re-measures.
+
+**THE RULE. A sentence that says what cannot go wrong is a claim, not prose. Measure it or do not
+write it.** Specifically:
+
+- If a sentence names a surface that does NOT change — *"the export is untouched"*, *"only the
+  banner"*, *"the engine is untouched"* — go and measure that surface both ways before it is
+  written. Three of the five above would have died in under a minute.
+- If a sentence names a recovery path — *"correctable by"*, *"undone by"*, *"until you delete it"* —
+  go and find the control. Twice there was no such control anywhere in the file.
+- **Grep the file for what it already says about the same thing.** The pass-5 claim contradicted a
+  comment eleven hundred lines away in the same file, which listed the affected surfaces by name.
+- **A safety argument does not have to be reassuring.** The true one here is narrower than any of the
+  four false ones and it holds: no entry is written, edited or deleted; every dose stays where it is;
+  the suppression is derived at render time and reverses exactly. That is enough.
+
+## v75 — KNOWN AND NOT FIXED, from the Zero Day Audit (2026-09-11)
+
+None of these blocks the release. They are written down so the next person finds them rather than
+rediscovers them.
+
+**1. The span is built from the device clock.** Restore records *the day it left* to *today*, and
+both ends come from the phone. A phone whose date is wrong at the moment of restore records a wrong
+span, and days inside it stop being counted as missed. **Both ends come from the clock, at different moments** — the day
+it left is recorded when the medication is REMOVED, the other when it is brought back. So the
+narrow bad case is a phone whose date was wrong at the moment of removal and was corrected
+afterwards: that restore records a span reaching further back than the medication was ever away.
+The fourth audit was right that an earlier note here, which named only the moment of restore and
+said the span *"can never reach past the day the medication actually left"*, understated it.
+
+**It cannot be undone, by any route.** Restore APPENDS a span; nothing removes one and no screen
+shows one. **Deleting the medication does not clear it** — removing one ARCHIVES it, spans and all,
+and bringing it back re-adds them. Two earlier drafts of this note claimed otherwise (*"removing and
+restoring again fixes it"*, then *"stays until the medication is deleted outright"*) and the audit
+refused both; the second had reached the shipped source comment, where it was the stated reason it
+is safe to reject a bad span rather than clamp it.
+
+**What actually makes this safe, measured rather than asserted:** no entry is written, edited or
+deleted, every logged dose stays where it is, and the suppression is derived at render time — drop
+the span and every count returns exactly. **A span DOES change every surface fed by
+`missedDosesFor()`**: the banner, the card's MISSED label, Today's journal, the History rows and day
+summaries, and the derived missed-dose rows in the clinician export. The sentence that stood here
+before said "only what the banner counts"; on a 14-day span the export drops 305 rows to 277 and 14
+History days change their MISSED count.
+No fix attempted on either half: reading a trusted clock means a network call on a path that must
+work offline, and a control that edits suppression is a control that can hide real missed doses.
+Clamping spans to `MISSED_TRACK_SINCE` was considered and NOT taken — the floor is a constant
+declared far below `normalizeMedication()` in one app and, in the sibling, a `let` reassigned from
+stored preferences AFTER load, so clamping against it at normalisation time would drop legitimate
+spans.
+
+**2. An old phone republishing over medsync can strip the stamp.** `removedAt` lives in the archive
+entry and `awayPeriods` on the medication. A device still on an older build does not know either
+field, so if it republishes the medication config the fields are dropped and the days the medication
+was away go back to reading as missed. **That is the safe direction** — it shows more, never less,
+and it self-corrects when the old phone updates. The opposite would be a finding.
+
+**4. Two ways a release could have shipped a lie, both CLOSED by the third audit pass.** The copy
+promised, in three separate strings, that only the days a medication was off the list go uncounted —
+untrue for every entry written before this release, which is every entry that existed on upgrade day.
+Each row now says which case it is in. And a normaliser that stripped `awayPeriods` on load scored a
+**full green board** in both suites while the feature was dead from the first reload: the check that
+was supposed to cover it read `localStorage`, which still holds what the app has already forgotten.
+The suites now close and reopen the app and read the banner.
+
+**5. Spans accumulate rather than merging**, and the restore day is itself inside the span. Neither
+is a defect; both are written down because an exemption nobody wrote down is indistinguishable from
+an oversight.
+
+**3. `pm.py`'s suite-record check only read the rows that were there — CLOSED 2026-09-11.** A sweep
+killed halfway left a record holding the few suites that had finished, all green, and `pm.py`
+called that *"every suite recorded"*: an aborted run scored better than a completed one. It now
+requires the closing line `run-all.sh` writes only when it reaches the end, and a row for every
+suite in `harness/`. Both checks were falsified — the closing line removed, then one row deleted;
+each blocks, and the restored file passes.
 
 ## v62 — KNOWN AND NOT FIXED (LOW), from the Zero Day Audit
 
