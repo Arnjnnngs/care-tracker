@@ -1,6 +1,10 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-11 · **Live:** v74 and app-v72, both on `main` · **v75, app-v73 and beta-v62 built, six audit passes, awaiting your merge call** · **app-v74 built and in audit** · **Dispatch:** ACTIVE
+**Updated:** 2026-09-13 · **Live:** care-tracker **v75** · ChemoWell **app-v78** on `main` · staging **beta-v62** · **app-v79 built, audit round 2 running** · **Dispatch:** ACTIVE
+
+*The 2026-09-11 version of this line said "v74 and app-v72 live, v75 awaiting your merge call" — four
+releases out of date, and it is the file you read to know what is happening. It is regenerated from
+the actual `APP_VERSION` in each repo now, not from memory.*
 
 Split by WHO the next step belongs to. If MINE has an item, the turn does not end.
 
@@ -14,16 +18,31 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
 - [ ] **Enhancer proposals** (`outputs/ENHANCER-PASS-05.md`): archived medications cannot be seen or
       restored anywhere in either app (S–M, recommended first); add/correct controls on the Bowel
       Movement and Appetite reports (S each); History says "Superseded" where "Removed" reads better (S).
-- [ ] **MERGE v75 AND app-v73 TO `main`, OR ONE MORE AUDIT PASS.** Six passes have refused this
-      release. The mechanism has been sound since the third; every refusal since was a sentence in
-      the notes claiming a safety property the code did not have. Suites 51/51, 50/50, 42/42, every
-      mutant red, `pm.py` clear. Your call, and I would take one more pass.
-- [ ] **Enhancer pass 07, on app-v74** (`outputs/ENHANCER-PASS-07.md` in chemowell-app-beta):
-      a lookup that fails can never be retried except by re-saving a medication you did not want to
-      edit (S, **recommended** — the lookup may be failing for every medication forever and nobody
-      would know to keep tapping Save); show when a description was fetched (S, not yet); refresh
-      cached descriptions in the background (M, **refused** — it spends a patient's battery and
-      signal on something nobody asked for).
+- [ ] **THE RED OVERDOSE WARNING IS REPLACED BY AN AMBER ONE, ON YOUR LIVE APP.** Found today while
+      fixing the same thing in ChemoWell. `state.warn` is one slot, and the iron/protonix branch
+      sets it and returns before any ceiling check runs. So: Brandi goes over the daily
+      acetaminophen limit → the red *"do not give more without contacting the care team"* banner
+      appears → the next **Take all** on the evening meds logs Iron within two hours of Protonix →
+      the red banner is replaced by a note about iron absorption, with nothing to say it was ever
+      there. Second half: **Take all only ever checks iron**, so a batch that pushes anything else
+      past its own daily limit warns about nothing at all.
+      The fix is written (`chemowell-beta/harness-warning-priority-patch.py`) and is NOT shipped to
+      either app: the QA harness does not pass yet, and this repo needs your explicit go-ahead
+      anyway. **Your call: say the word and I finish the harness and ship it to both.** I would.
+
+- [ ] **THE CHEMOWELL REDESIGN — pick a direction.** Screenshots sent; the working files are in
+      `chemowell-app-beta/outputs/design-v80/`. Nothing is wired in. The structural finding is that
+      the category leader's home screen is a timeline of what is due when and ChemoWell's is a stack
+      of data-entry forms, so restyling the current screens would have produced a prettier version
+      of the wrong screen. **Yes / no / change something specific.**
+- [ ] **Enhancer pass on app-v79** (`chemowell-app-beta/outputs/ENHANCER-PASS-v79.md`). The headline:
+      **the app draws a daily-total card that no screen can create.** The running
+      "2,500 / 3,000 mg · 500 mg left" card is switched on by a property only the legacy migration
+      writes, so a new ChemoWell customer who sets up paracetamol with a 3,000 mg limit gets the
+      ceiling *warning* and never the running total — they find out they are over at the moment they
+      cross it. That is phase 4 of the hardcoded-medications plan (L, **recommended next**). Smaller:
+      the red banner and the daily-total card are both dead ends, with no way through to the doses
+      behind the number (S each).
 - [ ] **PHONE CHECK THAT ONLY YOU CAN DO, and app-v74 needs it more than usual.** The live lookup was
       never contacted — this sandbox blocks every external host — so whether MedlinePlus answers a
       browser at all is unproven. On your phone: add a medication the app does not know and see
@@ -62,9 +81,25 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
       Home to 829px on a 320px phone and carried the bottom tab bar off the screen, so the Meds tab
       needed to undo the paste was unreachable. It measures 320px now.
 
+- [x] **ChemoWell app-v77, app-v78, app-v79 built and audited** — phases 2 and 3 of taking one
+      patient's prescription out of a product everyone uses. Thirteen drug names came out of the code
+      and into the data, the fence that stopped a customer creating a medication called Zofran came
+      down, and the ratchet reads 0 / 0 / 0.
+- [x] **app-v78 shipped a dead Home screen and the audit caught it.** `medHomeCardKind` was called
+      three times and defined nowhere; five suites and 103 checks were green while the app threw on
+      every render. No suite had ever drawn a screen with a migrated medication. app-v79 fixes it and
+      seven more, and the audit blocked app-v79 too — rightly, nine times, including a dose ceiling
+      from one care plan that I put back into the product.
+- [x] **Three repos each have their own instruction file that actually loads.** `CLAUDE.md` is a stub
+      importing `claude/<app>.md`, because Claude Code auto-loads that one name and nothing else —
+      which is why for months the only instructions any session read were this repo's, in a product
+      that is not this patient's.
+
 ## QUEUED — built in order without re-asking
 
 1. **Take all** — saves some medications, reports none saved, re-tap double-logs (S–M, audited).
+   *Note added 2026-09-13:* the warning defect in YOURS above lives in the same function. If you
+   green-light that one, these ship together — it is one visit to `afterLog`, not two.
 2. Add / correct controls on the Bowel Movement and Appetite reports (S each).
 4. The four v43-era test suites — rebase or retire (S–M).
 5. Android emulator smoke job in GitHub Actions (M).
