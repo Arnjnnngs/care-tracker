@@ -1283,14 +1283,40 @@ introduced nor moved it. Same shape as the export buttons that reported success 
 > "the patient is told nothing" has not been true since v48. A stale standing exception is not
 > harmless — it points real work at a solved problem while the live one goes unlisted.
 >
-> **The live one, verified against the current file:** the `multi` branch (the "Take all"
-> button) runs `for (const id of ids) { await addEntryDB(en); }` with the loop outside any
-> catch. The first refusal throws out of the loop, so medications before it are saved and the
-> rest are never attempted — while the banner reads *"Nothing was lost — check your connection
-> and log it again."* That sentence is true of the failures and wrong about the successes, and
-> acting on it double-logs every medication that did save. The `symptom` branch has a smaller
-> version of the same shape: `removeEntryDB(editId)` then `logSymptom(...)`, so a refused
-> re-log after a successful delete loses the original entry. Both need one small release.
+> **CLOSED, BOTH HALVES — and re-reading this note is the whole point of the paragraph above it.**
+> Checked against the current file on 2026-09-13, and the text that used to sit here described a
+> defect fixed a fortnight earlier. It said the `multi` branch runs its loop outside any catch, so
+> the first refusal strands the rest while the banner reads *"Nothing was lost."*
+>
+> **The "Take all" half was fixed in v63** (`git log -S "savedIds.includes('iron')"`, commit
+> `c0aabc9`, 2026-09-01). The branch now tracks `savedNames` and `failedNames` separately and, when
+> both are non-empty, says so in those words — *"X was logged. Y was NOT. Log only the missing one
+> again — the rest are already saved."* It also clears a stale `writeError` on a fully successful
+> run, so a banner left over from an earlier attempt cannot keep telling the caregiver to re-log
+> doses that are now in the record.
+>
+> **The `symptom` half was fixed in v72.** It no longer deletes: `confirmTimeAndLog` passes
+> `symptomId` and `prevStamp` into `logSymptom`, which appends a superseding entry stamped strictly
+> newer than the one it replaces. There is no window in which the original is gone.
+>
+> **This note survived a dozen releases after the thing it described was fixed, exactly as the
+> `confirmTimeAndLog()` note above it did**, and it was still on the task sheet as queued work. Two
+> for two. The rule that came out of the first one — verify a standing exception against the current
+> file before acting on it — is evidently not enough on its own, because nobody re-reads a list of
+> known problems looking for problems that are no longer there. **Every standing exception in this
+> file now carries the date it was last checked**, and an unchecked one is to be treated as unknown
+> rather than as true.
+>
+> **WHAT IS ACTUALLY OPEN IN `afterLog`, found 2026-09-13 and verified against the current file:**
+> `state.warn` is a single slot, and the iron/protonix branch sets it and `return`s before any
+> ceiling check runs. So a red *"Acetaminophen ceiling exceeded — do not give more without
+> contacting the care team"* banner is silently replaced by the amber iron-absorption notice the
+> next time "Take all" logs Iron within two hours of Protonix. Nothing on screen says the red
+> warning was ever there. And `setTimeout(() => { if (savedIds.includes('iron')) afterLog(...) })`
+> means **"Take all" only ever asks about iron** — a batch that pushes any other medication past its
+> own configured daily limit raises no warning at all. The fix is written
+> (`chemowell-beta/harness-warning-priority-patch.py`) and shipped nowhere; this repo needs Aaron's
+> go-ahead, and the QA harness does not pass yet.
 
 ### Concurrency
 Convergence, not conflict detection. Two edits in the same second both write the whole list and the

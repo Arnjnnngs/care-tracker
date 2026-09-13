@@ -97,9 +97,13 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
 
 ## QUEUED — built in order without re-asking
 
-1. **Take all** — saves some medications, reports none saved, re-tap double-logs (S–M, audited).
-   *Note added 2026-09-13:* the warning defect in YOURS above lives in the same function. If you
-   green-light that one, these ship together — it is one visit to `afterLog`, not two.
+1. ~~**Take all** — saves some medications, reports none saved, re-tap double-logs.~~ **ALREADY
+   DONE, and it has been since v63 (2026-09-01).** Checked against the live file today: the branch
+   names both sides — *"X was logged. Y was NOT. Log only the missing one again."* — and clears a
+   stale banner on a clean run. The symptom half was closed in v72. **It sat in this queue for a
+   fortnight as work to do, and STATUS.md still listed it as open**, which is the second standing
+   exception on this project to outlive its own fix. What IS still open in that function is the
+   warning defect at the top of YOURS.
 2. Add / correct controls on the Bowel Movement and Appetite reports (S each).
 4. The four v43-era test suites — rebase or retire (S–M).
 5. Android emulator smoke job in GitHub Actions (M).
