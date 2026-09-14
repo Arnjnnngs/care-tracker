@@ -1120,7 +1120,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v75';
+const APP_VERSION = 'v76';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1139,6 +1139,12 @@ const APP_VERSION = 'v75';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
+  { v: 'v76', date: 'Sep 14, 2026', title: 'A safety warning can no longer be pushed off the screen',
+    points: [
+      'The app shows one warning at a time. The red “Acetaminophen ceiling exceeded — do not give more without contacting the care team” could be replaced moments later by an amber note about Iron and Protonix timing, with nothing left to say the red one had ever been there.',
+      'The more serious warning wins now. An amber note never takes a red one off the screen — the red stays until you close it yourself.',
+      '“Take all” used to check only Iron. It checks every medication in the batch now, so going over any daily limit is reported.'
+    ] },
   { v: 'v75', date: 'Sep 11, 2026', title: 'Removed medications can be brought back',
     points: [
       'The Meds screen now lists medications you have removed, under "Removed medications", and each one has a "Bring back" button.',
@@ -2016,11 +2022,21 @@ function setToast(msg) {
 }
 
 function afterLog(entry) {
+  // EVERY WARNING THIS DOSE EARNS, THEN THE WORST ONE.
+  // This used to be a chain of branches each calling setState({ warn }) into a single slot, with the
+  // iron/protonix branch RETURNING before the ceiling check could run. A caregiver who had just been
+  // shown "Acetaminophen ceiling exceeded -- do not give more without contacting the care team", and
+  // who then tapped "Take all" on the evening meds, had that red banner replaced by an amber note
+  // about iron absorption timing. The overdose warning simply left the screen, with nothing to say
+  // it had been there. Which warning she was looking at depended on what she happened to tap next.
   const twoH = 2 * 3600000;
+  const warnings = [];
   if (entry.medId === 'iron' || entry.medId === 'protonix') {
     const other = entry.medId === 'iron' ? 'protonix' : 'iron';
     const near = state.entries.find(e => e.medId === other && e.id !== entry.id && Math.abs(e.ts - entry.ts) <= twoH);
-    if (near) { setState({ warn: { tone: 'amber', title: 'Iron + Protonix timing', body: 'Iron and Protonix were logged within 2 hours of each other. Protonix (a PPI) lowers stomach acid, which can markedly reduce iron absorption. Aim to separate the two by at least 2 hours.' } }); return; }
+    // NO `return` HERE. That return is half the defect: it meant an iron dose could never also
+    // report a ceiling, and that this amber always won whatever was already on screen.
+    if (near) warnings.push({ tone: 'amber', title: 'Iron + Protonix timing', body: 'Iron and Protonix were logged within 2 hours of each other. Protonix (a PPI) lowers stomach acid, which can markedly reduce iron absorption. Aim to separate the two by at least 2 hours.' });
   }
   if (entry.medId === 'tylenol' || entry.medId === 'tylenol-liquid') {
     const mg = tylenolMg();
@@ -2034,19 +2050,34 @@ function afterLog(entry) {
       volOver = !!(liquidMed && liquidMed.volumeCeilingMl && vol > liquidMed.volumeCeilingMl);
     }
     if (mgOver && volOver) {
-      setState({ warn: { tone: 'red', title: 'Acetaminophen ceiling exceeded', body: "Today's Tylenol total is " + mg.toLocaleString() + " mg (above the " + limit.toLocaleString() + " mg daily limit) and Tylenol Liquid volume is " + vol + " mL (above the " + liquidMed.volumeCeilingMl + " mL daily limit). Do not give more without contacting the care team." } });
+      warnings.push({ tone: 'red', title: 'Acetaminophen ceiling exceeded', body: "Today's Tylenol total is " + mg.toLocaleString() + " mg (above the " + limit.toLocaleString() + " mg daily limit) and Tylenol Liquid volume is " + vol + " mL (above the " + liquidMed.volumeCeilingMl + " mL daily limit). Do not give more without contacting the care team." });
     } else if (mgOver) {
-      setState({ warn: { tone: 'red', title: 'Acetaminophen ceiling exceeded', body: "Today's Tylenol total is " + mg.toLocaleString() + " mg, above the " + limit.toLocaleString() + " mg daily limit. Do not give more without contacting the care team." } });
+      warnings.push({ tone: 'red', title: 'Acetaminophen ceiling exceeded', body: "Today's Tylenol total is " + mg.toLocaleString() + " mg, above the " + limit.toLocaleString() + " mg daily limit. Do not give more without contacting the care team." });
     } else if (volOver) {
-      setState({ warn: { tone: 'red', title: 'Tylenol Liquid volume ceiling exceeded', body: "Today's Tylenol Liquid total is " + vol + " mL, above the " + liquidMed.volumeCeilingMl + " mL daily limit. Do not give more without contacting the care team." } });
+      warnings.push({ tone: 'red', title: 'Tylenol Liquid volume ceiling exceeded', body: "Today's Tylenol Liquid total is " + vol + " mL, above the " + liquidMed.volumeCeilingMl + " mL daily limit. Do not give more without contacting the care team." });
     }
   } else {
+    // NO LONGER AN `else` ON THE IRON BRANCH. It was one before, so a medication that is neither
+    // tylenol nor iron reached its own configured ceiling check, but iron itself never did -- iron
+    // has no ceiling today, which is the only reason that did not already matter.
     const configuredMedication = state.meds.find(med => med.id === entry.medId);
     const configuredLimit = dailyCeiling(configuredMedication);
     if (configuredLimit && configuredLimit.used > configuredLimit.max) {
-      setState({ warn: { tone: 'red', title: configuredMedication.name + ' daily limit exceeded', body: "Today's " + configuredMedication.name + ' total is ' + configuredLimit.used + ' ' + configuredLimit.unit + ', above the ' + configuredLimit.label + ' daily limit. Do not give more without contacting the care team.' } });
+      warnings.push({ tone: 'red', title: configuredMedication.name + ' daily limit exceeded', body: "Today's " + configuredMedication.name + ' total is ' + configuredLimit.used + ' ' + configuredLimit.unit + ', above the ' + configuredLimit.label + ' daily limit. Do not give more without contacting the care team.' });
     }
   }
+
+  if (!warnings.length) return;
+  const worst = warnings.find(w => w.tone === 'red') || warnings[0];
+  // AN AMBER NEVER DISPLACES A RED THE CAREGIVER IS STILL LOOKING AT. The red banner stays until
+  // she taps the x on it, and while an overdose warning is on the screen it is the thing she has to
+  // deal with -- a note about iron absorption timing is not a reason to take it away. A red may
+  // still replace a red: the newer figure is the one that matters. Checked against what is ON
+  // SCREEN rather than a per-batch flag, because the reported failure crosses taps: the red came
+  // from a Tylenol dose and the amber from a later "Take all".
+  if (state.warn && state.warn.tone === 'red' && worst.tone !== 'red') return;
+  setState({ warn: worst });
+
 }
 
 async function logMed(medId, dose, opts) {
@@ -2224,7 +2255,7 @@ async function confirmTimeAndLog() {
     // others written, that raised the Iron/Protonix advisory about a dose that is not in the
     // record. On v62 the throw skipped this line entirely, so it was a regression introduced by
     // the fix. Found by the Zero Day Auditor.
-    setTimeout(() => { if (savedIds.includes('iron')) afterLog({ medId: 'iron', ts, id: 'pending' }); }, 500);
+    setTimeout(() => { savedIds.forEach(mid => afterLog({ medId: mid, ts, id: 'pending' })); }, 500);
   } else if (m.type === 'marker') {
     const editId = m.editId;
     if (editId) {

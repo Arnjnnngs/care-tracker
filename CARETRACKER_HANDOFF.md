@@ -9,7 +9,8 @@
 > **Purpose:** Complete context for any AI assistant to understand, maintain, and extend the CareTracker project without prior knowledge.
 >
 > **Last updated:** September 7, 2026
-> **Current version:** v75 (removed medications can be brought back; every medication says what it is for; removing a corrected weight or paracentesis
+> **Current version:** v76 (a red overdose warning is no longer replaced by an amber timing notice, and
+> "Take all" checks every medication in the batch rather than only Iron; removed medications can be brought back; every medication says what it is for; removing a corrected weight or paracentesis
 > clears it instead of restoring the old number; a changed bowel, appetite or symptom answer stays changed — corrections append,
 > never delete; the page holds still behind an open menu or pop-up; move a period's
 > start or end at any age, guarded so a move cannot
