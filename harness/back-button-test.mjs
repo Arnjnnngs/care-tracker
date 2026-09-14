@@ -299,8 +299,12 @@ console.log('\n4. THE CLASS: EVERY DISMISSIBLE LAYER HAS A RULE');
     t('the nested medsync confirmation is armed, and Back dismisses it without leaving',
       cleared && stayed, 'cleared: ' + cleared + ', still in app: ' + stayed);
   } else {
+    // THE COUNT IS COMPUTED, NOT COPIED. It read "1 of 22 layers" in the port, which is
+    // production's number -- staging registers 18. A figure carried across apps is the same class
+    // of false claim as a comment citing the other app's scar, and it was caught the same way.
     notes.push('medsync.confirm — the nested confirmation could not be armed from this harness, so '
-      + 'its Back rule is asserted by inspection and NOT measured. 1 of 22 layers.');
+      + 'its Back rule is asserted by inspection and NOT measured. 1 of ' + (keys.length + 1)
+      + ' layers (' + keys.length + ' registered, plus this nested one).');
   }
   await four.ctx.close();
 }
