@@ -597,8 +597,13 @@ for problems that are no longer there.** A date is a mechanism; a reminder is no
   all" logs Iron within two hours of Protonix, with nothing on screen to say it was ever there. And
   `if (savedIds.includes('iron')) afterLog(...)` means **"Take all" only ever asks about iron**, so
   a batch that pushes any other medication past its own daily limit warns about nothing at all.
-  Fix written (`chemowell-beta/harness-warning-priority-patch.py`), shipped nowhere, QA harness not
-  yet passing. Needs Aaron's go-ahead for this repo.
+  **FIX BUILT AND VERIFIED 2026-09-14, waiting on Aaron's word for the push.** It is v76 on
+  `claude/caretracker-team-review-i83ik2`, reproducible from v75 plus
+  `harness/v76-warning-priority-patch.py`. `harness/warning-priority-test.mjs` is 18/18 on the fix
+  and **15/18 on v75**, so the defect is reproduced on the shipping build rather than argued from
+  the source. The same fix is already live in `chemowell-beta` (beta-v64) and in
+  `chemowell-app-beta` (app-v80). **What is still open here is one thing and it is Aaron's: the
+  push to `main`.**
 
 ---
 ## What this project is

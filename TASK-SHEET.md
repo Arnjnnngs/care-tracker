@@ -1,6 +1,6 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-13 · **Live:** care-tracker **v75** · ChemoWell **app-v78** on `main` · staging **beta-v62** · **app-v79 built, audit round 2 running** · **Dispatch:** ACTIVE
+**Updated:** 2026-09-14 · **Live:** care-tracker **v75** · ChemoWell **app-v80** (live and verified by CI) · staging **beta-v64** · **care-tracker v76 built on the working branch, waiting on your word** · **Dispatch:** ACTIVE
 
 *The 2026-09-11 version of this line said "v74 and app-v72 live, v75 awaiting your merge call" — four
 releases out of date, and it is the file you read to know what is happening. It is regenerated from
@@ -26,15 +26,27 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
       the red banner is replaced by a note about iron absorption, with nothing to say it was ever
       there. Second half: **Take all only ever checks iron**, so a batch that pushes anything else
       past its own daily limit warns about nothing at all.
-      The fix is written (`chemowell-beta/harness-warning-priority-patch.py`) and is NOT shipped to
-      either app: the QA harness does not pass yet, and this repo needs your explicit go-ahead
-      anyway. **Your call: say the word and I finish the harness and ship it to both.** I would.
+      **BUILT AND VERIFIED, 2026-09-14. The harness passes now and the only thing left is you.**
+      It is `v76` on the working branch, reproducible from v75 plus one patch script.
+      `harness/warning-priority-test.mjs` is **18/18** on the fix and **15/18 on v75** — so the
+      defect is reproduced on the build that is live on your phone, not argued from the source. It
+      appends nothing, edits nothing and deletes nothing; it changes which of two banners is on the
+      screen. The same fix is already live in staging (`beta-v64`). **Your decision: say the word
+      and I push v76 to `main`.** I recommend it.
 
-- [ ] **THE CHEMOWELL REDESIGN — pick a direction.** Screenshots sent; the working files are in
-      `chemowell-app-beta/outputs/design-v80/`. Nothing is wired in. The structural finding is that
-      the category leader's home screen is a timeline of what is due when and ChemoWell's is a stack
-      of data-entry forms, so restyling the current screens would have produced a prettier version
-      of the wrong screen. **Yes / no / change something specific.**
+- [x] **THE CHEMOWELL REDESIGN — BUILT IN BOTH APPS**, on your *"Let's do redesign on both apps.
+      Maybe on chemowell first then caretracker staging."* Home now answers **what is due next**
+      before it asks for anything: a card at the top naming the medication that is actually due,
+      when, the day's dose count, and one control that takes the caregiver to the card that can log
+      it. It never names an as-needed medication, never one the app itself is refusing, and when the
+      day is finished it says so instead of vanishing. **Both are live**: staging as `beta-v63` and
+      ChemoWell as `app-v80`, the latter confirmed serving from a machine that can reach it rather
+      than from anything I say. The port is deliberately not a copy — staging's theme is pink
+      glassmorphism, so its card is pink. **The independent audit refused ChemoWell three times and
+      every refusal was the same control**: the card's only button. It named an as-needed medication
+      as due; it was dead for a medication with no card; and then — the nasty one — tapping the
+      **Quick log** heading to tidy Home away left the button doing nothing at all, silently, for
+      the rest of the session.
 - [ ] **Enhancer pass on app-v79** (`chemowell-app-beta/outputs/ENHANCER-PASS-v79.md`). The headline:
       **the app draws a daily-total card that no screen can create.** The running
       "2,500 / 3,000 mg · 500 mg left" card is switched on by a property only the legacy migration
@@ -53,6 +65,14 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
       three or more days old and confirm it sticks after a reload.
 
 ## MINE — no decision needed
+
+- [x] **app-v80 is LIVE, and the CI gate on ChemoWell is green for the first time.** It had been red
+      on every push since it was added — not for anything it was watching: the runner had no browser
+      for the test the gate runs, and its checkout was too shallow to resolve the commit the gate
+      measures against. **A gate that is always red says nothing** — a release that skipped the
+      review and one that passed it looked identical from outside. Both fixed, and the proof is the
+      run itself: every step green, including the one that reads the live site and confirms it is
+      serving the new version.
 
 - [x] **Rule 0.6 written into the operating model in all three repos** — do not report until done,
       work end to end.
