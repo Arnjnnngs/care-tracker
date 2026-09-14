@@ -20,7 +20,17 @@ I cannot see your terminal.
 
 Then run `python3 pm.py` before you touch anything.
 
-**The four things I care about most, so you do not have to infer them:**
+**The five things I care about most, so you do not have to infer them:**
+
+0. **EVERY MESSAGE YOU SEND ME CARRIES A TASK TABLE. This one is not optional and I have asked for
+   it more than once.** Four columns, in this order: `#` (a task number and NEVER a version number),
+   `App` (`ChemoWell app` / `care-tracker` / `staging` / `all 3 repos`), `Task`, `Status`. Show the
+   **last 5 completed items plus everything still open**, ascending by number — the completed rows
+   are the record of what happened while I was away, and they are the whole reason the table exists.
+   I read this on a tablet, scrolling back through a chat. I should be able to find the table by its
+   shape and know where everything stands in five seconds without reading a word around it.
+   **A list in your task tool is not this** — I do not see that panel. The table goes in the message
+   body. Full rule and the history behind it: `claude/care-tracker.md` Rule 0.8.
 
 1. **Do the work in the same turn you talk about it, and DO NOT REPORT UNTIL IT IS DONE.** There are
    exactly two reasons to send me a message: I have to approve or decide something, or the work is
@@ -49,14 +59,20 @@ list in `TASK-SHEET.md`, and the standing queue means you do not ask me again pe
 - Say out loud what is deliberately exempt from a check. An exemption nobody wrote down looks
   identical to an oversight.
 
-**Where things stand:** care-tracker **v71** is live. ChemoWell is on **app-v71**. The open list is in
-STATUS.md and the task list; the top item is that re-answering the daily bowel or appetite question
-can silently keep the old answer — two documents with an identical timestamp and an arbitrary winner —
-and the appetite correction deletes before it adds, which the Firestore rules refuse after 48 hours.
-That is the same root cause we fixed three times already.
+**Where things stand (2026-09-14 — CHECK THIS AGAINST `STATUS.md` BEFORE BELIEVING IT).**
+care-tracker **v77** is live on `main`: the phone's own Back button now walks the app instead of
+closing it. ChemoWell is on **app-v84** on the branch `claude/caretracker-team-review-i83ik2`,
+carrying the three-screen redesign I approved — the Home timeline and vitals strip, the Meds status
+pill and daily-limit bar, a Temperature report that never existed before, symptom frequency bars,
+and a What's New notice. **That branch has not been promoted to ChemoWell's `main`** and needs the
+independent audit and PM sign-off first (`chemowell-app-beta` hard rules 5 and 6).
 
-**Start now:** read the docs, run `python3 pm.py`, give me the team recommendation in one short
-message, and then — without waiting for me — begin the bowel/appetite fix. Report when it is done.
+**This paragraph goes stale faster than anything else in this file. It said "v71 is live" for six
+releases and pointed a new session at a task that had already shipped.** If the versions here do not
+match `STATUS.md` and the repo's `sw.js`, trust the repo and fix this file in the same pass.
+
+**Start now:** read the docs, run `python3 pm.py`, and then — without waiting for me — take the top
+of the QUEUED list. Report when it is done.
 
 ---
 
