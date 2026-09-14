@@ -1,4 +1,4 @@
-# Suite record — v76 — 2026-09-14 00:40 UTC
+# Suite record — v76 — 2026-09-14 01:12 UTC
 
 Every browser suite in `harness/`, run by `harness/run-all.sh`. A row reading FAIL or ERROR blocks
 the release in `pm.py` unless it is changed to EXEMPT with a reason of at least twenty characters.
@@ -6,7 +6,7 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | Suite | Result | Last line |
 |---|---|---|
 | archived-meds-test.mjs | PASS | 51/51 checks passed |
-| cal-test.mjs | FAIL |     [iPhone-390x844] sheet field font sizes: title=16px, when=16px, note=16px (floor 16) |
+| cal-test.mjs | PASS |     [iPhone-390x844] sheet field font sizes: title=16px, when=16px, note=16px (floor 16) |
 | chemo-offset-test.mjs | PASS | 17/17 checks passed |
 | daily-supersede-test.mjs | PASS | 40/40 checks passed |
 | deactivate-test.mjs | EXEMPT | v43.3 deactivate-patch verifier, pinned to v43.3 per pm.py; 21/34 on v71 and on v72 with identical failures (the 600s gate cuts it to 15/34); rebase or retire queued |
@@ -44,4 +44,4 @@ the release in `pm.py` unless it is changed to EXEMPT with a reason of at least 
 | audit-v72-probe.mjs | PASS | 28/28 checks passed |
 | overflow-scan.mjs | PASS | CLEAN — Android rows are high fidelity (Chromium is Android's engine); iOS rows are Chromium at Apple viewport sizes, not Safari. |
 
-Failing or erroring suites: 1
+Failing or erroring suites: 0
