@@ -128,6 +128,87 @@ correct. A turn that runs for four minutes and ends with a status paragraph is t
 change is a thing he asked for; `SendUserFile` is delivery, not a recap. Never pair it with a
 progress note.
 
+## Rule 0.7 — A TASK LIST, EVERY TIME, COMPLETED IN ORDER. (2026-09-14, Aaron, and he has said it before)
+
+> *"Every time I give you something to do, you need to create a task list and complete in order
+> unless I tell you otherwise. I've said multiple times before about task list. Those notes should be
+> somewhere in the md file. There probably needs to be a meeting notes taker that can keep track of
+> tasks to keep you on track. This is absurd"*
+
+**He is right that he has said it before, and right that it was not written down here. That is the
+whole defect.** The Scribe seat (Rule 1.5) was described as keeping `REQUESTS.md` and
+`TASK-SHEET.md` — files. It was never made to create a LIVE, ORDERED task list at the moment he
+asks for something, and so the order of work was decided by whatever I found interesting.
+
+**What that cost, exactly, on 2026-09-13/14.** Aaron approved a three-screen redesign from
+screenshots and gave the order himself: *Home timeline → Meds cards + ceiling bar → Reports.* Twelve
+hours later **one card of one screen existed**, in a weaker form than the mockup, because a dose-
+parser defect turned into eleven audit rounds and a back-button fix turned into three ports, and
+neither was the thing he asked for. Both were real. Neither was next. **There was no list, so
+nothing said so.**
+
+### The rule
+
+1. **The moment Aaron asks for anything, create the task list — before any other tool call.** Use
+   the task tools (TaskCreate / TaskUpdate), not a paragraph and not a file. It has to be the thing
+   he can see at a glance.
+2. **One task per deliverable, in the order HE gave**, not the order that is easiest. If he did not
+   give an order, propose one in the list and start at the top.
+3. **Mark in_progress before starting and completed when it is genuinely done** — done means built,
+   verified and pushed, not "written".
+4. **Anything found along the way becomes its own task at the BOTTOM of the list**, not a detour.
+   A defect found mid-task is logged and scheduled; only a defect that makes the current task
+   impossible or unsafe is allowed to jump the queue, and then it is said out loud.
+5. **The list goes in the reply** whenever the work spans more than one message, so he never has to
+   ask what is happening or in what order.
+
+**This is not the Scribe's habit. It is the first action of every request.** A role whose output is
+a file Aaron does not read is not a role — that lesson is already written into Rule 2.6 about the
+Enhancer, and it is the same lesson here one level up.
+
+## Rule 0.8 — THE TASK TABLE GOES IN THE MESSAGE. EVERY MESSAGE. (2026-09-14, Aaron, EXPLICIT)
+
+> *"I don't see the list. You said you fixed it. There needs to be very frequent task table update so
+> I can see what has been done when I go back to the chat occasionally. I shouldn't have to read 15
+> pages of small details to see what was done. I can scroll through and see the table and see what
+> was done. Commit to your record and put into place now"*
+
+**Rule 0.7 was written and then not obeyed.** The list was created with the task tools — which render
+somewhere Aaron does not look — and the replies went back to being prose. From his side that is
+identical to there being no list at all. The task tools are for me; **the table in the message is for
+him**, and it is the one that counts.
+
+### The rule
+
+1. **Every message to Aaron carries a markdown table.** Not a bulleted list, not a paragraph, not
+   "see the task list" — a table, so it is a recognisable shape he can scroll to and read in five
+   seconds without reading anything around it.
+2. **Columns, always these four, in this order:**
+
+   | # | App | Task | Status |
+
+   **App is not optional** (Aaron, 2026-09-14: *"the task should show what app is being worked on.
+   Bc I have no idea which one you're actually working on"*). It is one of
+   `ChemoWell app` · `care-tracker` · `staging` · `all 3 repos`.
+3. **The table shows the LAST 5 COMPLETED items plus everything still open.** Not open items only —
+   the completed rows are the record of what happened while he was away, and they are the reason the
+   table exists. Completed rows come first, oldest of the five at the top, so the eye lands on the
+   open work at the bottom where the next action is.
+4. **Status is one of:** `DONE — live` · `DONE — pushed, awaiting your word` · `IN PROGRESS` ·
+   `QUEUED` · `BLOCKED — needs you`. A status that names a blocker names it in the same cell.
+5. **Frequent means every message, including the long ones.** This does not license a status-only
+   message — Rule 0.6 still governs WHEN a message may be sent (an approval he must give, or
+   completion). Rule 0.8 governs what is IN a message once one is due: the table is the top of it,
+   and the detail goes underneath for whoever wants it.
+6. **If a task moved since the last table, the table says so.** A row that has not changed in three
+   messages while work is happening means the rows are wrong — split the task.
+
+**Why a table and not the task tools.** The task tools are a side panel in a developer's terminal.
+Aaron reads this on a tablet, scrolling back through a chat, looking for the shape of a table. Output
+that lands somewhere the owner does not look is not output — the same lesson as Rule 2.6's Enhancer
+list and Rule 0.7's task list, now for the third time. **Third time is the rule getting a mechanism:
+the table is part of the message body, so it cannot be filed anywhere else.**
+
 ## Rule 1 — Deploying: SETTLED 2026-08-24. Read this before touching a browser.
 
 **There are two ways to get code onto GitHub from a Claude session, and the good one is already
