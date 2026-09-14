@@ -209,6 +209,25 @@ that lands somewhere the owner does not look is not output — the same lesson a
 list and Rule 0.7's task list, now for the third time. **Third time is the rule getting a mechanism:
 the table is part of the message body, so it cannot be filed anywhere else.**
 
+### The numbers, and why the first table got them wrong (2026-09-14, same day)
+
+Aaron, on the very first table this rule produced: *"The # on the task table is quite confusing.
+It's not in order and the range jumps from 28 to 77. Is that logical for you and do you think that
+makes sense to me. You put 77 bc caretracker is on v77"*
+
+**He is exactly right and it was worse than untidy.** The `#` column is a TASK number. I put `77` in
+it because care-tracker's release is v77 — a VERSION number, in a column of task numbers, in a table
+whose whole purpose is to be readable in five seconds. A reader has no way to know one row is
+counting a different thing from every other row.
+
+1. **The `#` column holds task numbers and nothing else.** Never a version, never a release, never a
+   commit. A version belongs in the Task cell as words: *"care-tracker v77 — back button"*.
+2. **Rows are in ascending order by number**, completed five first, then open. An out-of-order list
+   is a list somebody has to read twice.
+3. **Every open item gets a real task number**, allocated in sequence. If something is being tracked
+   without one — a blocker, a promotion waiting on Aaron — it gets a number before it gets a row.
+   A row with a `—` in the `#` column is a row that was never on the list.
+
 ## Rule 1 — Deploying: SETTLED 2026-08-24. Read this before touching a browser.
 
 **There are two ways to get code onto GitHub from a Claude session, and the good one is already
