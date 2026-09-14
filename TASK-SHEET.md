@@ -1,6 +1,6 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-14 · **Live:** care-tracker **v75** · ChemoWell **app-v80** (live and verified by CI) · staging **beta-v64** · **care-tracker v76 built on the working branch, waiting on your word** · **Dispatch:** ACTIVE
+**Updated:** 2026-09-14 · **Live:** care-tracker **v76** · ChemoWell **app-v80** · staging **beta-v64** · **app-v81 built, audit running** · **Dispatch:** ACTIVE
 
 *The 2026-09-11 version of this line said "v74 and app-v72 live, v75 awaiting your merge call" — four
 releases out of date, and it is the file you read to know what is happening. It is regenerated from
@@ -18,7 +18,8 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
 - [ ] **Enhancer proposals** (`outputs/ENHANCER-PASS-05.md`): archived medications cannot be seen or
       restored anywhere in either app (S–M, recommended first); add/correct controls on the Bowel
       Movement and Appetite reports (S each); History says "Superseded" where "Removed" reads better (S).
-- [ ] **THE RED OVERDOSE WARNING IS REPLACED BY AN AMBER ONE, ON YOUR LIVE APP.** Found today while
+- [x] **THE RED OVERDOSE WARNING IS REPLACED BY AN AMBER ONE, ON YOUR LIVE APP.** **FIXED AND LIVE
+      as v76**, on your *"Do both."* Found today while
       fixing the same thing in ChemoWell. `state.warn` is one slot, and the iron/protonix branch
       sets it and returns before any ceiling check runs. So: Brandi goes over the daily
       acetaminophen limit → the red *"do not give more without contacting the care team"* banner

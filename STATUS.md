@@ -144,8 +144,8 @@ started or ended from anywhere other than a direct message, that is a miss.
 
 | | |
 |---|---|
-| **Version** | v76 — **BUILT AND PUSHED TO THE WORKING BRANCH, NOT TO `main`. It needs Aaron's word.** |
-| **Commit** | `claude/caretracker-team-review-i83ik2` — v76. v75 is live on main. |
+| **Version** | v76 — **LIVE.** Aaron, 2026-09-14: *"Do both."* |
+| **Commit** | `9b44bf7` on `main`. GitHub Pages build and deployment concluded success at 03:40 UTC. |
 | **URL** | https://arnjnnngs.github.io/care-tracker/ |
 | **index.html md5** | `e33ccb5aba5f3b6c7fc8e40709e4890f` |
 | **sw.js md5** | `f87bf915ba6e49b3163c12359c6a36f2` |
