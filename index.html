@@ -1120,7 +1120,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v76';
+const APP_VERSION = 'v77';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1139,6 +1139,12 @@ const APP_VERSION = 'v76';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
+  { v: 'v77', date: 'Sep 14, 2026', title: 'Your phone\u2019s Back button no longer closes the app',
+    points: [
+      'Tapping Back used to shut the whole app and drop you on your phone\u2019s home screen, wherever you were \u2014 even half-way through confirming a dose. Whatever you were filling in was gone.',
+      'Back now goes back one step: it closes whatever is open, then takes you to Home. Only when nothing is open does it leave the app, the same as every other app on your phone.',
+      'If you have tapped something that asks \u201cAre you sure?\u201d, Back cancels just that question and leaves the screen behind it as it was.'
+    ] },
   { v: 'v76', date: 'Sep 14, 2026', title: 'A safety warning can no longer be pushed off the screen',
     points: [
       'The app shows one warning at a time. The red “Acetaminophen ceiling exceeded — do not give more without contacting the care team” could be replaced moments later by an amber note about Iron and Protonix timing, with nothing left to say the red one had ever been there.',
@@ -1462,6 +1468,85 @@ function uiIsBusy() {
     || !!state.missReasonSheet
     || !!state.medEditor
     || !!state.tour;
+}
+
+// ---- THE PHONE'S OWN BACK BUTTON -------------------------------------------------------------
+// Ordered INNERMOST FIRST. Each layer says how to tell it is open and how to close it, and closing
+// it is exactly what that layer's own Cancel or close control does -- if the two ever disagree,
+// Back becomes a second way out of a screen that leaves different state behind.
+const BACK_LAYERS = [
+  // 1. CONFIRMATIONS FIRST. They sit on top of whatever armed them, so Back disarms the
+  //    confirmation and leaves that thing open, rather than closing both.
+  { key: 'confirmDeleteMed', label: 'the delete-medication confirmation', open: () => state.confirmDeleteMed != null, close: () => setState({ confirmDeleteMed: null }) },
+  { key: 'confirmRemove', label: 'the remove-entry confirmation', open: () => state.confirmRemove != null, close: () => setState({ confirmRemove: null }) },
+  { key: 'confirmRemovePara', label: 'the remove-paracentesis confirmation', open: () => state.confirmRemovePara != null, close: () => setState({ confirmRemovePara: null }) },
+  { key: 'confirmRemoveWeight', label: 'the remove-weight confirmation', open: () => state.confirmRemoveWeight != null, close: () => setState({ confirmRemoveWeight: null }) },
+  { key: 'confirmMedList', label: 'the medication-list confirmation', open: () => !!state.confirmMedList, close: () => setState({ confirmMedList: false }) },
+  { key: 'confirmClearChemo', label: 'the clear-treatment-date confirmation', open: () => !!state.confirmClearChemo, close: () => setState({ confirmClearChemo: false }) },
+  { key: 'reportConfirmClear', label: 'the clear-reports confirmation', open: () => !!state.reportConfirmClear, close: () => setState({ reportConfirmClear: false }) },
+  { key: 'apptConfirmDelete', label: 'the delete-appointment confirmation', open: () => state.apptConfirmDelete != null, close: () => setState({ apptConfirmDelete: null }) },
+  { key: 'shareArmed', label: 'the armed share control', open: () => !!state.shareArmed, close: () => setState({ shareArmed: false }) },
+  { key: 'override', label: 'the over-limit override', open: () => state.override != null, close: () => setState({ override: null }) },
+  // 2. SHEETS AND POP-UPS.
+  { key: 'timeModal', label: 'the confirm-the-time sheet', open: () => state.timeModal != null, close: () => setState({ timeModal: null }) },
+  { key: 'missReasonSheet', label: 'the missed-dose reason sheet', open: () => state.missReasonSheet != null, close: () => setState({ missReasonSheet: null }) },
+  { key: 'apptSheet', label: 'the appointment sheet', open: () => state.apptSheet != null, close: () => setState({ apptSheet: null }) },
+  { key: 'backupNotice', label: 'the backup notice', open: () => state.backupNotice != null, close: () => setState({ backupNotice: null }) },
+  { key: 'reportNotice', label: 'the report notice', open: () => state.reportNotice != null, close: () => setState({ reportNotice: null }) },
+  { key: 'bkLocked', label: 'the locked-backup prompt', open: () => state.bkLocked != null, close: () => setState({ bkLocked: null }) },
+  { key: 'whatsNewOpen', label: "the What's New sheet", open: () => !!state.whatsNewOpen, close: () => setState({ whatsNewOpen: false }) },
+  { key: 'tour', label: 'the guided tour', open: () => state.tour != null, close: () => setState({ tour: null }) },
+  // 3. PANELS AND EDITORS.
+  { key: 'medEditor', label: 'the medication editor', open: () => state.medEditor != null, close: () => setState({ medEditor: null, confirmDeleteMed: null }) },
+  { key: 'missedBannerOpen', label: 'the expanded missed-dose banner', open: () => !!state.missedBannerOpen, close: () => setState({ missedBannerOpen: false }) },
+  { key: 'drawerOpen', label: 'the menu drawer', open: () => !!state.drawerOpen, close: () => setState({ drawerOpen: false }) }
+];
+function backLayerKeys() { return BACK_LAYERS.map(l => l.key); }
+// Returns what it dismissed, or null when there is nothing left on this screen to dismiss.
+function handleBackPress() {
+  // NESTED CONFIRMATION INSIDE medsync, which is an object rather than a top-level flag. Handled
+  // explicitly and first, because a generic rule over `state` cannot see one level down -- and the
+  // suite's completeness check is written against top-level keys, so this is the one that would
+  // have been missed silently.
+  if (state.medsync && state.medsync.confirm) {
+    setState({ medsync: { ...state.medsync, confirm: null } });
+    return 'medsync.confirm';
+  }
+  for (let i = 0; i < BACK_LAYERS.length; i++) {
+    if (BACK_LAYERS[i].open()) { BACK_LAYERS[i].close(); return BACK_LAYERS[i].key; }
+  }
+  // A tab that is not Home goes to Home -- the "at least go to the previous page" Aaron asked for.
+  // For a tab bar Home is the honest answer: the tabs are siblings, not a trail, so there is
+  // nowhere else to go back TO.
+  if (state.view !== 'home') { setState({ view: 'home' }); return 'view'; }
+  return null;
+}
+// ONE HISTORY ENTRY, pushed once and re-pushed after every Back the app handles. When nothing is
+// left it is not replaced, so a second Back leaves the app exactly as the phone expects.
+function armBackButton() {
+  if (typeof window === 'undefined' || !window.history || !window.addEventListener) return;
+  try { history.pushState({ ctBack: 1 }, ''); } catch (e) { return; }
+  let leaving = false;
+  window.addEventListener('popstate', () => {
+    const handled = handleBackPress();
+    if (handled) { try { history.pushState({ ctBack: 1 }, ''); } catch (e) {} return; }
+    // NOTHING LEFT TO DISMISS, SO LET THE PHONE LEAVE -- ON ONE PRESS, NOT TWO.
+    // Without this the first Back on Home did nothing visible: it consumed the entry this app
+    // pushed at startup and stopped there, so a caregiver had to press Back twice to get out while
+    // every other app on her phone takes one. The suite caught it by asserting the app DOES leave.
+    // `history.back()` hands the press back to the platform: in a browser it returns to whatever
+    // was open before, and in an installed PWA or the native wrapper there is nothing behind the
+    // app, so the system closes it -- which is exactly the behaviour being asked for.
+    if (leaving) return;              // one delegation per press; never a loop
+    leaving = true;
+    try { history.back(); } catch (e) {}
+    setTimeout(() => { leaving = false; }, 0);
+  });
+}
+if (typeof window !== 'undefined') {
+  // For the completeness check in harness/back-button-test.mjs. Exported rather than copied into
+  // the suite, so a new layer cannot be added to one and not the other. Pure reads; holds nothing.
+  window.__backTest = { keys: backLayerKeys, press: handleBackPress, stateKeys: () => Object.keys(state) };
 }
 
 function setState(patch) {
@@ -8489,6 +8574,12 @@ setInterval(() => {
   }
   checkNotifications();
 }, 1000);
+// ARMED HERE, at module top level and after `state` exists and after the app has rendered once.
+// pushState would be harmless earlier; the popstate handler calls setState, which reads `state`.
+// (The first draft of this comment cited a `TREATMENT_DAYS_MAX` scar. That belongs to ChemoWell,
+// not to this file -- a fact carried across on the way over, which is precisely the leak this
+// repo's own instructions warn about, and it pointed at a comment that does not exist here.)
+armBackButton();
 render();
 
 // Service worker registration
