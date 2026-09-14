@@ -1,6 +1,6 @@
 # care-tracker — Task Sheet
 
-**Updated:** 2026-09-14 · **Live:** care-tracker **v75** · ChemoWell **app-v79** on `main` · staging **beta-v64** (pushed) · **app-v80 built, round-3 audit pending** · **care-tracker v76 built on the working branch, waiting on your word** · **Dispatch:** ACTIVE
+**Updated:** 2026-09-14 · **Live:** care-tracker **v75** · ChemoWell **app-v80** (live and verified by CI) · staging **beta-v64** · **care-tracker v76 built on the working branch, waiting on your word** · **Dispatch:** ACTIVE
 
 *The 2026-09-11 version of this line said "v74 and app-v72 live, v75 awaiting your merge call" — four
 releases out of date, and it is the file you read to know what is happening. It is regenerated from
@@ -39,9 +39,14 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
       before it asks for anything: a card at the top naming the medication that is actually due,
       when, the day's dose count, and one control that takes the caregiver to the card that can log
       it. It never names an as-needed medication, never one the app itself is refusing, and when the
-      day is finished it says so instead of vanishing. Staging (`beta-v63`) is **pushed and live**;
-      ChemoWell (`app-v80`) is built and one gate from shipping. The port is deliberately not a
-      copy — staging's theme is pink glassmorphism, so its card is pink.
+      day is finished it says so instead of vanishing. **Both are live**: staging as `beta-v63` and
+      ChemoWell as `app-v80`, the latter confirmed serving from a machine that can reach it rather
+      than from anything I say. The port is deliberately not a copy — staging's theme is pink
+      glassmorphism, so its card is pink. **The independent audit refused ChemoWell three times and
+      every refusal was the same control**: the card's only button. It named an as-needed medication
+      as due; it was dead for a medication with no card; and then — the nasty one — tapping the
+      **Quick log** heading to tidy Home away left the button doing nothing at all, silently, for
+      the rest of the session.
 - [ ] **Enhancer pass on app-v79** (`chemowell-app-beta/outputs/ENHANCER-PASS-v79.md`). The headline:
       **the app draws a daily-total card that no screen can create.** The running
       "2,500 / 3,000 mg · 500 mg left" card is switched on by a property only the legacy migration
@@ -60,6 +65,14 @@ Split by WHO the next step belongs to. If MINE has an item, the turn does not en
       three or more days old and confirm it sticks after a reload.
 
 ## MINE — no decision needed
+
+- [x] **app-v80 is LIVE, and the CI gate on ChemoWell is green for the first time.** It had been red
+      on every push since it was added — not for anything it was watching: the runner had no browser
+      for the test the gate runs, and its checkout was too shallow to resolve the commit the gate
+      measures against. **A gate that is always red says nothing** — a release that skipped the
+      review and one that passed it looked identical from outside. Both fixed, and the proof is the
+      run itself: every step green, including the one that reads the live site and confirms it is
+      serving the new version.
 
 - [x] **Rule 0.6 written into the operating model in all three repos** — do not report until done,
       work end to end.
