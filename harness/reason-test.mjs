@@ -54,7 +54,15 @@ const ONLY = (() => { const i = argv.indexOf('--only'); return i >= 0 ? argv[i +
 // Falsification launches a whole browser session per mutator. --batch a-b runs a slice of the
 // mutator list so the sweep can be done in sittings instead of one very long run.
 const BATCH = (() => { const i = argv.indexOf('--batch'); return i >= 0 ? argv[i + 1].split('-').map(Number) : null; })();
-const APP_FILE = FILE_ARG || path.join(HERE, 'work', 'index.html');
+// DEFAULT: THE REPO'S OWN index.html, NOT harness/work/.
+//
+// `harness/work/` was a v43.3-era build directory that has not existed for months, so running this
+// suite with no arguments died on ENOENT -- and seven suites failing that way is why the task list
+// carried "rebase or retire the four v43/v44-era patch verifiers" as though they were stale. They
+// are not stale. Pointed at the shipping file they pass in full; only the default was dead.
+// `--file` still wins, and harness/work/ is still preferred when it exists, so a patch-and-verify
+// run is unchanged.
+const APP_FILE = FILE_ARG || (fs.existsSync(path.join(HERE, 'work', 'index.html')) ? path.join(HERE, 'work', 'index.html') : path.join(HERE, '..', 'index.html'));
 const VIEWPORT = { w: 375, h: 812 };
 
 for (const v of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy']) {

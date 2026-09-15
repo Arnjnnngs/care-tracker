@@ -66,7 +66,15 @@ const STREAM = argv.includes('--stream');
 const ONLY = arg('--only');
 const VP_ARG = arg('--vp') ? Number(arg('--vp')) : null;
 const BATCH = arg('--batch') ? arg('--batch').split('-').map(Number) : null;
-const APP_FILE = arg('--file') || path.join(HERE, 'work', 'repo', 'index.html');
+// DEFAULT: THE REPO'S OWN index.html, NOT harness/work/.
+//
+// `harness/work/` was a v43.3-era build directory that has not existed for months, so running this
+// suite with no arguments died on ENOENT -- and seven suites failing that way is why the task list
+// carried "rebase or retire the four v43/v44-era patch verifiers" as though they were stale. They
+// are not stale. Pointed at the shipping file they pass in full; only the default was dead.
+// `--file` still wins, and harness/work/ is still preferred when it exists, so a patch-and-verify
+// run is unchanged.
+const APP_FILE = arg('--file') || (fs.existsSync(path.join(HERE, 'work', 'repo', 'index.html')) ? path.join(HERE, 'work', 'repo', 'index.html') : path.join(HERE, '..', 'index.html'));
 // The UNPATCHED base. Used only for input-vs-output comparison. No check in this file asserts a
 // version literal, a cache name or a build number — three earlier patches on this project were
 // broken by suites that did.

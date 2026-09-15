@@ -53,7 +53,15 @@ const ONLY = (() => { const i = argv.indexOf('--only'); return i >= 0 ? argv[i +
 const STREAM = argv.includes('--stream');
 const VP_ARG = (() => { const i = argv.indexOf('--vp'); return i >= 0 ? Number(argv[i + 1]) : null; })();
 const BATCH = (() => { const i = argv.indexOf('--batch'); return i >= 0 ? argv[i + 1].split('-').map(Number) : null; })();
-const APP_FILE = FILE_ARG || path.join(HERE, 'work', 'repo', 'index.html');
+// DEFAULT: THE REPO'S OWN index.html, NOT harness/work/.
+//
+// `harness/work/` was a v43.3-era build directory that has not existed for months, so running this
+// suite with no arguments died on ENOENT -- and seven suites failing that way is why the task list
+// carried "rebase or retire the four v43/v44-era patch verifiers" as though they were stale. They
+// are not stale. Pointed at the shipping file they pass in full; only the default was dead.
+// `--file` still wins, and harness/work/ is still preferred when it exists, so a patch-and-verify
+// run is unchanged.
+const APP_FILE = FILE_ARG || (fs.existsSync(path.join(HERE, 'work', 'repo', 'index.html')) ? path.join(HERE, 'work', 'repo', 'index.html') : path.join(HERE, '..', 'index.html'));
 // The UNPATCHED base, used only for input-vs-output comparisons (APP_VERSION, sw.js). Never used
 // to assert a version literal — see FILE-app-version.
 const BASE_ARG = (() => { const i = argv.indexOf('--base'); return i >= 0 ? argv[i + 1] : null; })();
