@@ -250,6 +250,46 @@ await run('ENC-9-locked-file-shows-no-manifest', 'opening it asks for the passwo
   assert(!new RegExp(PATIENT_MARK, 'i').test(txt), 'the locked panel names the patient, which is what the password is protecting');
 });
 
+await run('ENC-9b-password-can-actually-be-TYPED', 'typing the password one key at a time puts every character in the box', async () => {
+  // WHY THIS EXISTS: every other check in this file sets the field's value in one go and fires a
+  // single input event (`type()` at the top). That is not typing. It is how this suite could pass
+  // ENC-10 through ENC-14 against a build where a person cannot enter a password at all -- the
+  // same class as driving a Playwright click through a frozen page and calling the button
+  // reachable. So this one presses keys.
+  const SEL = '#bk-unlock-pw';
+  await b.page.evaluate((s) => {
+    const el = document.querySelector(s);
+    if (!el) return;
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(el, '');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }, SEL);
+  await b.page.waitForTimeout(400);
+  // Re-query AFTER the clear: that input event re-renders, so a handle taken before it points at a
+  // node that is no longer in the document.
+  assert(await b.page.$(SEL), 'the password box is not on screen, so this check would measure nothing');
+  await b.page.click(SEL);
+  await b.page.waitForTimeout(200);
+  const WORD = 'correct-horse';
+  for (const ch of WORD) { await b.page.keyboard.type(ch); await b.page.waitForTimeout(70); }
+  await b.page.waitForTimeout(300);
+  const got = await b.page.evaluate((s) => {
+    const el = document.querySelector(s);
+    return { value: el ? el.value : null, focused: !!el && document.activeElement === el };
+  }, SEL);
+  assert(got.focused,
+    'the caret was thrown out of the password box while typing -- every keystroke rebuilds the field, so a person gets one character per tap on the screen that restores an encrypted backup');
+  assert(got.value === WORD,
+    'typed ' + WORD.length + ' characters and the box holds ' + JSON.stringify(got.value));
+  // Leave it empty so the checks below start where they expect to.
+  await b.page.evaluate((s) => {
+    const el = document.querySelector(s);
+    if (!el) return;
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(el, '');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }, SEL);
+  await b.page.waitForTimeout(300);
+});
+
 await run('ENC-10-wrong-password-writes-nothing', 'a wrong password opens nothing and changes nothing', async () => {
   const before = await b.page.evaluate(() => globalThis.__mc.ids().slice().sort().join(','));
   await type(b.page, '#bk-unlock-pw', 'not-the-password'); await b.page.waitForTimeout(200);
