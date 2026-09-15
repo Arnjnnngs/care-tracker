@@ -1120,7 +1120,7 @@ function renderMedsyncScreen(now) {
 const CONFIG = { patientName: 'Brandi', ceilingMg: 2500, tempUnit: 'Fahrenheit' };
 // v43: index.html carried no version constant. The printable record states which build
 // produced it, and a release check needs one place to compare against sw.js's cache key.
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 
 // ---------- WHAT'S NEW ----------
 //
@@ -1139,6 +1139,12 @@ const APP_VERSION = 'v77';
 // up -- an honest "nothing you would see" is worth more than a sentence of filler, and it is what
 // makes the entries that DO matter believable.
 const CHANGELOG = [
+  { v: 'v78', date: 'Sep 15, 2026', title: 'The password box on a protected backup can be typed in',
+    points: [
+      'Opening a password-protected backup asks for the password. That box was throwing the cursor out after every single letter, so you had to tap it again for every character.',
+      'It takes a typed password normally now.',
+      'Nothing else about backups changed \u2014 the same file, the same password, the same records.'
+    ] },
   { v: 'v77', date: 'Sep 14, 2026', title: 'Your phone\u2019s Back button no longer closes the app',
     points: [
       'Tapping Back used to shut the whole app and drop you on your phone\u2019s home screen, wherever you were \u2014 even half-way through confirming a dose. Whatever you were filling in was gone.',
@@ -5299,7 +5305,19 @@ function renderBackupUnlock() {
     h('div', { style: { fontSize: '11.5px', color: '#6E5261', lineHeight: '1.45', marginTop: '3px' } },
       'Saved ' + made + '. Type the password the person who made it gave you. Nothing on this phone is changed until it opens.'),
     h('input', { id: 'bk-unlock-pw', type: 'password', autocomplete: 'current-password', value: String(state.bkUnlockPw || ''), placeholder: 'Password',
-      onInput: (e) => setState({ bkUnlockPw: e.target.value, backupNotice: null }),
+      // WRITE THE STATE, DO NOT RE-RENDER. `setState` ends in an unconditional `render()`, and
+      // this app's render() does NOT put focus back — it protects typing by suppressing the
+      // once-a-second tick while a text field is focused (`uiIsBusy`), which does nothing about a
+      // repaint this handler asks for itself. So every keystroke here destroyed the box being
+      // typed into: one character per tap, on the screen that restores an encrypted backup of a
+      // medication history. The file already states the rule in its own words further up —
+      // "NEVER setState from onInput — it rebuilds the tree and destroys the field being typed
+      // in" — and every other input in this file obeys it. This was the only violation left.
+      //
+      // Clearing `backupNotice` here was the only reason a render was wanted, and it was never
+      // needed: `bkUnlock()` already clears it on the way in. The message about the last attempt
+      // now stays on screen while the password is retyped, which is what it is for.
+      onInput: (e) => { state.bkUnlockPw = e.target.value; },
       onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); bkUnlock(); } },
       style: { width: '100%', marginTop: '10px', minHeight: '46px', border: '1px solid rgba(212,104,138,0.28)', borderRadius: '12px', padding: '0 12px', fontSize: '16px', background: 'rgba(255,255,255,0.82)', color: '#342530' } }),
     h('div', { style: { display: 'flex', gap: '8px', marginTop: '11px' } },
