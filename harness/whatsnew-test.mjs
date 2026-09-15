@@ -231,7 +231,17 @@ console.log('\n5. The history lives under the menu and lists the real releases')
     const screenTxt = await page.evaluate(() => document.querySelector('[data-whatsnew-screen]').innerText);
     t('the newest release is at the top', screenTxt.indexOf(appVersion) >= 0 && screenTxt.indexOf(appVersion) < 200, '');
     t('it tells you which version this phone runs', screenTxt.indexOf('running ' + appVersion) >= 0, '');
-    t('the oldest release is there too', screenTxt.indexOf('v13') >= 0, '');
+    // NOT A PINNED LITERAL. This read `screenTxt.indexOf('v13') >= 0` -- the oldest entry in the
+    // changelog on the day it was written. Trim the changelog, or renumber anything, and it goes
+    // red for no defect; this project has been broken by exactly that on three patches, and pm.py
+    // has warned about this one line ever since. The file under test decides which release is
+    // oldest, the same way it already decides how many there are two checks above.
+    const allV = [...rawHtml.matchAll(/\{ v: '(v[0-9.]+)', date:/g)].map(m => m[1]);
+    const oldest = allV.length ? allV[allV.length - 1] : null;
+    t('the file actually has a changelog to read, so the next check is about something',
+      allV.length > 10, allV.length + ' entries in the file');
+    t('the oldest release in the file is listed too', !!oldest && screenTxt.indexOf(oldest) >= 0,
+      oldest ? ('oldest is ' + oldest) : 'no changelog entries found in the file');
   }
   await ctx.close();
 }

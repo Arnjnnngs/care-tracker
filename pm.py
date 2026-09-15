@@ -176,7 +176,7 @@ for _root, _dirs, _files in os.walk(REPO):
 def _strip_comments(_t):
     return re.sub(r'^\s*(//|#).*$', '', re.sub(r'/\*[\s\S]*?\*/', '', _t), flags=re.M)
 
-_dead_paths, _ortrue, _pinned = [], [], []
+_dead_paths, _ortrue, _pinned, _pinned_ok = [], [], [], []
 for _f in _suites:
     try: _t = open(_f, encoding='utf-8').read()
     except Exception: continue
@@ -193,8 +193,23 @@ for _f in _suites:
     if re.search(r"\|\|\s*true\b", _code):
         _ortrue.append(_rel)
     # a version literal in a suite breaks on the next release; read it from the file under test
+    #
+    # SPLIT, BECAUSE A WARNING THAT IS ALWAYS ON IS A WARNING NOBODY READS. This printed the same
+    # nine lines on every run for months and asked the reader to make the same judgement each time:
+    # a harness PATCH legitimately names the versions it transforms between, and a backup FIXTURE
+    # legitimately carries the version that wrote it. Neither can go red on a later release --
+    # only an ASSERTION can, and that is the one this check exists for. So the judgement is made
+    # here, once, and only the bucket that can actually bite is warned about. The expected ones are
+    # still counted and printed as a single line, so they cannot drift out of sight either.
     for _m in re.finditer(r"['\"]((?:app-|beta-)?v\d+(?:\.\d+)?)['\"]", _code):
-        _pinned.append("%s -> '%s'" % (_rel, _m.group(1)))
+        _line = _code[_code.rfind('\n', 0, _m.start()) + 1:_code.find('\n', _m.end())]
+        _expected = (
+            'must(' in _line            # a patch step: old literal -> new literal
+            or 'apply:' in _line        # the same, named
+            or re.search(r"\bapp\s*:", _line)          # backup-fixture provenance
+            or 'formatVersion' in _line
+        )
+        (_pinned_ok if _expected else _pinned).append("%s -> '%s'" % (_rel, _m.group(1)))
 
 if _dead_paths:
     blockers.append("GATE CANNOT START — %d suite reference(s) point at a path from a dead\n"
@@ -205,12 +220,17 @@ if _ortrue:
                     % (len(_ortrue), ", ".join(sorted(set(_ortrue))[:6])))
 if _pinned:
     _u = sorted(set(_pinned))
-    warnings.append("PINNED VERSION LITERAL in %d place(s) — compare input to output, or read\n"
-                    "    APP_VERSION from the file under test. This has cost three patches.\n"
-                    "    JUDGEMENT REQUIRED: a harness/ PATCH legitimately names the versions it\n"
-                    "    transforms between. An ASSERTION never should — that is the one that goes\n"
-                    "    red on the next release for no defect:\n    %s"
+    warnings.append("PINNED VERSION LITERAL in %d place(s) OUTSIDE a patch step or a fixture —\n"
+                    "    compare input to output, or read APP_VERSION from the file under test.\n"
+                    "    This has cost three patches. Every one of these is in a position where it\n"
+                    "    CAN go red on the next release for no defect, which is the whole point:\n    %s"
                     % (len(_u), "\n    ".join(_u[:8])))
+if _pinned_ok:
+    _k = sorted(set(_pinned_ok))
+    notes.append("%d version literal(s) in patch steps and backup fixtures, which is where they "
+                 "belong — a patch names the versions it transforms between and a backup records "
+                 "the version that wrote it. Neither can go red on a later release. Counted, not "
+                 "warned about: %s" % (len(_k), ", ".join(_k[:6]) + ("…" if len(_k) > 6 else "")))
 
 # --- 7b. SOMEBODY MUST HAVE LOOKED AT IT ------------------------------------------------------
 # Aaron, 2026-08-29: "how is auditing being done if nothing can be seen to make sure everything
