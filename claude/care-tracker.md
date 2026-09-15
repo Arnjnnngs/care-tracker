@@ -690,20 +690,16 @@ for problems that are no longer there.** A date is a mechanism; a reminder is no
   document id in `reminder_ledger`. The "~1 in 6 anchored reminders dropped on late cron runs" this
   entry warns about is what the ledger fixes, and the fix shipped.
 
-- **OPEN, verified against the current file 2026-09-13: a red overdose warning is replaced by an
-  amber timing notice.** `state.warn` is a single slot, and `afterLog`'s iron/protonix branch sets
-  it and `return`s before any ceiling check runs. So the red *"Acetaminophen ceiling exceeded — do
-  not give more without contacting the care team"* banner is silently replaced the next time "Take
-  all" logs Iron within two hours of Protonix, with nothing on screen to say it was ever there. And
-  `if (savedIds.includes('iron')) afterLog(...)` means **"Take all" only ever asks about iron**, so
-  a batch that pushes any other medication past its own daily limit warns about nothing at all.
-  **FIX BUILT AND VERIFIED 2026-09-14, waiting on Aaron's word for the push.** It is v76 on
-  `claude/caretracker-team-review-i83ik2`, reproducible from v75 plus
-  `harness/v76-warning-priority-patch.py`. `harness/warning-priority-test.mjs` is 18/18 on the fix
-  and **15/18 on v75**, so the defect is reproduced on the shipping build rather than argued from
-  the source. The same fix is already live in `chemowell-beta` (beta-v64) and in
-  `chemowell-app-beta` (app-v80). **What is still open here is one thing and it is Aaron's: the
-  push to `main`.**
+- ~~A red overdose warning is replaced by an amber timing notice.~~ **CLOSED — LIVE IN v77, and
+  measured rather than assumed, 2026-09-15.** `harness/warning-priority-test.mjs` run with
+  `--file` pointed at `origin/main`'s own `index.html` reports **18/18**, including the case this
+  entry was written for: one dose that earns both an interaction notice and a ceiling breach shows
+  the **red** one. `afterLog` collects every warning the dose earns into a list and then picks the
+  worst, and the iron/protonix branch no longer `return`s before the ceiling check — the comment in
+  the shipped file says so in those words. **This entry is closed by running the suite against the
+  file that is serving to her phone, not by reading the branch it was built on.** That distinction
+  is the whole reason Rule 7 carries dates: the previous three entries here all described defects
+  that had been fixed for weeks, and one of them nearly sent a second build at a solved problem.
 
 ---
 ## What this project is
