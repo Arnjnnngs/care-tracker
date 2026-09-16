@@ -60,7 +60,9 @@ list in `TASK-SHEET.md`, and the standing queue means you do not ask me again pe
   identical to an oversight.
 
 **Where things stand (2026-09-14 — CHECK THIS AGAINST `STATUS.md` BEFORE BELIEVING IT).**
-care-tracker **v77** is live on `main`: the phone's own Back button now walks the app instead of
+care-tracker **v78** is live on `main` (2026-09-16): the password box on a password-protected
+backup could not be typed into — one character per tap, on the screen that restores an encrypted
+medication history. Before it, v77 made the phone's own Back button walk the app instead of
 closing it. ChemoWell is on **app-v84** on the branch `claude/caretracker-team-review-i83ik2`,
 carrying the three-screen redesign I approved — the Home timeline and vitals strip, the Meds status
 pill and daily-limit bar, a Temperature report that never existed before, symptom frequency bars,
