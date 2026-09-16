@@ -138,7 +138,17 @@ if os.path.exists(_sp):
     _txt = open(_sp, encoding="utf-8").read()
     _i = _txt.find("## LIVE RIGHT NOW")
     if _i >= 0:
-        _blk = _txt[_i:_i + 1200]
+        # THE WHOLE SECTION, NOT A FIXED 1,200 BYTES. That magic number meant this check could
+        # stop seeing a row simply because the prose ABOVE it got longer -- which is exactly what
+        # happened on the v78 release: the Commit row was rewritten a few lines longer and the
+        # `sw.js md5` row, still present and still correct, fell off the end of the window. The
+        # check then reported "STATUS.md does not record an md5 for sw.js", which was false.
+        #
+        # A gate that goes quiet because of an edit somewhere else is worse than no gate: it
+        # reports a defect that is not there, and the next person edits the file to satisfy it.
+        # The section runs to the next `## ` heading, so that is where it now ends.
+        _end = _txt.find("\n## ", _i + 1)
+        _blk = _txt[_i:_end if _end >= 0 else len(_txt)]
         for _name in ("index.html", "sw.js"):
             _fp = os.path.join(REPO, _name)
             if not os.path.exists(_fp):
