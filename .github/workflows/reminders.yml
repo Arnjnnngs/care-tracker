@@ -1,13 +1,24 @@
 name: Send Med Reminders
 
+# TURNED OFF 2026-09-23, at Aaron's word. Brandi passed away on 2026-09-18 and this job
+# was still sending medication reminders to her phone every thirty minutes.
+#
+# The schedule is REMOVED, not merely commented out on a live cron -- with no `schedule:`
+# key there is nothing for GitHub to fire, which is the only form of "off" that cannot be
+# undone by a stray edit. `workflow_dispatch` is kept so the job is one click away if it is
+# ever wanted again, and so the file stays a readable record rather than a deletion.
+#
+# The schedule it used to carry, for anyone restoring it:
+#     - cron: '0,30 13-23 * * *'
+#     - cron: '0,30 0-4 * * *'
+#   Every 30 minutes, 8 AM through the 10:00 PM send, Central time. The two ranges kept the
+#   10 PM run covered in both CDT (03:00 UTC) and CST (04:00 UTC); quiet hours inside
+#   send-reminders.js silenced any extra late runs.
+#
+# NOTHING ELSE WAS TOUCHED. send-reminders.js, the reminder ledger, the Firestore data and
+# the app itself are all exactly as they were. This change stops sends; it deletes nothing.
+
 on:
-  schedule:
-    # Every 30 minutes from 8 AM through the 10:00 PM send, Central time.
-    # 0-4 UTC keeps the 10:00 PM run covered in BOTH daylight (CDT, 03:00 UTC)
-    # and standard (CST, 04:00 UTC) time; quiet hours in send-reminders.js
-    # silence any extra late runs.
-    - cron: '0,30 13-23 * * *'
-    - cron: '0,30 0-4 * * *'
   workflow_dispatch:
 
 jobs:

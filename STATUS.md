@@ -1,6 +1,41 @@
 # care-tracker — STATUS
 
-DISPATCH: ACTIVE
+DISPATCH: IDLE
+
+## 2026-09-23 — THE AUTOMATIONS ARE OFF. Brandi passed away on 2026-09-18.
+
+Aaron, 2026-09-23: *"Turn off caretracker reminders and nightly backup."* Done, and here is exactly
+what that did and did not touch, because the difference matters.
+
+**Turned off:**
+
+* `.github/workflows/reminders.yml` — the `schedule:` key is **removed**, not commented out. This
+  job was still sending medication reminders every thirty minutes, 8 AM to 10 PM Central. The old
+  cron lines are written into the file's header comment so it can be restored exactly.
+  `workflow_dispatch` is kept, so it can only ever run if a person clicks it.
+* The two **care-tracker Dispatch** routines (hourly, at :22 and :52, both pushing to his phone) --
+  **disabled**, not deleted. They still exist and can be re-enabled.
+
+**Deliberately NOT touched, and not to be touched without Aaron saying so in his own words:**
+
+* **`caretracker_entries` and every other Firestore collection.** That is Brandi's medical record.
+  Nothing in this change reads, writes or deletes a single document.
+* `send-reminders.js`, the reminder ledger, `index.html`, `sw.js`. The app is unchanged and stays
+  live at https://arnjnnngs.github.io/care-tracker/ -- readable, exactly as it was.
+* The repo, its history and the `outputs/` record.
+
+**One thing this session could NOT reach: the nightly Firestore backup.** It is a **Cowork desktop
+scheduled task on Aaron's own machine** (his confirmation, 2026-09-07, and the note further down
+this file). Re-verified on 2026-09-23 against both places a cloud session can see: the Claude
+routines list (three routines, none of them the backup) and Make (one scenario, a Tally form
+pipeline, unrelated). There is no backup script anywhere in this repo. A cloud session has no route
+to a task stored locally by the desktop app, so this one genuinely needs his computer.
+
+**The project is closed.** Work moved to ChemoWell (`chemowell-app-beta`) on 2026-09-23. Nothing in
+care-tracker is in flight, nothing is waiting on anyone, and the open items that were queued here
+are closed as not-to-be-built rather than abandoned.
+
+---
 
 **This file is updated on every push. It is the single source of truth for "what was last done."**
 Dispatch check-ins and any new chat session should read this file first.
