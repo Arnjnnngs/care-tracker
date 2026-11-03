@@ -46,8 +46,32 @@ copy produces that md5 exactly, so the patch is deterministic.
 * **`chemowell-beta` beta-v67** (staging, which is this app's own test bed) —
   `harness/weight-axis-test.mjs` **69/69** under `TZ=America/Chicago` and `TZ=Etc/UTC`, five
   mutants all dead.
-* **This repo** — the same suite, byte for byte below its header, run against the patched copy of
-  live v78. Result below.
+* **This repo, twice, and this is the part worth reading.**
+
+  **(a) The defect reproduced on the bytes that are serving to her phone.** Live `v78` with
+  **nothing changed but the three test hooks** — the two defective sites left exactly as they are
+  (md5 `d60facfbc132dd533a6b0ea91ce517dc`, against the live file's `80ba7549395c78e216f2d4f919239630`):
+
+  ```
+  69 checks: 61 passed, 8 failed   (TZ=America/Chicago)
+    FAIL 1.1  the labels are TIMES, not one date printed five times
+              ["11/2","11/2","11/2","11/3","11/3"]
+    FAIL 1.3  nothing on the axis is later than the frozen now
+              ["11/2","11/2","11/2","11/3","11/3"]
+    FAIL 2.1  a span inside one hour is labelled with minutes, not bare hours
+              ["11/2","11/3","11/3","11/3","11/3"]
+    FAIL 3.2  and no date is printed twice   ["11/1","11/1","11/1","11/2","11/2"]
+    FAIL 7.2  and no date is printed twice   ["11/1","11/2","11/2","11/2","11/2"]
+    FAIL 8.1  every label carries a two-digit year   ["9/28","12/22","3/17","6/10","9/3"]
+  ```
+
+  `["11/2","11/2","11/2","11/3","11/3"]` is one reading logged this morning: **the same date three
+  times, and then tomorrow.** Both halves of Aaron's report in a single axis, measured rather than
+  argued.
+
+  **(b) The fix verified on the same bytes.** Live `v78` + `axis-patch.py` (md5
+  `0bbf3f60ac8e731d14a21635ebd2d32c`, exactly what `--check` predicts, so the patch is
+  deterministic): **69 checks: 69 passed, 0 failed.**
 
 The suite **freezes the clock** (`window.Date` overridden, the technique
 `harness/warning-priority-test.mjs` already uses here) rather than running against the wall clock.
