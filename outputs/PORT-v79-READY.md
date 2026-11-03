@@ -146,7 +146,7 @@ measured against her app rather than against staging's:
 | `glass-test` | 7/7 |
 | `repaint-test` | 17/17 |
 | `overflow-scan` | **140 of 140** screen/width combinations clean, 0 overflowing elements, across 10 device widths |
-| `export-test` | being read |
+| `export-test` | **49/49**, including `NET-1-no-real-firebase` (nothing outside 127.0.0.1 and the three stubs was reached) and `NET-2-no-service-worker` |
 
 `overflow-scan` is the one that matters most for this change, because the only geometry this
 release touches is the chart's right margin: nothing overflows at any width. Its own caveat stands
