@@ -88,6 +88,33 @@ hours of every day, and it was the only section that killed one of the mutants.
 5. Push to `main`; GitHub Pages serves it in about a minute; verify the live `APP_VERSION` and
    `sw.js` CACHE with a cache-buster before calling it done.
 
+## The patch itself was tested from three starting states, and two bugs were in the patch
+
+The patch is a program, so it gets the same treatment as the app. Run against three different
+starting files, all three must converge on the same md5 (`0bbf3f60ac8e731d14a21635ebd2d32c`):
+
+| Start | Result |
+|---|---|
+| clean live `v78` | applies all 8 edits → `0bbf3f60…` |
+| already patched | **refuses**, nothing written, file unchanged |
+| the three test hooks only, fix absent | skips 4, applies 4 → `0bbf3f60…` |
+
+**Both of the first two attempts at that were wrong, and only the third state caught them.**
+
+1. The original whole-file guard returned early if `data-weight-range` was anywhere in the file —
+   so a build carrying only the TEST HOOKS and none of the fix was reported *"ALREADY APPLIED"* and
+   left defective. A guard that declares a broken build fixed is this project's oldest failure
+   shape.
+2. Replacing it with per-edit idempotency then broke the other direction: the helpers are inserted
+   *above* `function renderWeightTrend(now) {`, and that line survives the edit, so on an
+   already-patched file the generic "is the new form here?" test could not see itself and inserted
+   **the helper block a second time** — two `const AXIS_HOUR` declarations in one module, a hard
+   syntax error. Caught because the already-patched run produced a *different* md5, not because
+   anyone read it.
+
+An edit whose own anchor survives it needs its own fingerprint. That is what `present=` does, and
+the comment beside it says why.
+
 ## One housekeeping trap in the regression pass
 
 `harness/audit-v69-weightreport.mjs` **writes a tracked file** every time it runs

@@ -105,24 +105,57 @@ def main():
     a = ap.parse_args()
     src = open(a.file, encoding="utf-8").read()
     print("in   %s\n     md5 %s" % (a.file, hashlib.md5(src.encode()).hexdigest()))
-    if "function timeAxisLabels(" in src or "function chartTimeMax(" in src or "data-weight-range" in src:
-        print("ALREADY APPLIED -- nothing written."); return
+    # EVERY EDIT IS INDIVIDUALLY IDEMPOTENT, and the first version of this was not. It had one
+    # whole-file guard that returned early if `data-weight-range` was present -- so a file carrying
+    # only the three TEST HOOKS and none of the fix was reported "ALREADY APPLIED" and left
+    # defective. That is this project's oldest failure shape: a guard that passes on nonsense,
+    # here one that would have declared a broken build fixed. Each edit now checks for its own
+    # result, so a partially-patched file is completed rather than waved through.
     out = src
+    done, skipped = [], []
+
+    def edit(label, old, new, count=1, present=None):
+        """Apply one anchored edit, or skip it if it is already in its new form.
+
+        `present` is for the one edit whose old anchor SURVIVES the edit: inserting the helpers
+        above `function renderWeightTrend(now) {` leaves that line exactly where it was, so the
+        generic "is the new form already here?" test cannot see it and the edit would INSERT THE
+        HELPERS A SECOND TIME -- two `const AXIS_HOUR` declarations in one module, a hard syntax
+        error. Measured, not reasoned: the first version of this scaffolding did exactly that to an
+        already-patched file and produced a different md5, which is how it was caught. An edit whose
+        anchor survives it needs its own fingerprint, and that is what `present` is.
+        """
+        nonlocal out
+        if present is not None and present in out:
+            skipped.append(label)
+            print("  skip  %s -- already in place" % label)
+            return
+        if out.count(old) == count:
+            out = out.replace(old, new, count)
+            done.append(label)
+            print("  ok    %s" % label)
+            return
+        if out.count(old) == 0 and out.count(new) == count:
+            skipped.append(label)
+            print("  skip  %s -- already in place" % label)
+            return
+        die("%s: anchor matched %d times (expected %d) and the patched form matched %d"
+            % (label, out.count(old), count, out.count(new)))
 
     # ---- 1. the helpers, at module scope, immediately above the chart that calls them ----------
-    anchor = "function renderWeightTrend(now) {"
-    if out.count(anchor) != 1: die("renderWeightTrend anchor matched %d times" % out.count(anchor))
-    out = out.replace(anchor, HELPERS.lstrip("\n") + anchor, 1)
-    print("  ok  1. timeAxisLabels() and chartTimeMax() added at module scope")
+    edit("1. timeAxisLabels() and chartTimeMax() at module scope",
+         "function renderWeightTrend(now) {",
+         HELPERS.lstrip("\n") + "function renderWeightTrend(now) {",
+         present="function timeAxisLabels(")
 
     # ---- 2. the right edge ---------------------------------------------------------------------
-    old = "  const tMax = Math.max(points[points.length - 1].ts, tMin + DAY);"
-    if out.count(old) != 1: die("tMax anchor matched %d times" % out.count(old))
-    out = out.replace(old, "  const tMax = chartTimeMax(tMin, points[points.length - 1].ts, now);", 1)
-    print("  ok  2. the axis no longer runs past now")
+    edit("2. the axis no longer runs past now",
+         "  const tMax = Math.max(points[points.length - 1].ts, tMin + DAY);",
+         "  const tMax = chartTimeMax(tMin, points[points.length - 1].ts, now);")
 
     # ---- 3. the labels -------------------------------------------------------------------------
-    old = """  // X-axis labels (dates)
+    edit("3. the labels are no longer always M/D",
+         """  // X-axis labels (dates)
   const xLabels = [];
   const labelCount = range === 'weeks' ? 4 : 6;
   for (let i = 0; i <= labelCount; i++) {
@@ -130,47 +163,46 @@ def main():
     const d = new Date(ts);
     const label = (d.getMonth() + 1) + '/' + d.getDate();
     xLabels.push({ label, px: x(ts) });
-  }"""
-    if out.count(old) != 1: die("x-label loop anchor matched %d times" % out.count(old))
-    out = out.replace(old, """  // X-axis labels -- dates OR times, decided by the span. See timeAxisLabels() above.
+  }""",
+         """  // X-axis labels -- dates OR times, decided by the span. See timeAxisLabels() above.
   const labelCount = range === 'weeks' ? 4 : 6;
-  const xLabels = timeAxisLabels(tMin, tMax, labelCount, x);""", 1)
-    print("  ok  3. the labels are no longer always M/D")
+  const xLabels = timeAxisLabels(tMin, tMax, labelCount, x);""")
 
     # ---- 4. the padding a time label was clipped by --------------------------------------------
-    old = "  const pad = { top: 30, right: 20, bottom: 50, left: 55 };"
-    if out.count(old) != 1: die("pad anchor matched %d times" % out.count(old))
-    out = out.replace(old, """  // right: 34, not 20. THE RIGHTMOST LABEL IS CENTRED ON THE RIGHT EDGE, so what matters is how
+    edit("4. pad.right 20 -> 34, so a time label is not clipped at the right edge",
+         "  const pad = { top: 30, right: 20, bottom: 50, left: 55 };",
+         """  // right: 34, not 20. THE RIGHTMOST LABEL IS CENTRED ON THE RIGHT EDGE, so what matters is how
   // far it reaches PAST its anchor, not how wide it is. Measured by getBBox in
   // harness/weight-axis-test.mjs section 2, at 11px in this monospace:
   //     "10:36 PM"  53.0 units wide  -> 26.5 past the anchor
   //     "10/24"     33.0 units wide  -> 16.5 past the anchor
   // At right: 20 the anchor sits 20 from the edge, so a time label overflows the 680 viewBox by
   // 6.5 and renders clipped. At 34 it has 7.5 to spare.
-  const pad = { top: 30, right: 34, bottom: 50, left: 55 };""", 1)
-    print("  ok  4. pad.right 20 -> 34, so a time label is not clipped at the right edge")
+  const pad = { top: 30, right: 34, bottom: 50, left: 55 };""")
 
     # ---- 5. a data hook, so no suite ever selects a label by its text (Rule 5) -----------------
-    old = """    svg += '<text x="' + xl.px.toFixed(1) + '" y="' + (H - 10) + '" fill="#7D6974" font-size="11" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + xl.label + '</text>';"""
-    if out.count(old) != 1: die("x-label render anchor matched %d times" % out.count(old))
-    out = out.replace(old, """    svg += '<text data-xaxis="1" x="' + xl.px.toFixed(1) + '" y="' + (H - 10) + '" fill="#7D6974" font-size="11" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + xl.label + '</text>';""", 1)
-    print("  ok  5. data-xaxis hook on every x label")
+    edit("5. data-xaxis hook on every x label",
+         """    svg += '<text x="' + xl.px.toFixed(1) + '" y="' + (H - 10) + '" fill="#7D6974" font-size="11" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + xl.label + '</text>';""",
+         """    svg += '<text data-xaxis="1" x="' + xl.px.toFixed(1) + '" y="' + (H - 10) + '" fill="#7D6974" font-size="11" font-family="IBM Plex Mono,monospace" text-anchor="middle">' + xl.label + '</text>';""")
 
     # ---- 6 & 7. the two navigation hooks the suite needs, so it reaches the chart the way a
     #             caregiver does rather than by poking state. Production already has
     #             data-cal-menu-button and data-cal-drawer-item; these two were missing.
-    old = "        return h('button', { onClick: () => openReport(type), style:"
-    if out.count(old) != 1: die("report card anchor matched %d times" % out.count(old))
-    out = out.replace(old, "        return h('button', { 'data-report': type, onClick: () => openReport(type), style:", 1)
-    print("  ok  6. data-report hook on each report card")
+    edit("6. data-report hook on each report card",
+         "        return h('button', { onClick: () => openReport(type), style:",
+         "        return h('button', { 'data-report': type, onClick: () => openReport(type), style:")
 
-    n = 0
     for rng in ("weeks", "months"):
-        old = "    h('button', { onClick: () => setState({ weightRange: '%s' }), style:" % rng
-        if out.count(old) != 1: die("weightRange '%s' anchor matched %d times" % (rng, out.count(old)))
-        out = out.replace(old, "    h('button', { 'data-weight-range': '%s', onClick: () => setState({ weightRange: '%s' }), style:" % (rng, rng), 1)
-        n += 1
-    print("  ok  7. data-weight-range hook on both toggle buttons (%d)" % n)
+        edit("7." + rng + ". data-weight-range hook on the " + rng + " button",
+             "    h('button', { onClick: () => setState({ weightRange: '%s' }), style:" % rng,
+             "    h('button', { 'data-weight-range': '%s', onClick: () => setState({ weightRange: '%s' }), style:" % (rng, rng))
+
+    if not done:
+        print("ALREADY APPLIED -- all %d edits were already in place, nothing written." % len(skipped))
+        return
+    if skipped:
+        print("NOTE: %d of %d edits were already in place; the other %d were applied. A partially "
+              "patched file is completed, not refused." % (len(skipped), len(skipped) + len(done), len(done)))
 
     if a.check:
         print("--check: %d bytes would be written (md5 %s). Nothing written."
