@@ -140,9 +140,13 @@ def main():
     # ---- 4. the padding a time label was clipped by --------------------------------------------
     old = "  const pad = { top: 30, right: 20, bottom: 50, left: 55 };"
     if out.count(old) != 1: die("pad anchor matched %d times" % out.count(old))
-    out = out.replace(old, """  // right: 34, not 20. A date label is "10/31" -- 18 units wide in this 11px monospace -- but a
-  // TIME label is "10:36 PM" at 29, and the rightmost one is centred on the right edge, so at 20
-  // it rendered clipped as "10:09 P". Measured from the text metrics, asserted by the suites.
+    out = out.replace(old, """  // right: 34, not 20. THE RIGHTMOST LABEL IS CENTRED ON THE RIGHT EDGE, so what matters is how
+  // far it reaches PAST its anchor, not how wide it is. Measured by getBBox in
+  // harness/weight-axis-test.mjs section 2, at 11px in this monospace:
+  //     "10:36 PM"  53.0 units wide  -> 26.5 past the anchor
+  //     "10/24"     33.0 units wide  -> 16.5 past the anchor
+  // At right: 20 the anchor sits 20 from the edge, so a time label overflows the 680 viewBox by
+  // 6.5 and renders clipped. At 34 it has 7.5 to spare.
   const pad = { top: 30, right: 34, bottom: 50, left: 55 };""", 1)
     print("  ok  4. pad.right 20 -> 34, so a time label is not clipped at the right edge")
 
