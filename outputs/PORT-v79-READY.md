@@ -88,6 +88,15 @@ hours of every day, and it was the only section that killed one of the mutants.
 5. Push to `main`; GitHub Pages serves it in about a minute; verify the live `APP_VERSION` and
    `sw.js` CACHE with a cache-buster before calling it done.
 
+## One housekeeping trap in the regression pass
+
+`harness/audit-v69-weightreport.mjs` **writes a tracked file** every time it runs
+(`outputs/v69-report-after-edit.html`, line 203), so running it leaves the working tree dirty with
+a render of whatever build it was pointed at. Running it against the patched copy rewrote that file
+with a v78+patch render under a name that says v69, which would have put a wrong label on a record.
+It was restored, not committed. **Expect that diff after any run of that probe and discard it** —
+or point the probe at a path under the scratchpad if it is ever touched again.
+
 ## What is deliberately exempt
 
 Chromium only — no iPhone and nothing on her actual phone, which is where the chart will be read.
