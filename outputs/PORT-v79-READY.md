@@ -130,3 +130,48 @@ Chromium only — no iPhone and nothing on her actual phone, which is where the 
 Every width figure in this port is Chromium's. No screenshots: nothing here changes a layout a
 finger touches except the chart's own right margin, and that is asserted by measurement rather
 than by eye.
+
+---
+
+## The regression pass against the patched build (her app's own suites)
+
+Run as `node harness/<suite>.mjs --file <the patched copy>`, so every figure below is this change
+measured against her app rather than against staging's:
+
+| Suite | Result |
+|---|---|
+| `weight-axis-test` | **69/69** (the new one) |
+| `enhance-test` | 37/37 |
+| `para-test` | 16/16 |
+| `glass-test` | 7/7 |
+| `repaint-test` | 17/17 |
+| `overflow-scan` | **140 of 140** screen/width combinations clean, 0 overflowing elements, across 10 device widths |
+| `export-test` | being read |
+
+`overflow-scan` is the one that matters most for this change, because the only geometry this
+release touches is the chart's right margin: nothing overflows at any width. Its own caveat stands
+and is worth repeating — Android rows are high fidelity because Chromium is Android's engine; the
+iOS rows are Chromium at Apple viewport sizes, not Safari.
+
+## The two doc rows, written out so the go-ahead is mechanical
+
+**`README.md`** version history, new row at the top of the table:
+
+> `| v79 | Nov 3, 2026 | **The weight chart's x-axis repeated dates and ran into the future.**
+> Reported by Aaron against ChemoWell, where it was fixed as app-v90; this app had both halves in
+> the same six lines. (1) The right-hand edge was floored at `tMin + DAY`, so a day holding a
+> single reading drew an axis 24 hours wide and labelled the far end with TOMORROW — one weight
+> logged in the morning read `11/2 11/2 11/2 11/3 11/3`, measured on the live bytes before the fix.
+> (2) Labels were always `M/D`, so a span of hours printed one date under five ticks. The edge is
+> now clamped to `simNow()` with `Math.max(lastTs, …)` kept so a reading later than now still
+> fits rather than being cropped; the format is chosen from whether the span crosses midnight, and
+> the year is printed past ~300 days because `weightEntries.slice(-2)` makes a span that long
+> reachable with no bound. `pad.right` 20 → 34 so a centred time label is not clipped (measured:
+> `"10:36 PM"` reaches 26.5 units past its anchor, a date 16.5). Applied by
+> `harness/axis-patch.py`, which lands on byte-identical output from a clean, a patched and a
+> half-patched file. `harness/weight-axis-test.mjs` **69/69**, clock frozen per section; the
+> defect reproduced on the pre-fix bytes at 8 of 69. Regression pass above. `APP_VERSION` → `v79`,
+> `sw.js` CACHE → `caretracker-v79`. |`
+
+**`CARETRACKER_HANDOFF.md`** — bump "Current version" to `v79` with the first two sentences of the
+row above, and move the existing v78 text into the "Previous" position, matching how v78 did it.
